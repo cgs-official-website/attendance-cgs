@@ -15,7 +15,9 @@ import {
   subscribeToPaidLeaves,
   updateAttendanceRules,
   subscribeToAttendanceRules,
-  updatePaidLeaveStatus
+  updatePaidLeaveStatus,
+  subscribeToRegularizationRequests,
+  updateRegularizationRequest
 } from "../firebase";
 import { 
   Shield, 
@@ -101,6 +103,9 @@ export default function AdminDashboard() {
   const [newProgram, setNewProgram] = useState("Internship");
   const [newShiftStart, setNewShiftStart] = useState("10:00");
   const [newShiftEnd, setNewShiftEnd] = useState("19:00");
+  const [newAnnual, setNewAnnual] = useState(25);
+  const [newSick, setNewSick] = useState(10);
+  const [newCasual, setNewCasual] = useState(6);
 
   // Edit Form Fields
   const [editName, setEditName] = useState("");
@@ -108,6 +113,9 @@ export default function AdminDashboard() {
   const [editProgram, setEditProgram] = useState("Internship");
   const [editShiftStart, setEditShiftStart] = useState("10:00");
   const [editShiftEnd, setEditShiftEnd] = useState("19:00");
+  const [editAnnual, setEditAnnual] = useState(25);
+  const [editSick, setEditSick] = useState(10);
+  const [editCasual, setEditCasual] = useState(6);
   
   // Action state loader
   const [actionLoading, setActionLoading] = useState(false);
@@ -117,6 +125,25 @@ export default function AdminDashboard() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [selectedRequestId, setSelectedRequestId] = useState(null);
   const [managerCommentInput, setManagerCommentInput] = useState("");
+
+  // Regularization Requests state
+  const [approvalsSubTab, setApprovalsSubTab] = useState("leaves");
+  const [regularizationRequests, setRegularizationRequests] = useState([]);
+  const [allRegularizationRequests, setAllRegularizationRequests] = useState([]);
+  const [selectedRegRequestId, setSelectedRegRequestId] = useState(null);
+  const [regManagerCommentInput, setRegManagerCommentInput] = useState("");
+
+  // History Filter states
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyType, setHistoryType] = useState("all");
+  const [historyStatus, setHistoryStatus] = useState("all");
+
+  // Pagination states
+  const [livePage, setLivePage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
+  const [leavesPendingPage, setLeavesPendingPage] = useState(1);
+  const [regsPendingPage, setRegsPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
 
   // Notice Board / Rules & Leaves tab states
   const [rulesInput, setRulesInput] = useState("");
@@ -194,6 +221,12 @@ export default function AdminDashboard() {
       setLeaveRequests(data.filter(r => r.status === "pending"));
     });
 
+    // Subscribe to regularization requests
+    const unsubscribeRegs = subscribeToRegularizationRequests((data) => {
+      setAllRegularizationRequests(data || []);
+      setRegularizationRequests(data.filter(r => r.status === "pending"));
+    });
+
     // Subscribe to attendance rules
     const unsubscribeRules = subscribeToAttendanceRules((data) => {
       setRulesInput(data || "");
@@ -207,6 +240,7 @@ export default function AdminDashboard() {
     return () => {
       unsubscribe();
       unsubscribeLeaves();
+      unsubscribeRegs();
       unsubscribeRules();
       unsubscribePaidLeaves();
     };
@@ -218,6 +252,21 @@ export default function AdminDashboard() {
     }
   }, [leaveRequests, selectedRequestId]);
 
+  // Reset pagination on tab/filter change
+  useEffect(() => {
+    setLivePage(1);
+    setUsersPage(1);
+    setLeavesPendingPage(1);
+    setRegsPendingPage(1);
+    setHistoryPage(1);
+  }, [activeTab, approvalsSubTab, searchQuery, historySearch, historyType, historyStatus]);
+
+  useEffect(() => {
+    if (regularizationRequests.length > 0 && (!selectedRegRequestId || !regularizationRequests.some(r => r.id === selectedRegRequestId))) {
+      setSelectedRegRequestId(regularizationRequests[0].id);
+    }
+  }, [regularizationRequests, selectedRegRequestId]);
+
   if (currentUser.role !== "admin") {
     return (
       <div className="w-full max-w-[1400px] mx-auto px-4 py-16 flex flex-col items-center justify-center min-h-[60vh]">
@@ -228,8 +277,11 @@ export default function AdminDashboard() {
     );
   }
 
+  // Filter out admin users from directory and counts
+  const staffUsers = users.filter(u => u.role !== "admin" && u.email !== "admin@teamcarrezza.com");
+
   // Get department options
-  const departments = [...new Set(users.map((u) => u.department).filter(Boolean))];
+  const departments = [...new Set(staffUsers.map((u) => u.department).filter(Boolean))];
 
   // Get user's current status and details for today
   const getLiveUserStatus = (user) => {
@@ -256,7 +308,7 @@ export default function AdminDashboard() {
   });
 
   // Filter live users
-  const liveStatusList = users.map((u) => {
+  const liveStatusList = staffUsers.map((u) => {
     const live = getLiveUserStatus(u);
     return {
       user: u,
@@ -273,7 +325,7 @@ export default function AdminDashboard() {
   });
 
   // Filter user profiles
-  const filteredProfiles = users.filter((u) => {
+  const filteredProfiles = staffUsers.filter((u) => {
     const matchesSearch = 
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       u.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -292,8 +344,53 @@ export default function AdminDashboard() {
     return matchesSearch;
   });
 
+  // Filter regularization requests for the queue
+  const filteredRegRequests = regularizationRequests.filter((req) => {
+    const matchesSearch = 
+      (req.userName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (req.date || "").includes(searchQuery) ||
+      (req.reason || "").toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
+
+  // Filter unified request history
+  const getUnifiedHistory = () => {
+    const leaveHistory = allRequests.filter(r => r.status !== "pending").map(r => ({
+      ...r,
+      reqType: "Leave",
+      dateLabel: r.startDate && r.endDate ? `${r.startDate} to ${r.endDate}` : "—",
+      details: `${r.type} (${r.duration})`,
+    }));
+
+    const regHistory = allRegularizationRequests.filter(r => r.status !== "pending").map(r => ({
+      ...r,
+      reqType: "Regularization",
+      dateLabel: r.date,
+      details: `Missed Check-In (${formatShiftTime(r.checkInTime)} - ${formatShiftTime(r.checkOutTime)})`,
+    }));
+
+    const combined = [...leaveHistory, ...regHistory];
+    
+    return combined.filter(item => {
+      const searchLower = historySearch.toLowerCase();
+      const matchesSearch = !historySearch || 
+        (item.userName || "").toLowerCase().includes(searchLower) ||
+        (item.reason || "").toLowerCase().includes(searchLower) ||
+        (item.details || "").toLowerCase().includes(searchLower);
+      const matchesType = historyType === "all" || item.reqType.toLowerCase() === historyType;
+      const matchesStatus = historyStatus === "all" || item.status === historyStatus;
+      return matchesSearch && matchesType && matchesStatus;
+    }).sort((a, b) => {
+      const dateA = a.updatedAt || a.createdAt || "";
+      const dateB = b.updatedAt || b.createdAt || "";
+      return dateB.localeCompare(dateA);
+    });
+  };
+
+  const filteredHistory = getUnifiedHistory();
+
   // Stats calculation
-  const totalRegistered = users.length;
+  const totalRegistered = staffUsers.length;
   const activeWorking = liveStatusList.filter((item) => item.status === "checked-in").length;
   const activeBreak = liveStatusList.filter((item) => item.status === "on-break").length;
   const checkedOut = liveStatusList.filter((item) => item.status === "checked-out").length;
@@ -342,6 +439,29 @@ export default function AdminDashboard() {
       setSelectedRequestId(null);
     } catch (err) {
       showToast(err.message || "Failed to reject leave request.", "error");
+    }
+  };
+
+  // Regularization Requests actions
+  const handleApproveReg = async (id, name, comment) => {
+    try {
+      await updateRegularizationRequest(id, "approved", comment);
+      showToast(`Regularization request approved for ${name}.`, "success");
+      setRegManagerCommentInput("");
+      setSelectedRegRequestId(null);
+    } catch (err) {
+      showToast(err.message || "Failed to approve regularization request.", "error");
+    }
+  };
+
+  const handleRejectReg = async (id, name, comment) => {
+    try {
+      await updateRegularizationRequest(id, "rejected", comment);
+      showToast(`Regularization request rejected for ${name}.`, "error");
+      setRegManagerCommentInput("");
+      setSelectedRegRequestId(null);
+    } catch (err) {
+      showToast(err.message || "Failed to reject regularization request.", "error");
     }
   };
 
@@ -860,7 +980,7 @@ export default function AdminDashboard() {
     const depts = departments.length > 0 ? departments : ["Engineering", "HR", "Marketing", "Design"];
     
     return depts.map(dept => {
-      const totalUsersInDept = users.filter(u => u.department === dept).length;
+      const totalUsersInDept = staffUsers.filter(u => u.department === dept).length;
       const checkedInToday = logs.filter(l => l.date === todayStr && l.userDept === dept && l.checkInTime).length;
       const rate = totalUsersInDept > 0 ? Math.round((checkedInToday / totalUsersInDept) * 100) : 0;
       return { department: dept, total: totalUsersInDept, present: checkedInToday, rate };
@@ -894,7 +1014,7 @@ export default function AdminDashboard() {
 
     setActionLoading(true);
     try {
-      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd);
+      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual);
       showToast(`Employee ${newName} registered successfully.`, "success");
       setShowAddModal(false);
       
@@ -903,6 +1023,9 @@ export default function AdminDashboard() {
       setNewEmail("");
       setNewPassword("");
       setNewDept("");
+      setNewAnnual(25);
+      setNewSick(10);
+      setNewCasual(6);
       
       // Refresh list
       loadDirectoryData();
@@ -920,6 +1043,9 @@ export default function AdminDashboard() {
     setEditProgram(user.programType || "Internship");
     setEditShiftStart(user.shiftStart || "10:00");
     setEditShiftEnd(user.shiftEnd || "19:00");
+    setEditAnnual(user.annualLeaves !== undefined ? user.annualLeaves : 25);
+    setEditSick(user.sickLeaves !== undefined ? user.sickLeaves : 10);
+    setEditCasual(user.casualLeaves !== undefined ? user.casualLeaves : 6);
     setShowEditModal(true);
   };
 
@@ -942,7 +1068,10 @@ export default function AdminDashboard() {
         editDept, 
         editProgram, 
         editShiftStart, 
-        editShiftEnd
+        editShiftEnd,
+        editAnnual,
+        editSick,
+        editCasual
       );
       
       setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? {
@@ -951,7 +1080,10 @@ export default function AdminDashboard() {
         department: editDept,
         programType: editProgram,
         shiftStart: editShiftStart,
-        shiftEnd: editShiftEnd
+        shiftEnd: editShiftEnd,
+        annualLeaves: editAnnual,
+        sickLeaves: editSick,
+        casualLeaves: editCasual
       } : u));
       
       showToast("User profile updated successfully.", "success");
@@ -981,13 +1113,44 @@ export default function AdminDashboard() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
+        {/* Header Skeleton */}
+        <div className="space-y-2">
+          <div className="h-8 w-64 rounded skeleton" />
+          <div className="h-4 w-96 rounded skeleton" />
+        </div>
+
+        {/* Stats Grid Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="h-24 rounded-[20px] skeleton" />
+          <div className="h-24 rounded-[20px] skeleton" />
+          <div className="h-24 rounded-[20px] skeleton" />
+          <div className="h-24 rounded-[20px] skeleton" />
+        </div>
+
+        {/* Split Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 h-[420px] rounded-[24px] skeleton" />
+          <div className="h-[420px] rounded-[24px] skeleton" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto text-left">
       
       {/* ------------------ VIEW 1: ADMIN PANEL / LIVE MONITORING ------------------ */}
-      {activeTab === "live" && (
-        <>
-          {/* Header Description */}
+      {activeTab === "live" && (() => {
+        const liveStartIndex = (livePage - 1) * 10;
+        const paginatedLiveStatus = liveStatusList.slice(liveStartIndex, liveStartIndex + 10);
+        const liveTotalPages = Math.ceil(liveStatusList.length / 10) || 1;
+
+        return (
+          <>
+            {/* Header Description */}
           <div className="mb-4 sm:mb-6">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Admin Monitoring Dashboard</h1>
             <p className="text-sm text-text-sec mt-1">Real-time workforce intelligence and management.</p>
@@ -1075,14 +1238,18 @@ export default function AdminDashboard() {
                       <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
                         <th className="pb-3 pr-4">Staff Member</th>
                         <th className="pb-3 px-4">Department</th>
-                        <th className="pb-3 px-4">Clock-In</th>
+                        <th className="pb-3 px-4">Check-In</th>
+                        <th className="pb-3 px-4">Check-Out</th>
                         <th className="pb-3 pl-4 text-right">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
-                      {liveStatusList.slice(0, 5).map(({ user, status, log }) => {
+                      {paginatedLiveStatus.map(({ user, status, log }) => {
                         const inTime = log?.checkInTime 
                           ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : "—";
+                        const outTime = log?.checkOutTime
+                          ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                           : "—";
 
                         return (
@@ -1095,12 +1262,58 @@ export default function AdminDashboard() {
                             </td>
                             <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold">{inTime}</td>
+                            <td className="py-3.5 px-4 text-text-sec">{outTime}</td>
                             <td className="py-3.5 pl-4 text-right">{getStatusBadge(status)}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {liveStatusList.length > 10 && (
+                <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                  <span className="text-text-mut font-semibold">
+                    Showing {liveStartIndex + 1} to {Math.min(liveStatusList.length, liveStartIndex + 10)} of {liveStatusList.length} entries
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setLivePage(prev => Math.max(1, prev - 1))}
+                      disabled={livePage === 1}
+                      className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                    >
+                      Prev
+                    </button>
+                    {Array.from({ length: liveTotalPages }, (_, i) => i + 1).map((p) => {
+                      if (liveTotalPages > 5 && p !== 1 && p !== liveTotalPages && Math.abs(p - livePage) > 1) {
+                        if (p === 2 || p === liveTotalPages - 1) {
+                          return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                        }
+                        return null;
+                      }
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => setLivePage(p)}
+                          className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                            livePage === p
+                              ? "bg-brand-primary border-brand-primary text-white"
+                              : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setLivePage(prev => Math.min(liveTotalPages, prev + 1))}
+                      disabled={livePage === liveTotalPages}
+                      className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1154,11 +1367,17 @@ export default function AdminDashboard() {
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {/* ------------------ VIEW 2: STAFF DIRECTORY / USERS REGISTRY ------------------ */}
-      {activeTab === "users" && (
-        <>
+      {activeTab === "users" && (() => {
+        const usersStartIndex = (usersPage - 1) * 10;
+        const paginatedProfiles = filteredProfiles.slice(usersStartIndex, usersStartIndex + 10);
+        const usersTotalPages = Math.ceil(filteredProfiles.length / 10) || 1;
+
+        return (
+          <>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Staff Directory</h1>
@@ -1285,7 +1504,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
-                    {filteredProfiles.map((user) => {
+                    {paginatedProfiles.map((user) => {
                       const userToday = getLiveUserStatus(user);
                       const isWorking = userToday.status === "checked-in" || userToday.status === "on-break";
                       
@@ -1373,13 +1592,59 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+
+            {filteredProfiles.length > 10 && (
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                <span className="text-text-mut font-semibold">
+                  Showing {usersStartIndex + 1} to {Math.min(filteredProfiles.length, usersStartIndex + 10)} of {filteredProfiles.length} entries
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setUsersPage(prev => Math.max(1, prev - 1))}
+                    disabled={usersPage === 1}
+                    className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                  >
+                    Prev
+                  </button>
+                  {Array.from({ length: usersTotalPages }, (_, i) => i + 1).map((p) => {
+                    if (usersTotalPages > 5 && p !== 1 && p !== usersTotalPages && Math.abs(p - usersPage) > 1) {
+                      if (p === 2 || p === usersTotalPages - 1) {
+                        return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                      }
+                      return null;
+                    }
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setUsersPage(p)}
+                        className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                          usersPage === p
+                            ? "bg-brand-primary border-brand-primary text-white"
+                            : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setUsersPage(prev => Math.min(usersTotalPages, prev + 1))}
+                    disabled={usersPage === usersTotalPages}
+                    className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
-      )}
+        );
+      })()}
 
       {/* ------------------ VIEW 3: LEAVE APPROVAL CENTER ------------------ */}
       {activeTab === "logs" && (() => {
-        const pendingCount = leaveRequests.length;
+        const pendingCount = leaveRequests.length + regularizationRequests.length;
         const approvedThisMonth = allRequests.filter(r => r.status === "approved").length;
         
         let totalApprovedDays = 0;
@@ -1393,14 +1658,27 @@ export default function AdminDashboard() {
         });
 
         const selectedRequest = leaveRequests.find(r => r.id === selectedRequestId);
+        const selectedRegRequest = regularizationRequests.find(r => r.id === selectedRegRequestId);
+
+        const leavesPendingStartIndex = (leavesPendingPage - 1) * 10;
+        const paginatedPendingLeaves = filteredLeaveRequests.slice(leavesPendingStartIndex, leavesPendingStartIndex + 10);
+        const leavesPendingTotalPages = Math.ceil(filteredLeaveRequests.length / 10) || 1;
+
+        const regsPendingStartIndex = (regsPendingPage - 1) * 10;
+        const paginatedPendingRegs = filteredRegRequests.slice(regsPendingStartIndex, regsPendingStartIndex + 10);
+        const regsPendingTotalPages = Math.ceil(filteredRegRequests.length / 10) || 1;
+
+        const historyStartIndex = (historyPage - 1) * 10;
+        const paginatedHistory = filteredHistory.slice(historyStartIndex, historyStartIndex + 10);
+        const historyTotalPages = Math.ceil(filteredHistory.length / 10) || 1;
 
         return (
           <>
             {/* Header Description */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 text-left">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Leave Approval Center</h1>
-                <p className="text-sm text-text-sec mt-1">Review and manage time-off requests from your direct reports.</p>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Approvals Center</h1>
+                <p className="text-sm text-text-sec mt-1">Review and manage time-off and regularization requests from your direct reports.</p>
               </div>
               
               <div className="flex gap-2">
@@ -1437,8 +1715,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div className="mt-4 text-xs font-semibold text-text-sec flex items-center gap-1.5">
-                  <span className="text-brand-primary font-bold">+2</span>
-                  <span className="text-text-mut font-semibold">since yesterday</span>
+                  <span className="text-brand-primary font-bold">Leaves: {leaveRequests.length}</span>
+                  <span className="text-text-mut font-semibold">• Regs: {regularizationRequests.length}</span>
                 </div>
               </div>
 
@@ -1446,7 +1724,7 @@ export default function AdminDashboard() {
               <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">APPROVED THIS MONTH</span>
+                    <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">APPROVED LEAVES (MONTH)</span>
                     <span className="text-4xl font-black text-text-main block mt-2">{String(approvedThisMonth).padStart(2, '0')}</span>
                   </div>
                   <div className="w-12 h-12 rounded-[16px] bg-brand-success/10 text-brand-success flex items-center justify-center flex-shrink-0">
@@ -1477,20 +1755,567 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* Sub-tab segmented control */}
+            <div className="flex border-b border-border-card mb-6">
+              <button
+                onClick={() => setApprovalsSubTab("leaves")}
+                className={`py-3 px-6 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                  approvalsSubTab === "leaves"
+                    ? "border-brand-primary text-brand-primary"
+                    : "border-transparent text-text-sec hover:text-text-main"
+                }`}
+              >
+                Leave Requests ({leaveRequests.length})
+              </button>
+              <button
+                onClick={() => setApprovalsSubTab("regularization")}
+                className={`py-3 px-6 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                  approvalsSubTab === "regularization"
+                    ? "border-brand-primary text-brand-primary"
+                    : "border-transparent text-text-sec hover:text-text-main"
+                }`}
+              >
+                Regularization Requests ({regularizationRequests.length})
+              </button>
+              <button
+                onClick={() => setApprovalsSubTab("history")}
+                className={`py-3 px-6 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                  approvalsSubTab === "history"
+                    ? "border-brand-primary text-brand-primary"
+                    : "border-transparent text-text-sec hover:text-text-main"
+                }`}
+              >
+                Request History ({allRequests.filter(r => r.status !== "pending").length + allRegularizationRequests.filter(r => r.status !== "pending").length})
+              </button>
+            </div>
+
             {/* Split Content */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
-              {/* Queue */}
-              <div className="lg:col-span-7 bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-extrabold text-base text-text-main tracking-tight">Pending Request Queue</h3>
-                  <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase">
-                    {filteredLeaveRequests.length} ACTIVE
-                  </span>
+            {/* Split Content */}
+            {approvalsSubTab === "leaves" && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+                {/* Leaves Queue */}
+                <div className="lg:col-span-7 bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight">Pending Leave Requests</h3>
+                    <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase">
+                      {filteredLeaveRequests.length} ACTIVE
+                    </span>
+                  </div>
+
+                  {filteredLeaveRequests.length === 0 ? (
+                    <div className="text-center py-16 text-text-mut text-sm font-semibold flex-grow flex items-center justify-center">
+                      No pending leave requests in the queue.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
+                            <th className="pb-3 pr-4">Employee</th>
+                            <th className="pb-3 px-4">Leave Type</th>
+                            <th className="pb-3 px-4">Dates</th>
+                            <th className="pb-3 pl-4 text-right">Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
+                          {paginatedPendingLeaves.map((req) => {
+                            const isSelected = req.id === selectedRequestId;
+                            
+                            const startF = req.startDate ? new Date(req.startDate).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+                            const endF = req.endDate ? new Date(req.endDate).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+                            
+                            let typeBadge = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
+                            if (req.type === "Sick Leave") {
+                              typeBadge = "bg-brand-danger/10 text-brand-danger border border-brand-danger/20";
+                            } else if (req.type === "Casual Leave") {
+                              typeBadge = "bg-brand-success/10 text-brand-success border border-brand-success/20";
+                            }
+
+                            return (
+                              <tr 
+                                key={req.id} 
+                                onClick={() => setSelectedRequestId(req.id)}
+                                className={`hover:bg-bg-base/30 cursor-pointer transition-all ${
+                                  isSelected ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""
+                                }`}
+                              >
+                                <td className="py-3.5 pr-4 flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
+                                    {req.userName ? getInitials(req.userName) : "U"}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-extrabold text-text-main truncate max-w-[130px]">{req.userName}</span>
+                                    <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded font-extrabold uppercase ${typeBadge}`}>
+                                    {req.type}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-text-sec whitespace-nowrap">
+                                  {startF && endF ? `${startF} - ${endF}` : "—"}
+                                </td>
+                                <td className="py-3.5 pl-4 text-right text-brand-primary font-bold whitespace-nowrap">
+                                  {req.duration}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {filteredLeaveRequests.length > 10 && (
+                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                      <span className="text-text-mut font-semibold">
+                        Showing {leavesPendingStartIndex + 1} to {Math.min(filteredLeaveRequests.length, leavesPendingStartIndex + 10)} of {filteredLeaveRequests.length} entries
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setLeavesPendingPage(prev => Math.max(1, prev - 1))}
+                          disabled={leavesPendingPage === 1}
+                          className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                        >
+                          Prev
+                        </button>
+                        {Array.from({ length: leavesPendingTotalPages }, (_, i) => i + 1).map((p) => {
+                          if (leavesPendingTotalPages > 5 && p !== 1 && p !== leavesPendingTotalPages && Math.abs(p - leavesPendingPage) > 1) {
+                            if (p === 2 || p === leavesPendingTotalPages - 1) {
+                              return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                            }
+                            return null;
+                          }
+                          return (
+                            <button
+                              key={p}
+                              onClick={() => setLeavesPendingPage(p)}
+                              className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                                leavesPendingPage === p
+                                  ? "bg-brand-primary border-brand-primary text-white"
+                                  : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => setLeavesPendingPage(prev => Math.min(leavesPendingTotalPages, prev + 1))}
+                          disabled={leavesPendingPage === leavesPendingTotalPages}
+                          className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {filteredLeaveRequests.length === 0 ? (
-                  <div className="text-center py-16 text-text-mut text-sm font-semibold flex-grow flex items-center justify-center">
-                    No pending leave requests in the queue.
+                {/* Leaves Details Column */}
+                <div className="lg:col-span-5 space-y-6">
+                  {selectedRequest ? (
+                    <>
+                      <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-4 border-b border-border-card">
+                          <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0">
+                            {selectedRequest.userName ? getInitials(selectedRequest.userName) : "U"}
+                          </div>
+                          <div className="flex-grow text-left">
+                            <div className="flex justify-between items-center">
+                              <span className="font-extrabold text-sm text-text-main">{selectedRequest.userName}</span>
+                              <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/30 text-[10px] px-3 py-1 rounded-[8px] font-black uppercase tracking-wider">
+                                PENDING
+                              </span>
+                            </div>
+                            <span className="text-xs text-text-sec font-semibold mt-0.5 block">{selectedRequest.type} Request</span>
+                            <span className="text-[10px] text-text-mut font-bold block mt-1">
+                              {selectedRequest.startDate && selectedRequest.endDate 
+                                ? `${new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'})} - ${new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'})}`
+                                : "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {selectedRequest.reason && (
+                          <div className="p-3 bg-bg-base/30 rounded-[12px] border border-border-card">
+                            <span className="text-[9px] font-bold text-text-mut uppercase block mb-1">Reason for Leave</span>
+                            <p className="text-xs text-text-sec leading-relaxed font-semibold">{selectedRequest.reason}</p>
+                          </div>
+                        )}
+
+                        {/* Leave Balances Grid */}
+                        <div className="bg-bg-base/30 rounded-[16px] border border-border-card p-4 space-y-3">
+                          <span className="text-[10px] font-bold text-text-mut uppercase block text-left">Leave Balances</span>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
+                              <span className="text-[8px] font-bold text-text-mut uppercase block">Annual</span>
+                              <span className="text-sm font-extrabold text-text-main mt-0.5 block">
+                                {users.find(u => u.uid === selectedRequest.userId)?.annualLeaves !== undefined 
+                                  ? users.find(u => u.uid === selectedRequest.userId).annualLeaves 
+                                  : 25}
+                                <span className="text-[8px] font-semibold text-text-sec">d</span>
+                              </span>
+                            </div>
+                            <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
+                              <span className="text-[8px] font-bold text-text-mut uppercase block">Sick</span>
+                              <span className="text-sm font-extrabold text-text-main mt-0.5 block">
+                                {users.find(u => u.uid === selectedRequest.userId)?.sickLeaves !== undefined 
+                                  ? users.find(u => u.uid === selectedRequest.userId).sickLeaves 
+                                  : 10}
+                                <span className="text-[8px] font-semibold text-text-sec">d</span>
+                              </span>
+                            </div>
+                            <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
+                              <span className="text-[8px] font-bold text-text-mut uppercase block">Casual</span>
+                              <span className="text-sm font-extrabold text-text-main mt-0.5 block">
+                                {users.find(u => u.uid === selectedRequest.userId)?.casualLeaves !== undefined 
+                                  ? users.find(u => u.uid === selectedRequest.userId).casualLeaves 
+                                  : 6}
+                                <span className="text-[8px] font-semibold text-text-sec">d</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-bold text-text-sec">Manager Comment</label>
+                          <textarea
+                            placeholder="Add a note for the employee (optional)..."
+                            className="w-full h-20 p-3 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all resize-none"
+                            value={managerCommentInput}
+                            onChange={(e) => setManagerCommentInput(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleRejectLeave(selectedRequest.id, selectedRequest.userName, managerCommentInput)}
+                            className="py-2.5 px-4 border border-border-card hover:bg-red-500/10 text-red-500 text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                          >
+                            REJECT
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveLeave(selectedRequest.id, selectedRequest.userName, managerCommentInput)}
+                            className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors shadow-md shadow-brand-primary/10 cursor-pointer"
+                          >
+                            APPROVE REQUEST
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-extrabold text-xs text-text-mut uppercase tracking-wider">
+                            TEAM AVAILABILITY: {selectedRequest.startDate && selectedRequest.endDate 
+                              ? `${new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - ${new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})}`
+                              : "OCT 24 - OCT 28"}
+                          </h4>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <span className="text-text-main">Emily Stone <span className="text-[10px] text-text-mut font-normal">(Product Manager)</span></span>
+                              <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500 w-full" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <span className="text-text-main">Sarah Miller <span className="text-[10px] text-text-mut font-normal">(UI Designer)</span></span>
+                              <span className="text-brand-danger font-extrabold text-[10px] uppercase">Off (2 Days)</span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-brand-danger w-2/5" />
+                            </div>
+                            <span className="text-[9px] text-text-mut font-semibold block">Duration: Oct 24 - Oct 25</span>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <span className="text-text-main">James Wilson <span className="text-[10px] text-text-mut font-normal">(DevOps Engineer)</span></span>
+                              <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500 w-full" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <span className="text-brand-primary font-bold">{selectedRequest.userName} <span className="text-[10px] text-text-mut font-normal">({getMockDesignation(selectedRequest.userName)})</span></span>
+                              <span className="text-brand-primary font-extrabold text-[10px] uppercase">Requested</span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-brand-primary w-full" />
+                            </div>
+                            {selectedRequest.startDate && selectedRequest.endDate && (
+                              <span className="text-[9px] text-brand-primary font-semibold block">
+                                Duration: {new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - {new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} ({selectedRequest.duration})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-border-card pt-3 mt-1 text-[11px] text-text-sec font-semibold leading-relaxed">
+                          Approval will result in 2/5 members off during this period.
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-center py-16 text-text-mut text-sm font-semibold">
+                      Select a request from the queue to review details.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {approvalsSubTab === "regularization" && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+                {/* Regularization Queue */}
+                <div className="lg:col-span-7 bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight">Pending Time Regularizations</h3>
+                    <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase">
+                      {filteredRegRequests.length} ACTIVE
+                    </span>
+                  </div>
+
+                  {filteredRegRequests.length === 0 ? (
+                    <div className="text-center py-16 text-text-mut text-sm font-semibold flex-grow flex items-center justify-center">
+                      No pending regularization requests in the queue.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
+                            <th className="pb-3 pr-4">Employee</th>
+                            <th className="pb-3 px-4">Missed Date</th>
+                            <th className="pb-3 px-4">Req. Check-In</th>
+                            <th className="pb-3 pl-4 text-right">Req. Check-Out</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
+                          {paginatedPendingRegs.map((req) => {
+                            const isSelected = req.id === selectedRegRequestId;
+                            return (
+                              <tr 
+                                key={req.id} 
+                                onClick={() => setSelectedRegRequestId(req.id)}
+                                className={`hover:bg-bg-base/30 cursor-pointer transition-all ${
+                                  isSelected ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""
+                                }`}
+                              >
+                                <td className="py-3.5 pr-4 flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
+                                    {req.userName ? getInitials(req.userName) : "U"}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-extrabold text-text-main truncate max-w-[130px]">{req.userName}</span>
+                                    <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 text-text-sec whitespace-nowrap">
+                                  {req.date}
+                                </td>
+                                <td className="py-3.5 px-4 text-brand-primary font-bold">
+                                  {formatShiftTime(req.checkInTime)}
+                                </td>
+                                <td className="py-3.5 pl-4 text-right text-brand-primary font-bold animate-pulse-slow">
+                                  {formatShiftTime(req.checkOutTime)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {filteredRegRequests.length > 10 && (
+                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                      <span className="text-text-mut font-semibold">
+                        Showing {regsPendingStartIndex + 1} to {Math.min(filteredRegRequests.length, regsPendingStartIndex + 10)} of {filteredRegRequests.length} entries
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setRegsPendingPage(prev => Math.max(1, prev - 1))}
+                          disabled={regsPendingPage === 1}
+                          className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                        >
+                          Prev
+                        </button>
+                        {Array.from({ length: regsPendingTotalPages }, (_, i) => i + 1).map((p) => {
+                          if (regsPendingTotalPages > 5 && p !== 1 && p !== regsPendingTotalPages && Math.abs(p - regsPendingPage) > 1) {
+                            if (p === 2 || p === regsPendingTotalPages - 1) {
+                              return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                            }
+                            return null;
+                          }
+                          return (
+                            <button
+                              key={p}
+                              onClick={() => setRegsPendingPage(p)}
+                              className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                                regsPendingPage === p
+                                  ? "bg-brand-primary border-brand-primary text-white"
+                                  : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => setRegsPendingPage(prev => Math.min(regsPendingTotalPages, prev + 1))}
+                          disabled={regsPendingPage === regsPendingTotalPages}
+                          className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Regularization Details Column */}
+                <div className="lg:col-span-5 space-y-6">
+                  {selectedRegRequest ? (
+                    <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-6 text-left">
+                      <div className="flex items-center gap-3 pb-4 border-b border-border-card">
+                        <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0">
+                          {selectedRegRequest.userName ? getInitials(selectedRegRequest.userName) : "U"}
+                        </div>
+                        <div className="flex-grow text-left">
+                          <div className="flex justify-between items-center">
+                            <span className="font-extrabold text-sm text-text-main">{selectedRegRequest.userName}</span>
+                            <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/30 text-[10px] px-3 py-1 rounded-[8px] font-black uppercase tracking-wider">
+                              PENDING
+                            </span>
+                          </div>
+                          <span className="text-xs text-text-sec font-semibold mt-0.5 block">Time Regularization Request</span>
+                          <span className="text-[10px] text-text-mut font-bold block mt-1">
+                            Missed Date: {selectedRegRequest.date}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Times display */}
+                      <div className="grid grid-cols-2 gap-4 bg-bg-base/30 rounded-[16px] border border-border-card p-4">
+                        <div>
+                          <span className="text-[10px] font-bold text-text-mut uppercase block">Requested Check-In</span>
+                          <span className="text-sm font-extrabold text-brand-primary mt-1 block">{formatShiftTime(selectedRegRequest.checkInTime)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-text-mut uppercase block">Requested Check-Out</span>
+                          <span className="text-sm font-extrabold text-brand-primary mt-1 block">{formatShiftTime(selectedRegRequest.checkOutTime)}</span>
+                        </div>
+                      </div>
+
+                      {selectedRegRequest.reason && (
+                        <div className="p-3 bg-bg-base/30 rounded-[12px] border border-border-card">
+                          <span className="text-[9px] font-bold text-text-mut uppercase block mb-1">Reason / Explanation</span>
+                          <p className="text-xs text-text-sec leading-relaxed font-semibold">{selectedRegRequest.reason}</p>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-text-sec">Manager Comment</label>
+                        <textarea
+                          placeholder="Add a note for the employee (optional)..."
+                          className="w-full h-20 p-3 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all resize-none"
+                          value={regManagerCommentInput}
+                          onChange={(e) => setRegManagerCommentInput(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRejectReg(selectedRegRequest.id, selectedRegRequest.userName, regManagerCommentInput)}
+                          className="py-2.5 px-4 border border-border-card hover:bg-red-500/10 text-red-500 text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                        >
+                          REJECT
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveReg(selectedRegRequest.id, selectedRegRequest.userName, regManagerCommentInput)}
+                          className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors shadow-md shadow-brand-primary/10 cursor-pointer"
+                        >
+                          APPROVE REQUEST
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-center py-16 text-text-mut text-sm font-semibold">
+                      Select a regularization request from the queue to review details.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {approvalsSubTab === "history" && (
+              <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-left">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                  <div>
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight">Processed Request History</h3>
+                    <p className="text-xs text-text-mut font-semibold mt-1">Review approved and rejected leaves and regularization requests.</p>
+                  </div>
+                </div>
+
+                {/* Filter Toolbar */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 pb-6 border-b border-border-card">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Search Employee / Reason</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all font-semibold"
+                      placeholder="Search name, reason..."
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Request Type</label>
+                    <select
+                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main font-semibold outline-none focus:border-brand-primary transition-all"
+                      value={historyType}
+                      onChange={(e) => setHistoryType(e.target.value)}
+                    >
+                      <option value="all">All Types</option>
+                      <option value="leave">Leave Requests</option>
+                      <option value="regularization">Regularizations</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Status</label>
+                    <select
+                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main font-semibold outline-none focus:border-brand-primary transition-all"
+                      value={historyStatus}
+                      onChange={(e) => setHistoryStatus(e.target.value)}
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+
+                {filteredHistory.length === 0 ? (
+                  <div className="text-center py-16 text-text-mut text-sm font-semibold">
+                    No requests found matching the search or filters.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1498,52 +2323,62 @@ export default function AdminDashboard() {
                       <thead>
                         <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
                           <th className="pb-3 pr-4">Employee</th>
-                          <th className="pb-3 px-4">Leave Type</th>
-                          <th className="pb-3 px-4">Dates</th>
-                          <th className="pb-3 pl-4 text-right">Duration</th>
+                          <th className="pb-3 px-4">Request Type</th>
+                          <th className="pb-3 px-4">Date / Period</th>
+                          <th className="pb-3 px-4">Details</th>
+                          <th className="pb-3 px-4">Reason</th>
+                          <th className="pb-3 px-4">Status</th>
+                          <th className="pb-3 pl-4 text-right">Manager Note</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
-                        {filteredLeaveRequests.map((req) => {
-                          const isSelected = req.id === selectedRequestId;
-                          
-                          const startF = req.startDate ? new Date(req.startDate).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
-                          const endF = req.endDate ? new Date(req.endDate).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
-                          
-                          let typeBadge = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
-                          if (req.type === "Sick Leave") {
-                            typeBadge = "bg-brand-danger/10 text-brand-danger border border-brand-danger/20";
-                          } else if (req.type === "Casual Leave") {
-                            typeBadge = "bg-brand-success/10 text-brand-success border border-brand-success/20";
+                        {paginatedHistory.map((item) => {
+                          const isApproved = item.status === "approved";
+                          const isRejected = item.status === "rejected";
+                          let statusBadge = "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20";
+                          if (isApproved) {
+                            statusBadge = "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+                          } else if (isRejected) {
+                            statusBadge = "bg-red-500/10 text-red-500 border border-red-500/20";
+                          }
+
+                          let typeBadge = "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20";
+                          if (item.reqType === "Regularization") {
+                            typeBadge = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
                           }
 
                           return (
-                            <tr 
-                              key={req.id} 
-                              onClick={() => setSelectedRequestId(req.id)}
-                              className={`hover:bg-bg-base/30 cursor-pointer transition-all ${
-                                isSelected ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""
-                              }`}
-                            >
+                            <tr key={item.id} className="hover:bg-bg-base/30">
                               <td className="py-3.5 pr-4 flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                                  {req.userName ? getInitials(req.userName) : "U"}
+                                  {item.userName ? getInitials(item.userName) : "U"}
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="font-extrabold text-text-main truncate max-w-[130px]">{req.userName}</span>
-                                  <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
+                                  <span className="font-extrabold text-text-main truncate max-w-[130px]">{item.userName}</span>
+                                  <span className="text-[10px] text-text-mut font-semibold mt-0.5">{item.userDept || "Staff"}</span>
                                 </div>
                               </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-extrabold uppercase ${typeBadge}`}>
-                                  {req.type}
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <span className={`text-[9px] px-2 py-0.5 rounded font-extrabold uppercase ${typeBadge}`}>
+                                  {item.reqType}
                                 </span>
                               </td>
                               <td className="py-3.5 px-4 text-text-sec whitespace-nowrap">
-                                {startF && endF ? `${startF} - ${endF}` : "—"}
+                                {item.dateLabel}
                               </td>
-                              <td className="py-3.5 pl-4 text-right text-brand-primary font-bold whitespace-nowrap">
-                                {req.duration}
+                              <td className="py-3.5 px-4 text-text-main truncate max-w-[180px]" title={item.details}>
+                                {item.details}
+                              </td>
+                              <td className="py-3.5 px-4 text-text-sec truncate max-w-[200px]" title={item.reason}>
+                                {item.reason || "—"}
+                              </td>
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase ${statusBadge}`}>
+                                  {item.status}
+                                </span>
+                              </td>
+                              <td className="py-3.5 pl-4 text-right text-[11px] text-text-mut font-semibold truncate max-w-[150px]" title={item.managerComment || ""}>
+                                {item.managerComment || "—"}
                               </td>
                             </tr>
                           );
@@ -1552,173 +2387,53 @@ export default function AdminDashboard() {
                     </table>
                   </div>
                 )}
-              </div>
 
-              {/* Details Column */}
-              <div className="lg:col-span-5 space-y-6">
-                {selectedRequest ? (
-                  <>
-                    <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-6">
-                      <div className="flex items-center gap-3 pb-4 border-b border-border-card">
-                        <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0">
-                          {selectedRequest.userName ? getInitials(selectedRequest.userName) : "U"}
-                        </div>
-                        <div className="flex-grow text-left">
-                          <div className="flex justify-between items-center">
-                            <span className="font-extrabold text-sm text-text-main">{selectedRequest.userName}</span>
-                            <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/30 text-[10px] px-3 py-1 rounded-[8px] font-black uppercase tracking-wider">
-                              PENDING
-                            </span>
-                          </div>
-                          <span className="text-xs text-text-sec font-semibold mt-0.5 block">{selectedRequest.type} Request</span>
-                          <span className="text-[10px] text-text-mut font-bold block mt-1">
-                            {selectedRequest.startDate && selectedRequest.endDate 
-                              ? `${new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'})} - ${new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'})}`
-                              : "—"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {selectedRequest.reason && (
-                        <div className="p-3 bg-bg-base/30 rounded-[12px] border border-border-card">
-                          <span className="text-[9px] font-bold text-text-mut uppercase block mb-1">Reason for Leave</span>
-                          <p className="text-xs text-text-sec leading-relaxed font-semibold">{selectedRequest.reason}</p>
-                        </div>
-                      )}
-
-                      {/* Leave Balances Grid */}
-                      <div className="bg-bg-base/30 rounded-[16px] border border-border-card p-4 space-y-3">
-                        <span className="text-[10px] font-bold text-text-mut uppercase block text-left">Leave Balances</span>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
-                            <span className="text-[8px] font-bold text-text-mut uppercase block">Annual</span>
-                            <span className="text-sm font-extrabold text-text-main mt-0.5 block">14.5<span className="text-[8px] font-semibold text-text-sec">/25d</span></span>
-                          </div>
-                          <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
-                            <span className="text-[8px] font-bold text-text-mut uppercase block">Sick</span>
-                            <span className="text-sm font-extrabold text-text-main mt-0.5 block">6.0<span className="text-[8px] font-semibold text-text-sec">/10d</span></span>
-                          </div>
-                          <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
-                            <span className="text-[8px] font-bold text-text-mut uppercase block">Casual</span>
-                            <span className="text-sm font-extrabold text-text-main mt-0.5 block">3.0<span className="text-[8px] font-semibold text-text-sec">/6d</span></span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-text-sec">Manager Comment</label>
-                        <textarea
-                          placeholder="Add a note for the employee (optional)..."
-                          className="w-full h-20 p-3 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all resize-none"
-                          value={managerCommentInput}
-                          onChange={(e) => setManagerCommentInput(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-bold text-text-mut uppercase">Supporting Documents</span>
-                        <div className="flex items-center justify-between p-3 bg-bg-base/20 border border-border-card rounded-[12px] text-xs font-semibold text-text-sec">
-                          <span className="flex items-center gap-2">
-                            <FileText size={14} className="text-brand-primary" />
-                            <span>Flight_Itinerary.pdf</span>
-                          </span>
-                          <svg className="w-3.5 h-3.5 text-text-mut cursor-pointer hover:text-brand-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleRejectLeave(selectedRequest.id, selectedRequest.userName, managerCommentInput)}
-                          className="py-2.5 px-4 border border-border-card hover:bg-red-500/10 text-red-500 text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
-                        >
-                          REJECT
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleApproveLeave(selectedRequest.id, selectedRequest.userName, managerCommentInput)}
-                          className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors shadow-md shadow-brand-primary/10 cursor-pointer"
-                        >
-                          APPROVE REQUEST
-                        </button>
-                      </div>
+                {filteredHistory.length > 10 && (
+                  <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                    <span className="text-text-mut font-semibold">
+                      Showing {historyStartIndex + 1} to {Math.min(filteredHistory.length, historyStartIndex + 10)} of {filteredHistory.length} entries
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                        disabled={historyPage === 1}
+                        className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                      >
+                        Prev
+                      </button>
+                      {Array.from({ length: historyTotalPages }, (_, i) => i + 1).map((p) => {
+                        if (historyTotalPages > 5 && p !== 1 && p !== historyTotalPages && Math.abs(p - historyPage) > 1) {
+                          if (p === 2 || p === historyTotalPages - 1) {
+                            return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                          }
+                          return null;
+                        }
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => setHistoryPage(p)}
+                            className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                              historyPage === p
+                                ? "bg-brand-primary border-brand-primary text-white"
+                                : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                      <button
+                        onClick={() => setHistoryPage(prev => Math.min(historyTotalPages, prev + 1))}
+                        disabled={historyPage === historyTotalPages}
+                        className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                      >
+                        Next
+                      </button>
                     </div>
-
-                    <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-extrabold text-xs text-text-mut uppercase tracking-wider">
-                          TEAM AVAILABILITY: {selectedRequest.startDate && selectedRequest.endDate 
-                            ? `${new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - ${new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})}`
-                            : "OCT 24 - OCT 28"}
-                        </h4>
-                      </div>
-
-                      <div className="space-y-4">
-                        {/* Emily Stone */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-xs font-semibold">
-                            <span className="text-text-main">Emily Stone <span className="text-[10px] text-text-mut font-normal">(Product Manager)</span></span>
-                            <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
-                          </div>
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-emerald-500 w-full" />
-                          </div>
-                        </div>
-
-                        {/* Sarah Miller */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-xs font-semibold">
-                            <span className="text-text-main">Sarah Miller <span className="text-[10px] text-text-mut font-normal">(UI Designer)</span></span>
-                            <span className="text-brand-danger font-extrabold text-[10px] uppercase">Off (2 Days)</span>
-                          </div>
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-brand-danger w-2/5" />
-                          </div>
-                          <span className="text-[9px] text-text-mut font-semibold block">Duration: Oct 24 - Oct 25</span>
-                        </div>
-
-                        {/* James Wilson */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-xs font-semibold">
-                            <span className="text-text-main">James Wilson <span className="text-[10px] text-text-mut font-normal">(DevOps Engineer)</span></span>
-                            <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
-                          </div>
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-emerald-500 w-full" />
-                          </div>
-                        </div>
-
-                        {/* Requester */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-xs font-semibold">
-                            <span className="text-brand-primary font-bold">{selectedRequest.userName} <span className="text-[10px] text-text-mut font-normal">({getMockDesignation(selectedRequest.userName)})</span></span>
-                            <span className="text-brand-primary font-extrabold text-[10px] uppercase">Requested</span>
-                          </div>
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-brand-primary w-full" />
-                          </div>
-                          {selectedRequest.startDate && selectedRequest.endDate && (
-                            <span className="text-[9px] text-brand-primary font-semibold block">
-                              Duration: {new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - {new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} ({selectedRequest.duration})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="border-t border-border-card pt-3 mt-1 text-[11px] text-text-sec font-semibold leading-relaxed">
-                        Approval will result in 2/5 members off during this period.
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-center py-16 text-text-mut text-sm font-semibold">
-                    Select a request from the queue to review details.
                   </div>
                 )}
               </div>
-            </div>
+            )}
           </>
         );
       })()}
@@ -1811,30 +2526,99 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Top Employees Working Hours */}
-              <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm lg:col-span-2">
-                <h4 className="font-extrabold text-base text-text-main mb-1.5 flex items-center gap-2">
-                  <Clock size={18} className="text-brand-primary" /> 
-                  <span>Average Work Hours of Top Performers</span>
-                </h4>
-                <p className="text-[10px] text-text-mut font-semibold mb-6">Top employees with highest average active working hours per shift</p>
-                
+              {/* Top Employees Working Hours - Premium Leaderboard */}
+              <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm lg:col-span-2 overflow-hidden relative">
+                {/* Background decorative gradient */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary/5 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/2" />
+
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 relative">
+                  <div>
+                    <h4 className="font-extrabold text-base text-text-main flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-brand-primary to-indigo-500 flex items-center justify-center shadow-md shadow-brand-primary/25">
+                        <Clock size={16} className="text-white" />
+                      </div>
+                      <span>Average Work Hours — Top Performers</span>
+                    </h4>
+                    <p className="text-[10px] text-text-mut font-semibold mt-1 ml-10">Ranked by average active hours logged per shift session</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-brand-primary/5 border border-brand-primary/15 rounded-[10px] px-3 py-1.5 text-[10px] font-bold text-brand-primary self-start sm:self-auto">
+                    <TrendingUp size={12} />
+                    <span>TARGET: 8h / SHIFT</span>
+                  </div>
+                </div>
+
                 {employeeStats.length === 0 ? (
-                  <div className="text-center py-10 text-text-mut text-xs">No logs available for calculations.</div>
+                  <div className="text-center py-14 text-text-mut text-xs font-semibold">
+                    <BarChart3 size={32} className="mx-auto mb-3 opacity-30" />
+                    No attendance logs available yet for analysis.
+                  </div>
                 ) : (
-                  <div className="space-y-3.5">
+                  <div className="space-y-4 relative">
                     {employeeStats.map((e, idx) => {
-                      const rowWidth = Math.max(10, Math.round((e.avgHours / maxHours) * 100));
+                      const fillPercent = Math.max(5, Math.round((e.avgHours / maxHours) * 100));
+                      const targetPercent = Math.round((e.avgHours / 8) * 100);
+                      const isAboveTarget = e.avgHours >= 8;
+                      const isNearTarget = e.avgHours >= 6 && e.avgHours < 8;
+
+                      // Rank visuals
+                      const rankEmoji = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : null;
+                      const rankColors = [
+                        "from-amber-400 to-yellow-300",   // 1st - gold
+                        "from-slate-400 to-slate-300",    // 2nd - silver
+                        "from-orange-500 to-amber-400",   // 3rd - bronze
+                        "from-brand-primary to-indigo-500", // 4th
+                        "from-brand-primary to-indigo-500"  // 5th
+                      ];
+                      const barColor = isAboveTarget
+                        ? "from-brand-success to-emerald-400"
+                        : isNearTarget
+                          ? "from-brand-warning to-amber-300"
+                          : "from-red-500 to-red-400";
+                      const badgeColor = isAboveTarget
+                        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                        : isNearTarget
+                          ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                          : "bg-red-500/10 text-red-500 border-red-500/20";
+
                       return (
-                        <div key={idx} className="flex items-center gap-4">
-                          <span className="w-24 text-xs font-bold text-text-main truncate text-right">{e.name}</span>
-                          
-                          <div className="flex-grow bg-slate-200 dark:bg-slate-800 h-5 rounded-[8px] overflow-hidden relative">
-                            <div 
-                              className="bg-brand-primary h-full flex items-center justify-end px-3 transition-all duration-500 shadow-sm"
-                              style={{ width: `${rowWidth}%` }}
-                            >
-                              <span className="text-[9px] font-extrabold text-white">{e.avgHours}h</span>
+                        <div key={idx} className="group flex items-center gap-4 p-3 rounded-[16px] hover:bg-bg-base/60 transition-all duration-200">
+                          {/* Rank badge */}
+                          <div className={`w-9 h-9 rounded-[10px] bg-gradient-to-br ${rankColors[idx]} flex items-center justify-center font-extrabold text-white text-xs shadow-sm flex-shrink-0`}>
+                            {rankEmoji || `#${idx + 1}`}
+                          </div>
+
+                          {/* Name */}
+                          <div className="w-28 flex-shrink-0">
+                            <span className="text-xs font-extrabold text-text-main truncate block leading-tight">{e.name}</span>
+                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border mt-1 inline-block ${badgeColor}`}>
+                              {isAboveTarget ? "On Target" : isNearTarget ? "Near Target" : "Below Target"}
+                            </span>
+                          </div>
+
+                          {/* Bar track */}
+                          <div className="flex-grow flex flex-col gap-1.5">
+                            {/* Target line marker */}
+                            <div className="relative w-full bg-bg-base dark:bg-slate-800/60 h-6 rounded-[8px] overflow-hidden border border-border-card/50">
+                              {/* Filled bar */}
+                              <div
+                                className={`absolute left-0 top-0 h-full bg-gradient-to-r ${barColor} rounded-[8px] transition-all duration-700 ease-out flex items-center justify-end pr-2 shadow-sm`}
+                                style={{ width: `${fillPercent}%` }}
+                              >
+                                <span className="text-[9px] font-extrabold text-white drop-shadow">{e.avgHours}h</span>
+                              </div>
+                              {/* Target line at 8h (100% of maxHours reference) */}
+                              {maxHours > 8 && (
+                                <div
+                                  className="absolute top-0 h-full w-px bg-white/40 border-l border-dashed border-white/60 pointer-events-none"
+                                  style={{ left: `${Math.round((8 / maxHours) * 100)}%` }}
+                                />
+                              )}
+                            </div>
+                            {/* Progress mini-label */}
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] text-text-mut font-semibold">{targetPercent}% of 8h target</span>
+                              <span className="text-[9px] text-text-mut font-semibold">{e.avgHours}h avg</span>
                             </div>
                           </div>
                         </div>
@@ -1842,6 +2626,31 @@ export default function AdminDashboard() {
                     })}
                   </div>
                 )}
+
+                {/* Summary stats footer */}
+                {employeeStats.length > 0 && (() => {
+                  const overallAvg = parseFloat((employeeStats.reduce((s, e) => s + e.avgHours, 0) / employeeStats.length).toFixed(1));
+                  const topPerformer = employeeStats[0];
+                  const aboveTargetCount = employeeStats.filter(e => e.avgHours >= 8).length;
+                  return (
+                    <div className="mt-6 pt-5 border-t border-border-card grid grid-cols-3 gap-4">
+                      <div className="text-center p-3 rounded-[12px] bg-bg-base/50 border border-border-card">
+                        <span className="text-[9px] font-bold text-text-mut uppercase tracking-wide block mb-1">Team Avg</span>
+                        <span className="text-lg font-extrabold text-brand-primary">{overallAvg}h</span>
+                      </div>
+                      <div className="text-center p-3 rounded-[12px] bg-bg-base/50 border border-border-card">
+                        <span className="text-[9px] font-bold text-text-mut uppercase tracking-wide block mb-1">Top Performer</span>
+                        <span className="text-sm font-extrabold text-text-main truncate block">{topPerformer.name.split(" ")[0]}</span>
+                        <span className="text-[10px] font-bold text-emerald-500">{topPerformer.avgHours}h</span>
+                      </div>
+                      <div className="text-center p-3 rounded-[12px] bg-bg-base/50 border border-border-card">
+                        <span className="text-[9px] font-bold text-text-mut uppercase tracking-wide block mb-1">On Target</span>
+                        <span className="text-lg font-extrabold text-brand-success">{aboveTargetCount}</span>
+                        <span className="text-[9px] text-text-mut font-semibold block">/ {employeeStats.length} staff</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </>
@@ -2131,6 +2940,42 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Annual Leaves</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newAnnual}
+                    onChange={(e) => setNewAnnual(Number(e.target.value))}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Sick Leaves</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newSick}
+                    onChange={(e) => setNewSick(Number(e.target.value))}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Casual Leaves</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newCasual}
+                    onChange={(e) => setNewCasual(Number(e.target.value))}
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4 bg-brand-primary/5 p-3 rounded-[12px] border border-dashed border-border-card">
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-bold text-brand-primary">Shift Start</label>
@@ -2244,6 +3089,42 @@ export default function AdminDashboard() {
                       </button>
                     ))}
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Annual Leaves</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editAnnual}
+                    onChange={(e) => setEditAnnual(Number(e.target.value))}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Sick Leaves</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editSick}
+                    onChange={(e) => setEditSick(Number(e.target.value))}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Casual Leaves</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editCasual}
+                    onChange={(e) => setEditCasual(Number(e.target.value))}
+                    min="0"
+                    required
+                  />
                 </div>
               </div>
 

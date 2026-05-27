@@ -10,7 +10,8 @@ import {
   subscribeToUserLogs,
   requestLeave,
   subscribeToPaidLeaves,
-  subscribeToLeaveRequests
+  subscribeToLeaveRequests,
+  getAllRegisteredUsers
 } from "../firebase";
 import {
   Play,
@@ -58,6 +59,85 @@ export default function UserDashboard() {
   const [myLeaveRequests, setMyLeaveRequests] = useState([]);
   const [selectedPaidLeaveDetail, setSelectedPaidLeaveDetail] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+  const [leavesPage, setLeavesPage] = useState(1);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [teamOnLeaveCount, setTeamOnLeaveCount] = useState(0);
+
+  const toastShownRef = useRef(false);
+
+  const getElapsedWorkingMs = () => {
+    if (!todayLog) return 0;
+    if (todayLog.status === "checked-out") {
+      if (todayLog.totalWorkingMinutes !== undefined) {
+        return todayLog.totalWorkingMinutes * 60000;
+      }
+      const checkInDate = new Date(todayLog.checkInTime);
+      const checkOutDate = new Date(todayLog.checkOutTime);
+      let diffMs = checkOutDate.getTime() - checkInDate.getTime();
+      let breakMs = 0;
+      if (todayLog.breaks && todayLog.breaks.length > 0) {
+        todayLog.breaks.forEach(b => {
+          if (b.startTime) {
+            const start = new Date(b.startTime);
+            const resume = b.resumeTime ? new Date(b.resumeTime) : new Date(todayLog.checkOutTime);
+            breakMs += (resume.getTime() - start.getTime());
+          }
+        });
+      }
+      return Math.min(Math.max(0, diffMs - breakMs), 8 * 60 * 60 * 1000);
+    } else {
+      const checkInDate = new Date(todayLog.checkInTime);
+      let diffMs = currentTime.getTime() - checkInDate.getTime();
+      let breakMs = 0;
+      if (todayLog.breaks && todayLog.breaks.length > 0) {
+        todayLog.breaks.forEach(b => {
+          if (b.startTime) {
+            const start = new Date(b.startTime);
+            const resume = b.resumeTime ? new Date(b.resumeTime) : currentTime;
+            breakMs += (resume.getTime() - start.getTime());
+          }
+        });
+      }
+      return Math.min(Math.max(0, diffMs - breakMs), 8 * 60 * 60 * 1000);
+    }
+  };
+
+  const formatDuration = (ms) => {
+    const totalSecs = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  };
+
+  const isForgotToCheckIn = (() => {
+    if (currentUser.role === "admin") return false;
+    if (todayLog) return false;
+    
+    // Check if today is a weekday
+    const day = currentTime.getDay();
+    const isWeekday = day >= 1 && day <= 5;
+    if (!isWeekday) return false;
+    
+    // Parse shiftStart (e.g. "10:00")
+    if (!currentUser.shiftStart) return false;
+    const [startH, startM] = currentUser.shiftStart.split(":").map(Number);
+    const shiftStartToday = new Date(currentTime);
+    shiftStartToday.setHours(startH, startM, 0, 0);
+    
+    return currentTime > shiftStartToday;
+  })();
+
+  useEffect(() => {
+    if (isForgotToCheckIn && !toastShownRef.current) {
+      showToast("⚠️ Shift Started! You forgot to check-in today. Please check-in immediately.", "warning", 6000);
+      toastShownRef.current = true;
+    } else if (!isForgotToCheckIn) {
+      toastShownRef.current = false;
+    }
+  }, [isForgotToCheckIn]);
+
   const formatShiftTime = (timeStr) => {
     if (!timeStr) return "10:00 AM";
     const [hoursStr, minutesStr] = timeStr.split(":");
@@ -95,6 +175,11 @@ export default function UserDashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  // Reset pagination on tab change
+  useEffect(() => {
+    setLeavesPage(1);
+  }, [activeTab]);
+
   // Timer State
   const [timeLeft, setTimeLeft] = useState(0); // in seconds
   const [breakTotalSeconds, setBreakTotalSeconds] = useState(0);
@@ -110,6 +195,7 @@ export default function UserDashboard() {
       const todayStr = new Date().toISOString().split("T")[0];
       const today = logs.find(log => log.date === todayStr);
       setTodayLog(today || null);
+      setLoading(false);
     });
 
     const unsubscribePaid = subscribeToPaidLeaves((list) => {
@@ -118,7 +204,22 @@ export default function UserDashboard() {
 
     const unsubscribeLeaves = subscribeToLeaveRequests((list) => {
       setMyLeaveRequests(list.filter(r => r.userId === currentUser.uid));
+      
+      const todayStr = new Date().toISOString().split("T")[0];
+      const deptOnLeave = list.filter(r => 
+        r.status === "approved" && 
+        r.userDept === currentUser.department && 
+        r.userId !== currentUser.uid &&
+        r.startDate <= todayStr && 
+        r.endDate >= todayStr
+      );
+      setTeamOnLeaveCount(deptOnLeave.length);
     });
+
+    getAllRegisteredUsers().then(usersList => {
+      const deptUsers = usersList.filter(u => u.department === currentUser.department && u.uid !== currentUser.uid && u.role !== "admin");
+      setTeamMembers(deptUsers);
+    }).catch(err => console.warn("Failed to fetch team members:", err));
 
     return () => {
       unsubscribe();
@@ -126,7 +227,7 @@ export default function UserDashboard() {
       unsubscribeLeaves();
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [currentUser.uid]);
+  }, [currentUser.uid, currentUser.department]);
 
   // Handle countdown timer when user is on break
   useEffect(() => {
@@ -426,7 +527,7 @@ export default function UserDashboard() {
       if (todayLog.checkOutTime) {
         list.push({
           type: "out",
-          title: "Clocked Out",
+          title: "Checked Out",
           time: new Date(todayLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: "Today",
           desc: `Total: ${((todayLog.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs`
@@ -456,7 +557,7 @@ export default function UserDashboard() {
       if (todayLog.checkInTime) {
         list.push({
           type: "in",
-          title: "Clocked In",
+          title: "Checked In",
           time: new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: "Today",
           desc: "Office Worksite"
@@ -470,7 +571,7 @@ export default function UserDashboard() {
       if (hLog.checkOutTime) {
         list.push({
           type: "out",
-          title: "Clocked Out",
+          title: "Checked Out",
           time: new Date(hLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: dateText,
           desc: `Total: ${((hLog.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs`
@@ -479,7 +580,7 @@ export default function UserDashboard() {
       if (hLog.checkInTime) {
         list.push({
           type: "in",
-          title: "Clocked In",
+          title: "Checked In",
           time: new Date(hLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: dateText,
           desc: "Office Worksite"
@@ -489,10 +590,10 @@ export default function UserDashboard() {
 
     if (list.length === 0) {
       list.push(
-        { type: "in", title: "Clocked In", time: "09:12 AM", dateText: "Today", desc: "Remote Work" },
-        { type: "out", title: "Clocked Out", time: "05:45 PM", dateText: "Yesterday", desc: "Total: 8h 33m" },
+        { type: "in", title: "Checked In", time: "09:12 AM", dateText: "Today", desc: "Remote Work" },
+        { type: "out", title: "Checked Out", time: "05:45 PM", dateText: "Yesterday", desc: "Total: 8h 33m" },
         { type: "break", title: "Break Started", time: "01:00 PM", dateText: "Yesterday", desc: "Lunch Break" },
-        { type: "in", title: "Clocked In", time: "08:58 AM", dateText: "Yesterday", desc: "Office Worksite" }
+        { type: "in", title: "Checked In", time: "08:58 AM", dateText: "Yesterday", desc: "Office Worksite" }
       );
     }
 
@@ -509,7 +610,52 @@ export default function UserDashboard() {
   const maxWeeklyHours = Math.max(8, ...weeklyHoursData.map(d => d.hours));
   const recentActivities = getRecentActivitiesList();
 
+  if (loading) {
+    return (
+      <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
+        {/* Welcome Panel Skeleton */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-2 w-full max-w-[250px]">
+            <div className="h-7 w-48 rounded skeleton" />
+            <div className="h-4 w-36 rounded skeleton" />
+          </div>
+          <div className="h-16 w-full sm:w-64 rounded-[14px] skeleton" />
+        </div>
+
+        {/* Paid Leaves Section Skeleton */}
+        <div className="bg-bg-card border border-border-card rounded-[24px] p-6 space-y-4">
+          <div className="h-5 w-40 rounded skeleton" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="h-28 rounded-[20px] skeleton" />
+            <div className="h-28 rounded-[20px] skeleton" />
+            <div className="h-28 rounded-[20px] skeleton" />
+          </div>
+        </div>
+
+        {/* Dashboard Content Grid Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            {/* Shift Panel Skeleton */}
+            <div className="h-[280px] rounded-[24px] skeleton" />
+            {/* Weekly Attendance Skeleton */}
+            <div className="h-[240px] rounded-[24px] skeleton" />
+          </div>
+          <div className="space-y-8">
+            {/* Geolocation Skeleton */}
+            <div className="h-[140px] rounded-[24px] skeleton" />
+            {/* Recent Activity Skeleton */}
+            <div className="h-[320px] rounded-[24px] skeleton" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeTab === "leaves") {
+    const leavesStartIndex = (leavesPage - 1) * 10;
+    const paginatedLeaveRequests = myLeaveRequests.slice(leavesStartIndex, leavesStartIndex + 10);
+    const leavesTotalPages = Math.ceil(myLeaveRequests.length / 10) || 1;
+
     return (
       <div className="space-y-6 w-full max-w-[1400px] mx-auto text-left">
         {/* Breadcrumb & Header */}
@@ -660,7 +806,7 @@ export default function UserDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
-                      {myLeaveRequests.map((req) => {
+                      {paginatedLeaveRequests.map((req) => {
                         let statusColor = "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400";
                         if (req.status === "approved") {
                           statusColor = "bg-emerald-500/10 text-emerald-500";
@@ -691,6 +837,51 @@ export default function UserDashboard() {
                   </table>
                 </div>
               )}
+
+              {myLeaveRequests.length > 10 && (
+                <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                  <span className="text-text-mut font-semibold">
+                    Showing {leavesStartIndex + 1} to {Math.min(myLeaveRequests.length, leavesStartIndex + 10)} of {myLeaveRequests.length} entries
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setLeavesPage(prev => Math.max(1, prev - 1))}
+                      disabled={leavesPage === 1}
+                      className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                    >
+                      Prev
+                    </button>
+                    {Array.from({ length: leavesTotalPages }, (_, i) => i + 1).map((p) => {
+                      if (leavesTotalPages > 5 && p !== 1 && p !== leavesTotalPages && Math.abs(p - leavesPage) > 1) {
+                        if (p === 2 || p === leavesTotalPages - 1) {
+                          return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                        }
+                        return null;
+                      }
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => setLeavesPage(p)}
+                          className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                            leavesPage === p
+                              ? "bg-brand-primary border-brand-primary text-white"
+                              : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setLeavesPage(prev => Math.min(leavesTotalPages, prev + 1))}
+                      disabled={leavesPage === leavesTotalPages}
+                      className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -713,7 +904,7 @@ export default function UserDashboard() {
                     <div className="text-left">
                       <span className="text-[10px] font-bold text-text-mut uppercase block">Annual Leave</span>
                       <div className="flex items-baseline gap-1 mt-0.5">
-                        <span className="text-xl font-black text-text-main">14.5</span>
+                        <span className="text-xl font-black text-text-main">{currentUser.annualLeaves !== undefined ? currentUser.annualLeaves : 25}</span>
                         <span className="text-[10px] font-semibold text-text-sec">days</span>
                       </div>
                     </div>
@@ -722,7 +913,7 @@ export default function UserDashboard() {
                   <div className="w-10 h-10 relative flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90">
                       <circle cx="20" cy="20" r="16" className="text-border-card" strokeWidth="3" fill="transparent" stroke="currentColor" />
-                      <circle cx="20" cy="20" r="16" className="text-brand-primary" strokeWidth="3" fill="transparent" strokeDasharray="100" strokeDashoffset={100 - (14.5 / 25.0) * 100} strokeLinecap="round" stroke="currentColor" />
+                      <circle cx="20" cy="20" r="16" className="text-brand-primary" strokeWidth="3" fill="transparent" strokeDasharray="100" strokeDashoffset={100 - ((currentUser.annualLeaves !== undefined ? currentUser.annualLeaves : 25) / 25.0) * 100} strokeLinecap="round" stroke="currentColor" />
                     </svg>
                   </div>
                 </div>
@@ -738,7 +929,7 @@ export default function UserDashboard() {
                     <div className="text-left">
                       <span className="text-[10px] font-bold text-text-mut uppercase block">Sick Leave</span>
                       <div className="flex items-baseline gap-1 mt-0.5">
-                        <span className="text-xl font-black text-text-main">6.0</span>
+                        <span className="text-xl font-black text-text-main">{currentUser.sickLeaves !== undefined ? currentUser.sickLeaves : 10}</span>
                         <span className="text-[10px] font-semibold text-text-sec">days</span>
                       </div>
                     </div>
@@ -747,7 +938,7 @@ export default function UserDashboard() {
                   <div className="w-10 h-10 relative flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90">
                       <circle cx="20" cy="20" r="16" className="text-border-card" strokeWidth="3" fill="transparent" stroke="currentColor" />
-                      <circle cx="20" cy="20" r="16" className="text-brand-danger" strokeWidth="3" fill="transparent" strokeDasharray="100" strokeDashoffset={100 - (6.0 / 10.0) * 100} strokeLinecap="round" stroke="currentColor" />
+                      <circle cx="20" cy="20" r="16" className="text-brand-danger" strokeWidth="3" fill="transparent" strokeDasharray="100" strokeDashoffset={100 - ((currentUser.sickLeaves !== undefined ? currentUser.sickLeaves : 10) / 10.0) * 100} strokeLinecap="round" stroke="currentColor" />
                     </svg>
                   </div>
                 </div>
@@ -763,7 +954,7 @@ export default function UserDashboard() {
                     <div className="text-left">
                       <span className="text-[10px] font-bold text-text-mut uppercase block">Casual Leave</span>
                       <div className="flex items-baseline gap-1 mt-0.5">
-                        <span className="text-xl font-black text-text-main">3.0</span>
+                        <span className="text-xl font-black text-text-main">{currentUser.casualLeaves !== undefined ? currentUser.casualLeaves : 6}</span>
                         <span className="text-[10px] font-semibold text-text-sec">days</span>
                       </div>
                     </div>
@@ -772,7 +963,7 @@ export default function UserDashboard() {
                   <div className="w-10 h-10 relative flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90">
                       <circle cx="20" cy="20" r="16" className="text-border-card" strokeWidth="3" fill="transparent" stroke="currentColor" />
-                      <circle cx="20" cy="20" r="16" className="text-brand-success" strokeWidth="3" fill="transparent" strokeDasharray="100" strokeDashoffset={100 - (3.0 / 6.0) * 100} strokeLinecap="round" stroke="currentColor" />
+                      <circle cx="20" cy="20" r="16" className="text-brand-success" strokeWidth="3" fill="transparent" strokeDasharray="100" strokeDashoffset={100 - ((currentUser.casualLeaves !== undefined ? currentUser.casualLeaves : 6) / 6.0) * 100} strokeLinecap="round" stroke="currentColor" />
                     </svg>
                   </div>
                 </div>
@@ -812,12 +1003,16 @@ export default function UserDashboard() {
               <div className="flex items-center justify-between text-xs font-bold border-b border-border-card pb-3 mb-3">
                 <span className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Development</span>
+                  <span>{currentUser.department || "Development"}</span>
                 </span>
-                <span className="text-text-sec">8/10 Present</span>
+                <span className="text-text-sec">
+                  {Math.max(1, (teamMembers.length + 1) - teamOnLeaveCount)}/{teamMembers.length + 1} Present
+                </span>
               </div>
               <p className="text-[11px] text-text-sec font-semibold leading-relaxed">
-                2 team members are currently on leave during your requested period.
+                {teamOnLeaveCount > 0 
+                  ? `${teamOnLeaveCount} team member${teamOnLeaveCount > 1 ? "s are" : " is"} currently on leave today.`
+                  : "All team members in your department are active and available today."}
               </p>
             </div>
           </div>
@@ -826,10 +1021,39 @@ export default function UserDashboard() {
     );
   }
 
-  const activePaidLeaves = paidLeaves.filter(pl => (pl.status || "active") === "active");
+  const activePaidLeaves = paidLeaves
+    .filter(pl => (pl.status || "active") === "active")
+    .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
 
   return (
     <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto">
+      {/* Forgot to check-in Warning Banner */}
+      {isForgotToCheckIn && (
+        <div className="bg-gradient-to-r from-red-500/10 via-red-500/15 to-red-500/10 border border-red-500/30 rounded-[20px] p-5 shadow-lg relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500" />
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-[14px] bg-red-500/20 text-red-500 flex items-center justify-center flex-shrink-0 animate-bounce">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
+                <span>Attendance Alert: Forgot to Check-In!</span>
+              </h4>
+              <p className="text-xs text-text-sec mt-1 font-semibold leading-relaxed">
+                Your shift was scheduled to start at <strong className="text-text-main">{formatShiftTime(currentUser.shiftStart)}</strong>. Please check-in now to record your shift metrics.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleCheckIn}
+            disabled={actionLoading || fetchingGps}
+            className="py-2.5 px-6 bg-red-500 hover:bg-red-600 text-white font-extrabold text-xs rounded-[12px] shadow-md shadow-red-500/25 transition-all cursor-pointer whitespace-nowrap flex-shrink-0"
+          >
+            Check-In Now
+          </button>
+        </div>
+      )}
+
       {/* Official Paid Leaves Section */}
       {activePaidLeaves.length > 0 && (
         <div className="bg-bg-card border border-border-card rounded-[20px] sm:rounded-[24px] p-4 sm:p-6 shadow-sm text-left">
@@ -912,17 +1136,25 @@ export default function UserDashboard() {
               <span>check in</span>
             </button>
           ) : todayLog.status === "checked-in" ? (
-            <button
-              onClick={handleCheckOut}
-              disabled={actionLoading}
-              className="py-2.5 px-4 bg-brand-danger hover:bg-brand-danger-hover text-white font-bold text-xs rounded-[10px] flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-            >
-              <Square size={10} fill="#fff" />
-              <span>check out</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-mono font-bold text-brand-primary bg-brand-primary/10 px-2.5 py-1.5 rounded-[8px] animate-pulse">
+                {formatDuration(getElapsedWorkingMs())}
+              </span>
+              <button
+                onClick={handleCheckOut}
+                disabled={actionLoading}
+                className="py-2.5 px-4 bg-brand-danger hover:bg-brand-danger-hover text-white font-bold text-xs rounded-[10px] flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Square size={10} fill="#fff" />
+                <span>check out</span>
+              </button>
+            </div>
           ) : (
-            <span className="text-xs font-bold text-text-mut px-3 py-2 bg-bg-base rounded-[10px]">
-              {todayLog.status === "on-break" ? "On Break" : "Shift Ended"}
+            <span className="text-xs font-bold text-text-mut px-3 py-2 bg-bg-base rounded-[10px] flex items-center gap-2">
+              <span>{todayLog.status === "on-break" ? "On Break" : "Shift Ended"}</span>
+              <span className="text-[10px] font-mono text-text-sec bg-bg-card border border-border-card px-2 py-0.5 rounded">
+                {formatDuration(getElapsedWorkingMs())}
+              </span>
             </span>
           )}
         </div>
@@ -984,9 +1216,19 @@ export default function UserDashboard() {
                     <CheckCircle size={28} />
                   </div>
                   <h3 className="text-xl font-bold text-text-main mb-1">Shift In Progress</h3>
-                  <p className="text-sm text-text-sec mb-6">
-                    You clocked in today at <strong className="text-text-main">{new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
+                  <p className="text-sm text-text-sec mb-4">
+                    You checked in today at <strong className="text-text-main">{new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
                   </p>
+
+                  {/* Digital Clock Shift Duration Ticker */}
+                  <div className="relative w-full max-w-[320px] bg-bg-base/70 p-4 rounded-[20px] border border-dashed border-border-card flex flex-col items-center justify-center mx-auto mb-6 overflow-hidden">
+                    <div className="text-3xl font-mono font-extrabold text-brand-primary tracking-wider drop-shadow-sm mb-1 animate-pulse">
+                      {formatDuration(getElapsedWorkingMs())}
+                    </div>
+                    <span className="text-[9px] font-bold text-text-sec uppercase tracking-wide">
+                      Active Shift Duration
+                    </span>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[480px] mx-auto mb-6">
                     <button
@@ -1048,6 +1290,10 @@ export default function UserDashboard() {
                   />
                 </div>
 
+                <div className="mb-5 text-xs text-text-sec font-semibold">
+                  Shift paused at: <strong className="text-text-main font-mono">{formatDuration(getElapsedWorkingMs())}</strong>
+                </div>
+
                 <button
                   onClick={handleResumeWork}
                   disabled={actionLoading}
@@ -1061,14 +1307,25 @@ export default function UserDashboard() {
 
             {/* Action State: 5. CHECKED OUT */}
             {todayLog && todayLog.status === "checked-out" && (
-              <div className="text-center p-4">
+              <div className="text-center p-4 w-full">
                 <div className="w-16 h-16 rounded-full bg-brand-success/10 text-brand-success flex items-center justify-center mx-auto mb-5">
                   <CheckCircle size={28} />
                 </div>
                 <h3 className="text-xl font-bold text-text-main mb-1.5">Workday Completed</h3>
-                <p className="text-sm text-text-sec mb-5">
+                <p className="text-sm text-text-sec mb-4">
                   You checked out today at <strong className="text-text-main">{new Date(todayLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
                 </p>
+
+                {/* Frozen Digital Clock Shift Duration */}
+                <div className="relative w-full max-w-[320px] bg-bg-base/70 p-4 rounded-[20px] border border-dashed border-border-card flex flex-col items-center justify-center mx-auto mb-5 overflow-hidden">
+                  <div className="text-3xl font-mono font-extrabold text-brand-success tracking-wider drop-shadow-sm mb-1">
+                    {formatDuration(getElapsedWorkingMs())}
+                  </div>
+                  <span className="text-[9px] font-bold text-text-sec uppercase tracking-wide">
+                    Total Shift Duration
+                  </span>
+                </div>
+
                 <div className="inline-flex py-2.5 px-4 bg-brand-success/5 border border-brand-success/20 rounded-[12px] text-xs font-bold text-brand-success gap-1.5 uppercase tracking-wide">
                   <span>Logged:</span>
                   <strong>{((todayLog.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs</strong>

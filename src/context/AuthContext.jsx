@@ -63,13 +63,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateCurrentUserState = (newData) => {
+    setCurrentUser(prev => prev ? { ...prev, ...newData } : null);
+  };
+
   const value = {
     currentUser,
     loading,
     dbMode,
     signup,
     login,
-    logout
+    logout,
+    updateCurrentUserState
   };
 
   return (

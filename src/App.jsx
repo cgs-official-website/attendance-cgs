@@ -7,6 +7,7 @@ import Register from "./pages/Register";
 import UserDashboard from "./pages/UserDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import History from "./pages/History";
+import Profile from "./pages/Profile";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -89,6 +90,16 @@ export default function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 {currentUser?.role === "admin" ? <Navigate to="/admin" replace /> : <History />}
+              </DashboardLayout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Profile />
               </DashboardLayout>
             </ProtectedRoute>
           } 

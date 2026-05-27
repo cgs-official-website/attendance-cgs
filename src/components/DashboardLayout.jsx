@@ -19,7 +19,9 @@ import {
   ChevronRight,
   Play,
   Square,
-  ClipboardList
+  ClipboardList,
+  Mail,
+  User
 } from "lucide-react";
 import Logo from "./Logo";
 import { 
@@ -39,7 +41,7 @@ export default function DashboardLayout({ children }) {
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
-  const [showQuickClockModal, setShowQuickClockModal] = useState(false);
+  const [showQuickCheckModal, setShowQuickCheckModal] = useState(false);
   const [todayLog, setTodayLog] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
 
@@ -55,14 +57,14 @@ export default function DashboardLayout({ children }) {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  // Sync today's log for quick clock-in button state
+  // Sync today's log for quick check-in button state
   useEffect(() => {
     if (currentUser && currentUser.role !== "admin") {
       getTodayAttendanceLog(currentUser.uid)
         .then(log => setTodayLog(log))
         .catch(() => { });
     }
-  }, [currentUser, showQuickClockModal]);
+  }, [currentUser, showQuickCheckModal]);
 
   // Subscribe to dynamic rules and leave updates
   useEffect(() => {
@@ -143,14 +145,14 @@ export default function DashboardLayout({ children }) {
     });
   };
 
-  const handleQuickClockIn = async () => {
+  const handleQuickCheckIn = async () => {
     setLoadingAction(true);
     try {
       showToast("Fetching location...", "info", 1500);
       const loc = await getGpsLocation();
       await checkIn(currentUser, loc);
       showToast("Checked in successfully!", "success");
-      setShowQuickClockModal(false);
+      setShowQuickCheckModal(false);
       // reload page or trigger state update
       window.location.reload();
     } catch (err) {
@@ -160,14 +162,14 @@ export default function DashboardLayout({ children }) {
     }
   };
 
-  const handleQuickClockOut = async () => {
+  const handleQuickCheckOut = async () => {
     setLoadingAction(true);
     try {
       showToast("Fetching location...", "info", 1500);
       const loc = await getGpsLocation();
       await checkOut(currentUser.uid, loc);
       showToast("Checked out successfully!", "success");
-      setShowQuickClockModal(false);
+      setShowQuickCheckModal(false);
       window.location.reload();
     } catch (err) {
       showToast(err.message || "Quick check-out failed", "error");
@@ -210,6 +212,12 @@ export default function DashboardLayout({ children }) {
       icon: ClipboardList,
       active: location.pathname === "/admin" && activeTabParam === "rules",
       onClick: () => { navigate("/admin?tab=rules"); setIsMobileOpen(false); }
+    },
+    {
+      label: "My Profile",
+      icon: User,
+      active: location.pathname === "/profile",
+      onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
     }
   ] : [
     {
@@ -229,6 +237,12 @@ export default function DashboardLayout({ children }) {
       icon: Calendar,
       active: location.pathname === "/history",
       onClick: () => { navigate("/history"); setIsMobileOpen(false); }
+    },
+    {
+      label: "My Profile",
+      icon: User,
+      active: location.pathname === "/profile",
+      onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
     }
   ];
 
@@ -282,15 +296,15 @@ export default function DashboardLayout({ children }) {
           })}
         </nav>
 
-        {/* Quick check in action for normal user */}
+        {/* Quick Contact action for normal user */}
         {currentUser && currentUser.role !== "admin" && (
           <div className="p-4 border-t border-border-card">
             <button
-              onClick={() => setShowQuickClockModal(true)}
+              onClick={() => { window.location.href = "mailto:developers@teamcarrezza.com"; }}
               className="w-full py-3 px-4 bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm rounded-[12px] flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/15 hover:shadow-brand-primary/25 hover:translate-y-[-1px] transition-all cursor-pointer"
             >
-              <Clock size={16} />
-              <span>Quick Clock-In</span>
+              <Mail size={16} />
+              <span>Contact</span>
             </button>
           </div>
         )}
@@ -357,27 +371,6 @@ export default function DashboardLayout({ children }) {
               />
               <span className="font-extrabold text-sm text-text-main tracking-tight hidden xs:block">CGS</span>
             </div>
-          </div>
-
-          {/* Desktop: search bar - hidden on mobile */}
-          <div className="hidden md:flex items-center relative w-full max-w-[300px]">
-            <Search size={16} className="absolute left-3.5 text-text-mut" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="w-full pl-10 pr-4 py-2 border border-border-card rounded-[12px] bg-bg-base/50 text-xs text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
-              value={searchParams.get("q") || ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                const newParams = new URLSearchParams(searchParams);
-                if (val) {
-                  newParams.set("q", val);
-                } else {
-                  newParams.delete("q");
-                }
-                setSearchParams(newParams);
-              }}
-            />
           </div>
 
           {/* Action icons - right side */}
@@ -569,15 +562,15 @@ export default function DashboardLayout({ children }) {
               })}
             </nav>
 
-            {/* Quick Clock-in */}
+            {/* Quick Contact */}
             {currentUser && currentUser.role !== "admin" && (
               <div className="p-4 border-t border-border-card">
                 <button
-                  onClick={() => { setIsMobileOpen(false); setShowQuickClockModal(true); }}
+                  onClick={() => { setIsMobileOpen(false); window.location.href = "mailto:developers@teamcarrezza.com"; }}
                   className="w-full py-3 px-4 bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm rounded-[12px] flex items-center justify-center gap-2"
                 >
-                  <Clock size={16} />
-                  <span>Quick Clock-In</span>
+                  <Mail size={16} />
+                  <span>Contact</span>
                 </button>
               </div>
             )}
@@ -603,8 +596,8 @@ export default function DashboardLayout({ children }) {
           </aside>
       </div>
 
-      {/* Quick Clock-In Modal */}
-      {showQuickClockModal && currentUser && (
+      {/* Quick Check-In Modal */}
+      {showQuickCheckModal && currentUser && (
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up text-center relative overflow-hidden">
             {/* Header */}
@@ -614,7 +607,7 @@ export default function DashboardLayout({ children }) {
                 <span>Quick Actions</span>
               </h3>
               <button
-                onClick={() => setShowQuickClockModal(false)}
+                onClick={() => setShowQuickCheckModal(false)}
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
                 ✕
@@ -644,23 +637,23 @@ export default function DashboardLayout({ children }) {
             <div className="space-y-3">
               {!todayLog && (
                 <button
-                  onClick={handleQuickClockIn}
+                  onClick={handleQuickCheckIn}
                   disabled={loadingAction}
                   className="w-full py-3 px-4 bg-brand-primary text-white font-bold rounded-[12px] flex items-center justify-center gap-2 hover:bg-brand-hover shadow-md shadow-brand-primary/10 transition-all cursor-pointer"
                 >
                   <Play size={16} fill="#fff" />
-                  <span>{loadingAction ? "Processing..." : "check in Now"}</span>
+                  <span>{loadingAction ? "Processing..." : "Check In Now"}</span>
                 </button>
               )}
 
               {todayLog && todayLog.status === "checked-in" && (
                 <button
-                  onClick={handleQuickClockOut}
+                  onClick={handleQuickCheckOut}
                   disabled={loadingAction}
                   className="w-full py-3 px-4 bg-brand-danger text-white font-bold rounded-[12px] flex items-center justify-center gap-2 hover:bg-brand-danger-hover shadow-md shadow-brand-danger/10 transition-all cursor-pointer"
                 >
                   <Square size={14} fill="#fff" />
-                  <span>{loadingAction ? "Processing..." : "check out & End Shift"}</span>
+                  <span>{loadingAction ? "Processing..." : "Check Out & End Shift"}</span>
                 </button>
               )}
 
@@ -677,7 +670,7 @@ export default function DashboardLayout({ children }) {
               )}
 
               <button
-                onClick={() => setShowQuickClockModal(false)}
+                onClick={() => setShowQuickCheckModal(false)}
                 disabled={loadingAction}
                 className="w-full py-2.5 px-4 border border-border-card text-text-sec font-semibold rounded-[12px] hover:bg-bg-base transition-all cursor-pointer"
               >

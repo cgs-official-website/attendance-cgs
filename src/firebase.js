@@ -144,7 +144,7 @@ export const getDbType = () => dbType;
 /**
  * Register a new user
  */
-export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00") => {
+export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6) => {
   const role = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : "user";
   
   if (dbType === "firebase") {
@@ -168,6 +168,9 @@ export const registerUser = async (name, department, programType, email, passwor
       role,
       shiftStart,
       shiftEnd,
+      annualLeaves: Number(annualLeaves),
+      sickLeaves: Number(sickLeaves),
+      casualLeaves: Number(casualLeaves),
       createdAt: new Date().toISOString()
     };
     
@@ -189,6 +192,9 @@ export const registerUser = async (name, department, programType, email, passwor
       role,
       shiftStart,
       shiftEnd,
+      annualLeaves: Number(annualLeaves),
+      sickLeaves: Number(sickLeaves),
+      casualLeaves: Number(casualLeaves),
       createdAt: new Date().toISOString(),
       password // storing hashed or plain in local storage for local verification
     };
@@ -357,7 +363,20 @@ const getLocalDateString = () => {
  */
 export const checkIn = async (user, location) => {
   const dateStr = getLocalDateString();
-  const timeStr = new Date().toISOString();
+  
+  let checkInDate = new Date();
+  if (user && user.shiftStart) {
+    const [shiftH, shiftM] = user.shiftStart.split(":").map(Number);
+    const shiftStartToday = new Date();
+    shiftStartToday.setHours(shiftH, shiftM, 0, 0);
+    
+    const shiftStartPlusOneHour = new Date(shiftStartToday.getTime() + 60 * 60 * 1000);
+    
+    if (checkInDate >= shiftStartToday && checkInDate <= shiftStartPlusOneHour) {
+      checkInDate = shiftStartToday;
+    }
+  }
+  const timeStr = checkInDate.toISOString();
   
   const recordId = `${user.uid}_${dateStr}`;
   const data = {
@@ -737,7 +756,7 @@ export const getAllRegisteredUsers = async () => {
 /**
  * Update a user record (Admin edit user)
  */
-export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd) => {
+export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", uid);
     await updateDoc(docRef, {
@@ -745,7 +764,10 @@ export const updateUserRecord = async (uid, name, department, programType, shift
       department,
       programType,
       shiftStart,
-      shiftEnd
+      shiftEnd,
+      annualLeaves: Number(annualLeaves),
+      sickLeaves: Number(sickLeaves),
+      casualLeaves: Number(casualLeaves)
     });
   } else {
     const users = localDb.getUsers();
@@ -757,14 +779,17 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         department,
         programType,
         shiftStart,
-        shiftEnd
+        shiftEnd,
+        annualLeaves: Number(annualLeaves),
+        sickLeaves: Number(sickLeaves),
+        casualLeaves: Number(casualLeaves)
       };
       localStorage.setItem("att_users", JSON.stringify(users));
       
       // Update local storage current user profile if currently logged in user is updated
       const cur = localDb.getCurrentUser();
       if (cur && cur.uid === uid) {
-        const updatedUser = { ...cur, name, department, programType, shiftStart, shiftEnd };
+        const updatedUser = { ...cur, name, department, programType, shiftStart, shiftEnd, annualLeaves: Number(annualLeaves), sickLeaves: Number(sickLeaves), casualLeaves: Number(casualLeaves) };
         localDb.setCurrentUser(updatedUser);
         notifyAuthListeners(updatedUser);
       }
@@ -877,7 +902,9 @@ function calculateWorkingMinutes(checkInTime, checkOutTime, breaks) {
   }
   
   const workingMs = diffMs - breakMs;
-  return Math.max(0, parseFloat((workingMs / 60000).toFixed(1)));
+  const minutes = Math.max(0, parseFloat((workingMs / 60000).toFixed(1)));
+  // Cap at 8 hours (480 minutes) if user forgets to logout
+  return Math.min(minutes, 480);
 }
 
 // ----------------------------------------------------
@@ -990,9 +1017,9 @@ export const subscribeToAttendanceRules = (callback) => {
       } else {
         const defaultRules = 
           "1. Working Hours: Standard working hours are standard based on employee profiles. Be punctual.\n" +
-          "2. Late Threshold: Clocking in 15+ minutes after shift start marks your shift as Late.\n" +
+          "2. Late Threshold: Checking in 15+ minutes after shift start marks your shift as Late.\n" +
           "3. Break Limits: Short break is capped at 20 mins. Long break is capped at 40 mins. Overstays affect metrics.\n" +
-          "4. Geofencing: All clock events require GPS validation. Attempting to clock out of office bounds is flagged.\n" +
+          "4. Geofencing: All check events require GPS validation. Attempting to check out of office bounds is flagged.\n" +
           "5. Leave Submission: Official leaves must be requested 48 hours prior to start.";
         callback(defaultRules);
       }
@@ -1035,6 +1062,12 @@ export const requestLeave = async (userId, userName, userDept, type, duration, s
   }
 };
 
+const parseDurationDays = (durationStr) => {
+  if (!durationStr) return 1;
+  const match = String(durationStr).match(/(\d+(\.\d+)?)/);
+  return match ? parseFloat(match[1]) : 1;
+};
+
 export const updateLeaveRequest = async (id, status, managerComment) => {
   const updates = { status, updatedAt: new Date().toISOString() };
   if (managerComment !== undefined) {
@@ -1042,6 +1075,24 @@ export const updateLeaveRequest = async (id, status, managerComment) => {
   }
 
   if (dbType === "firebase") {
+    if (status === "approved") {
+      const docRef = doc(db, "leave_requests", id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().status !== "approved") {
+        const reqData = docSnap.data();
+        const userDocRef = doc(db, "users", reqData.userId);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          const days = parseDurationDays(reqData.duration);
+          let field = "annualLeaves";
+          if (reqData.type === "Sick Leave") field = "sickLeaves";
+          else if (reqData.type === "Casual Leave") field = "casualLeaves";
+          const currentBal = userData[field] !== undefined ? Number(userData[field]) : (field === "annualLeaves" ? 25 : (field === "sickLeaves" ? 10 : 6));
+          await updateDoc(userDocRef, { [field]: Math.max(0, currentBal - days) });
+        }
+      }
+    }
     await updateDoc(doc(db, "leave_requests", id), updates);
   } else {
     const current = localStorage.getItem("att_leave_requests")
@@ -1049,6 +1100,26 @@ export const updateLeaveRequest = async (id, status, managerComment) => {
       : [];
     const index = current.findIndex(r => r.id === id);
     if (index !== -1) {
+      if (status === "approved" && current[index].status !== "approved") {
+        const reqData = current[index];
+        const users = localDb.getUsers();
+        const uIdx = users.findIndex(u => u.uid === reqData.userId);
+        if (uIdx !== -1) {
+          const days = parseDurationDays(reqData.duration);
+          let field = "annualLeaves";
+          if (reqData.type === "Sick Leave") field = "sickLeaves";
+          else if (reqData.type === "Casual Leave") field = "casualLeaves";
+          const currentBal = users[uIdx][field] !== undefined ? Number(users[uIdx][field]) : (field === "annualLeaves" ? 25 : (field === "sickLeaves" ? 10 : 6));
+          users[uIdx][field] = Math.max(0, currentBal - days);
+          localStorage.setItem("att_users", JSON.stringify(users));
+          const cur = localDb.getCurrentUser();
+          if (cur && cur.uid === reqData.userId) {
+            cur[field] = users[uIdx][field];
+            localDb.setCurrentUser(cur);
+            notifyAuthListeners(cur);
+          }
+        }
+      }
       current[index].status = status;
       current[index].updatedAt = new Date().toISOString();
       if (managerComment !== undefined) {
@@ -1080,6 +1151,148 @@ export const subscribeToLeaveRequests = (callback) => {
         ];
         localStorage.setItem("att_leave_requests", JSON.stringify(list));
       }
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      callback(list);
+    };
+    noticeListeners.add(handler);
+    handler();
+    return () => {
+      noticeListeners.delete(handler);
+    };
+  }
+};
+
+// 4. Time Regularization APIs
+export const requestRegularization = async (userId, userName, userDept, date, checkInTime, checkOutTime, reason) => {
+  const req = {
+    id: dbType === "firebase" ? "" : "reg-" + Math.random().toString(36).substr(2, 9),
+    userId,
+    userName,
+    userDept,
+    date,
+    checkInTime,
+    checkOutTime,
+    reason,
+    status: "pending",
+    createdAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "regularization_requests"), req);
+    await updateDoc(docRef, { id: docRef.id });
+  } else {
+    const current = localStorage.getItem("att_regularizations")
+      ? JSON.parse(localStorage.getItem("att_regularizations"))
+      : [];
+    current.push(req);
+    localStorage.setItem("att_regularizations", JSON.stringify(current));
+    notifyNoticeListeners();
+  }
+};
+
+export const updateRegularizationRequest = async (id, status, managerComment) => {
+  const updates = { status, updatedAt: new Date().toISOString() };
+  if (managerComment !== undefined) {
+    updates.managerComment = managerComment;
+  }
+
+  if (dbType === "firebase") {
+    const docRef = doc(db, "regularization_requests", id);
+    await updateDoc(docRef, updates);
+    
+    if (status === "approved") {
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const reqData = docSnap.data();
+        
+        // Write standard attendance record
+        const recordId = `${reqData.userId}_${reqData.date}`;
+        const checkInIso = new Date(`${reqData.date}T${reqData.checkInTime}:00`).toISOString();
+        const checkOutIso = new Date(`${reqData.date}T${reqData.checkOutTime}:00`).toISOString();
+        const rawDiff = (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) / 60000;
+        const workingMinutes = Math.min(rawDiff >= 540 ? rawDiff - 60 : rawDiff, 480);
+        
+        const attendanceData = {
+          id: recordId,
+          userId: reqData.userId,
+          userName: reqData.userName,
+          userDept: reqData.userDept,
+          date: reqData.date,
+          checkInTime: checkInIso,
+          checkOutTime: checkOutIso,
+          status: "checked-out",
+          breaks: [],
+          totalWorkingMinutes: workingMinutes,
+          shortBreakBalance: 1200,
+          longBreakBalance: 2400
+        };
+        
+        await setDoc(doc(db, "attendance", recordId), attendanceData);
+      }
+    }
+  } else {
+    const current = localStorage.getItem("att_regularizations")
+      ? JSON.parse(localStorage.getItem("att_regularizations"))
+      : [];
+    const index = current.findIndex(r => r.id === id);
+    if (index !== -1) {
+      current[index].status = status;
+      current[index].updatedAt = new Date().toISOString();
+      if (managerComment !== undefined) {
+        current[index].managerComment = managerComment;
+      }
+      localStorage.setItem("att_regularizations", JSON.stringify(current));
+      
+      if (status === "approved") {
+        const reqData = current[index];
+        const recordId = `${reqData.userId}_${reqData.date}`;
+        const checkInIso = new Date(`${reqData.date}T${reqData.checkInTime}:00`).toISOString();
+        const checkOutIso = new Date(`${reqData.date}T${reqData.checkOutTime}:00`).toISOString();
+        const rawDiff = (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) / 60000;
+        const workingMinutes = Math.min(rawDiff >= 540 ? rawDiff - 60 : rawDiff, 480);
+        
+        const attendanceData = {
+          id: recordId,
+          userId: reqData.userId,
+          userName: reqData.userName,
+          userDept: reqData.userDept,
+          date: reqData.date,
+          checkInTime: checkInIso,
+          checkOutTime: checkOutIso,
+          status: "checked-out",
+          breaks: [],
+          totalWorkingMinutes: workingMinutes,
+          shortBreakBalance: 1200,
+          longBreakBalance: 2400
+        };
+        
+        const logs = localDb.getAttendance();
+        const logIdx = logs.findIndex(log => log.id === recordId);
+        if (logIdx !== -1) {
+          logs[logIdx] = attendanceData;
+        } else {
+          logs.push(attendanceData);
+        }
+        localDb.saveAttendance(logs);
+        notifyAttendanceListeners();
+      }
+      notifyNoticeListeners();
+    }
+  }
+};
+
+export const subscribeToRegularizationRequests = (callback) => {
+  if (dbType === "firebase") {
+    return onSnapshot(collection(db, "regularization_requests"), (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data());
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      const list = localStorage.getItem("att_regularizations")
+        ? JSON.parse(localStorage.getItem("att_regularizations"))
+        : [];
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
     };

@@ -374,7 +374,7 @@ export default function DashboardLayout({ children }) {
       {/* Main Content Area Wrapper */}
       <div className="flex flex-col flex-grow min-h-screen w-full lg:pl-[260px]">
         {/* Top Header navbar */}
-        <header className="h-[60px] sm:h-[70px] bg-bg-card border-b border-border-card px-3 sm:px-4 lg:px-8 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <header className="fixed top-0 left-0 lg:left-[260px] right-0 h-[60px] sm:h-[70px] bg-bg-card/85 backdrop-blur-md border-b border-border-card px-3 sm:px-4 lg:px-8 flex items-center justify-between z-40 shadow-sm transition-all">
           {/* Mobile: hamburger + logo icon only (no text) */}
           <div className="flex items-center gap-2 lg:hidden flex-shrink-0 min-w-0 overflow-hidden">
             <button
@@ -546,17 +546,19 @@ export default function DashboardLayout({ children }) {
             {/* Divider - hidden on mobile */}
             <div className="h-5 w-px bg-border-card hidden sm:block" />
 
-            {/* User profile avatar only */}
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm">
-                {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"}
-              </div>
-            </div>
+            {/* User profile avatar button */}
+            <button
+              onClick={() => navigate("/profile")}
+              className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 hover:border-brand-primary/60 hover:bg-brand-primary/25 transition-all flex items-center justify-center font-extrabold text-xs uppercase shadow-sm cursor-pointer focus:outline-none"
+              title="View Profile"
+            >
+              {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"}
+            </button>
           </div>
         </header>
 
-        {/* Dashboard Content Container */}
-        <main className="flex-grow p-3 sm:p-4 lg:p-8 overflow-y-auto">
+        {/* Dashboard Content Container with padding to clear fixed header */}
+        <main className="flex-grow p-3 sm:p-4 lg:p-8 pt-[72px] sm:pt-[86px] lg:pt-[102px] overflow-y-auto">
           {children}
         </main>
       </div>

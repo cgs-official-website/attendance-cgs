@@ -29,7 +29,8 @@ import {
   ChevronRight,
   LogOut,
   CalendarDays,
-  Umbrella
+  Umbrella,
+  X
 } from "lucide-react";
 
 export default function UserDashboard() {
@@ -38,6 +39,26 @@ export default function UserDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "dashboard";
+
+  const getTomorrowDateString = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  };
+  const tomorrowStr = getTomorrowDateString();
+
+  const [dismissedLeaves, setDismissedLeaves] = useState(() => {
+    const saved = localStorage.getItem("dismissed_paid_leaves");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const handleDismissPaidLeave = (e, id) => {
+    e.stopPropagation();
+    const updated = [...dismissedLeaves, id];
+    setDismissedLeaves(updated);
+    localStorage.setItem("dismissed_paid_leaves", JSON.stringify(updated));
+    showToast("Notification dismissed.", "info");
+  };
 
   const [userLogs, setUserLogs] = useState([]);
   const [todayLog, setTodayLog] = useState(null);
@@ -68,39 +89,29 @@ export default function UserDashboard() {
 
   const getElapsedWorkingMs = () => {
     if (!todayLog) return 0;
-    if (todayLog.status === "checked-out") {
-      if (todayLog.totalWorkingMinutes !== undefined) {
-        return todayLog.totalWorkingMinutes * 60000;
-      }
-      const checkInDate = new Date(todayLog.checkInTime);
-      const checkOutDate = new Date(todayLog.checkOutTime);
-      let diffMs = checkOutDate.getTime() - checkInDate.getTime();
-      let breakMs = 0;
-      if (todayLog.breaks && todayLog.breaks.length > 0) {
-        todayLog.breaks.forEach(b => {
-          if (b.startTime) {
-            const start = new Date(b.startTime);
-            const resume = b.resumeTime ? new Date(b.resumeTime) : new Date(todayLog.checkOutTime);
-            breakMs += (resume.getTime() - start.getTime());
-          }
-        });
-      }
-      return Math.min(Math.max(0, diffMs - breakMs), 8 * 60 * 60 * 1000);
-    } else {
-      const checkInDate = new Date(todayLog.checkInTime);
-      let diffMs = currentTime.getTime() - checkInDate.getTime();
-      let breakMs = 0;
-      if (todayLog.breaks && todayLog.breaks.length > 0) {
-        todayLog.breaks.forEach(b => {
-          if (b.startTime) {
-            const start = new Date(b.startTime);
-            const resume = b.resumeTime ? new Date(b.resumeTime) : currentTime;
-            breakMs += (resume.getTime() - start.getTime());
-          }
-        });
-      }
-      return Math.min(Math.max(0, diffMs - breakMs), 8 * 60 * 60 * 1000);
+    
+    const checkInDate = new Date(todayLog.checkInTime);
+    const checkOutDate = todayLog.checkOutTime ? new Date(todayLog.checkOutTime) : currentTime;
+    
+    const totalElapsedMs = checkOutDate.getTime() - checkInDate.getTime();
+    
+    // If the elapsed time from check-in to check-out/now exceeds 9 hours, cap working time at exactly 8 hours.
+    if (totalElapsedMs > 9 * 60 * 60 * 1000) {
+      return 8 * 60 * 60 * 1000;
     }
+    
+    let breakMs = 0;
+    if (todayLog.breaks && todayLog.breaks.length > 0) {
+      todayLog.breaks.forEach(b => {
+        if (b.startTime) {
+          const start = new Date(b.startTime);
+          const resume = b.resumeTime ? new Date(b.resumeTime) : (todayLog.checkOutTime ? new Date(todayLog.checkOutTime) : currentTime);
+          breakMs += (resume.getTime() - start.getTime());
+        }
+      });
+    }
+    
+    return Math.max(0, totalElapsedMs - breakMs);
   };
 
   const formatDuration = (ms) => {
@@ -400,8 +411,19 @@ export default function UserDashboard() {
       return showToast("Please fill in all leave request fields.", "warning");
     }
 
+    const tomorrow = new Date();
+    tomorrow.setHours(0, 0, 0, 0);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
     const startD = new Date(startDate);
+    startD.setHours(0, 0, 0, 0);
     const endD = new Date(endDate);
+    endD.setHours(0, 0, 0, 0);
+
+    if (startD < tomorrow) {
+      return showToast("You can only request leave starting from tomorrow.", "warning");
+    }
+
     if (endD < startD) {
       return showToast("End Date cannot be before Start Date.", "warning");
     }
@@ -547,7 +569,7 @@ export default function UserDashboard() {
         }
         list.push({
           type: "break",
-          title: brk.type === "short" ? "Short Break Started" : "Long Break Started",
+          title: brk.type === "short" ? "Break 1 Started" : "Break 2 Started",
           time: new Date(brk.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: "Today",
           desc: brk.duration ? `${brk.duration} mins` : "In progress"
@@ -601,10 +623,10 @@ export default function UserDashboard() {
   };
 
   const shiftProgressPercent = getShiftProgress();
-  const shortBreakBalance = todayLog?.shortBreakBalance !== undefined ? todayLog.shortBreakBalance : 1200;
-  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? todayLog.longBreakBalance : 2400;
-  const shortBreakPercent = (shortBreakBalance / 1200) * 100;
-  const longBreakPercent = (longBreakBalance / 2400) * 100;
+  const shortBreakBalance = todayLog?.shortBreakBalance !== undefined ? todayLog.shortBreakBalance : 1800;
+  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? todayLog.longBreakBalance : 1800;
+  const shortBreakPercent = (shortBreakBalance / 1800) * 100;
+  const longBreakPercent = (longBreakBalance / 1800) * 100;
 
   const weeklyHoursData = getWeeklyHours();
   const maxWeeklyHours = Math.max(8, ...weeklyHoursData.map(d => d.hours));
@@ -712,6 +734,7 @@ export default function UserDashboard() {
                     <input
                       id="start-date-input"
                       type="date"
+                      min={tomorrowStr}
                       className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
@@ -725,6 +748,7 @@ export default function UserDashboard() {
                     <input
                       id="end-date-input"
                       type="date"
+                      min={startDate || tomorrowStr}
                       className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
@@ -1022,7 +1046,7 @@ export default function UserDashboard() {
   }
 
   const activePaidLeaves = paidLeaves
-    .filter(pl => (pl.status || "active") === "active")
+    .filter(pl => (pl.status || "active") === "active" && !dismissedLeaves.includes(pl.id))
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
 
   return (
@@ -1082,19 +1106,28 @@ export default function UserDashboard() {
                 {/* Background glowing circle on hover */}
                 <div className="absolute -right-6 -bottom-6 w-16 h-16 rounded-full bg-brand-primary/10 group-hover:scale-[2] transition-all duration-500 pointer-events-none" />
 
-                <div className="flex justify-between items-start gap-3">
-                  <span className="font-black text-xs text-text-main leading-tight group-hover:text-brand-primary transition-colors truncate max-w-[150px]" title={pl.title}>{pl.title}</span>
-                  <span className="bg-brand-primary/10 text-brand-primary text-[8px] font-black px-2.5 py-1 rounded-full whitespace-nowrap">
-                    {pl.startDate && pl.endDate ? (
-                      pl.startDate === pl.endDate ? (
-                        new Date(pl.startDate).toLocaleDateString([], { month: "short", day: "numeric" })
+                <div className="flex justify-between items-start gap-3 relative z-10">
+                  <span className="font-black text-xs text-text-main leading-tight group-hover:text-brand-primary transition-colors truncate max-w-[120px]" title={pl.title}>{pl.title}</span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="bg-brand-primary/10 text-brand-primary text-[8px] font-black px-2.5 py-1 rounded-full whitespace-nowrap">
+                      {pl.startDate && pl.endDate ? (
+                        pl.startDate === pl.endDate ? (
+                          new Date(pl.startDate).toLocaleDateString([], { month: "short", day: "numeric" })
+                        ) : (
+                          `${new Date(pl.startDate).toLocaleDateString([], { month: "short", day: "numeric" })} - ${new Date(pl.endDate).toLocaleDateString([], { month: "short", day: "numeric" })}`
+                        )
                       ) : (
-                        `${new Date(pl.startDate).toLocaleDateString([], { month: "short", day: "numeric" })} - ${new Date(pl.endDate).toLocaleDateString([], { month: "short", day: "numeric" })}`
-                      )
-                    ) : (
-                      new Date(pl.date || pl.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })
-                    )}
-                  </span>
+                        new Date(pl.date || pl.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })
+                      )}
+                    </span>
+                    <button
+                      onClick={(e) => handleDismissPaidLeave(e, pl.id)}
+                      className="p-1 rounded-full bg-slate-200/50 dark:bg-slate-800/50 hover:bg-red-500/10 hover:text-red-500 transition-colors text-text-sec cursor-pointer flex items-center justify-center"
+                      title="Dismiss notice"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-[10px] text-text-sec leading-relaxed font-semibold line-clamp-2">{pl.description}</p>
               </div>
@@ -1237,7 +1270,7 @@ export default function UserDashboard() {
                       className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                     >
                       <Coffee size={15} />
-                      <span>Short Break ({shortBalMin}m left)</span>
+                      <span>Break 1 ({shortBalMin}m left)</span>
                     </button>
                     <button
                       onClick={() => handleStartBreak("long")}
@@ -1245,7 +1278,7 @@ export default function UserDashboard() {
                       className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                     >
                       <Coffee size={15} />
-                      <span>Long Break ({longBalMin}m left)</span>
+                      <span>Break 2 ({longBalMin}m left)</span>
                     </button>
                   </div>
 

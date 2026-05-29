@@ -21,7 +21,8 @@ import {
   Square,
   ClipboardList,
   Mail,
-  User
+  User,
+  Trash2
 } from "lucide-react";
 import Logo from "./Logo";
 import { 
@@ -51,6 +52,39 @@ export default function DashboardLayout({ children }) {
   const [rules, setRules] = useState("");
   const [leaveRequestsList, setLeaveRequestsList] = useState([]);
   const [newUpdatesCount, setNewUpdatesCount] = useState(0);
+  const [dismissedNotifs, setDismissedNotifs] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`dismissed_notifs_${currentUser?.uid}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const activeNotifications = leaveRequestsList.filter(req => !dismissedNotifs.includes(req.id));
+
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        const saved = localStorage.getItem(`dismissed_notifs_${currentUser.uid}`);
+        setDismissedNotifs(saved ? JSON.parse(saved) : []);
+      } catch (e) {
+        setDismissedNotifs([]);
+      }
+    } else {
+      setDismissedNotifs([]);
+    }
+  }, [currentUser]);
+
+  const handleDeleteNotification = (e, reqId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUser) return;
+    const updated = [...dismissedNotifs, reqId];
+    setDismissedNotifs(updated);
+    localStorage.setItem(`dismissed_notifs_${currentUser.uid}`, JSON.stringify(updated));
+    showToast("Notification deleted successfully.", "success");
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -81,17 +115,6 @@ export default function DashboardLayout({ children }) {
       } else {
         const myRequests = data.filter(r => r.userId === currentUser.uid);
         setLeaveRequestsList(myRequests);
-
-        const seenStr = localStorage.getItem(`seen_leaves_${currentUser.uid}`);
-        const seen = seenStr ? JSON.parse(seenStr) : {};
-
-        let unseenCount = 0;
-        myRequests.forEach(req => {
-          if (seen[req.id] !== req.status && req.status !== "pending") {
-            unseenCount++;
-          }
-        });
-        setNewUpdatesCount(unseenCount);
       }
     });
 
@@ -101,11 +124,29 @@ export default function DashboardLayout({ children }) {
     };
   }, [currentUser]);
 
+  // Compute unseen notifications count
+  useEffect(() => {
+    if (!currentUser || currentUser.role === "admin") {
+      setNewUpdatesCount(0);
+      return;
+    }
+    const seenStr = localStorage.getItem(`seen_leaves_${currentUser.uid}`);
+    const seen = seenStr ? JSON.parse(seenStr) : {};
+    
+    let unseenCount = 0;
+    leaveRequestsList.forEach(req => {
+      if (!dismissedNotifs.includes(req.id) && seen[req.id] !== req.status && req.status !== "pending") {
+        unseenCount++;
+      }
+    });
+    setNewUpdatesCount(unseenCount);
+  }, [leaveRequestsList, dismissedNotifs, currentUser]);
+
   const handleOpenNotifications = () => {
     setShowNotifications(!showNotifications);
     if (!showNotifications && currentUser && currentUser.role !== "admin") {
       const seen = {};
-      leaveRequestsList.forEach(req => {
+      activeNotifications.forEach(req => {
         seen[req.id] = req.status;
       });
       localStorage.setItem(`seen_leaves_${currentUser.uid}`, JSON.stringify(seen));
@@ -398,7 +439,7 @@ export default function DashboardLayout({ children }) {
                 title="Notifications"
               >
                 <Bell size={15} />
-                {((currentUser?.role === "admin" && leaveRequestsList.length > 0) || (currentUser?.role !== "admin" && newUpdatesCount > 0)) && (
+                {((currentUser?.role === "admin" && activeNotifications.length > 0) || (currentUser?.role !== "admin" && newUpdatesCount > 0)) && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-primary rounded-full border-2 border-bg-card" />
                 )}
               </button>
@@ -411,21 +452,21 @@ export default function DashboardLayout({ children }) {
                   <div className="fixed top-[65px] sm:top-[75px] right-3 sm:right-4 lg:right-8 w-[calc(100vw-1.5rem)] max-w-[340px] bg-bg-card border border-border-card rounded-[16px] shadow-2xl p-4 z-[200] text-left animate-scale-up">
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-border-card">
                       <span className="font-extrabold text-xs text-text-main uppercase tracking-wider">🔔 Leave Updates</span>
-                      {((currentUser?.role === "admin" && leaveRequestsList.length > 0) || (currentUser?.role !== "admin" && newUpdatesCount > 0)) && (
+                      {((currentUser?.role === "admin" && activeNotifications.length > 0) || (currentUser?.role !== "admin" && newUpdatesCount > 0)) && (
                         <span className="bg-brand-primary text-white px-2 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
-                          {currentUser?.role === "admin" ? leaveRequestsList.length : newUpdatesCount} New
+                          {currentUser?.role === "admin" ? activeNotifications.length : newUpdatesCount} New
                         </span>
                       )}
                     </div>
 
-                    {leaveRequestsList.length === 0 ? (
+                    {activeNotifications.length === 0 ? (
                       <div className="py-8 text-center">
                         <div className="text-3xl mb-2">📭</div>
                         <p className="text-xs text-text-mut font-semibold">No notifications yet.</p>
                       </div>
                     ) : (
                       <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1 overscroll-contain">
-                        {leaveRequestsList.slice(0, 10).map((req) => {
+                        {activeNotifications.slice(0, 10).map((req) => {
                           const isApproved = req.status === "approved";
                           const isRejected = req.status === "rejected";
 
@@ -453,7 +494,7 @@ export default function DashboardLayout({ children }) {
                               }`}
                             >
                               <div className="flex justify-between items-center">
-                                <span className="font-extrabold text-text-main truncate max-w-[160px]">{req.type}</span>
+                                <span className="font-extrabold text-text-main truncate max-w-[150px]">{req.type}</span>
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   {isNewUpdate && (
                                     <span className="bg-brand-primary text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">NEW</span>
@@ -461,6 +502,13 @@ export default function DashboardLayout({ children }) {
                                   <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${badgeColor}`}>
                                     {symbol} {req.status}
                                   </span>
+                                  <button
+                                    onClick={(e) => handleDeleteNotification(e, req.id)}
+                                    className="p-1 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded transition-colors cursor-pointer ml-1 flex items-center justify-center"
+                                    title="Delete Notification"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
                                 </div>
                               </div>
                               <p className="text-[10px] text-text-sec">

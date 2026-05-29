@@ -75,6 +75,40 @@ const getInitials = (name) => {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
+const hasOverlap = (s1, e1, s2, e2) => {
+  if (!s1 || !e1 || !s2 || !e2) return false;
+  const start1 = new Date(s1).setHours(0, 0, 0, 0);
+  const end1 = new Date(e1).setHours(23, 59, 59, 999);
+  const start2 = new Date(s2).setHours(0, 0, 0, 0);
+  const end2 = new Date(e2).setHours(23, 59, 59, 999);
+  return start1 <= end2 && start2 <= end1;
+};
+
+const getOverlapInfo = (s1, e1, s2, e2) => {
+  if (!s1 || !e1 || !s2 || !e2) return 0;
+  const start1 = new Date(s1).setHours(0, 0, 0, 0);
+  const end1 = new Date(e1).setHours(23, 59, 59, 999);
+  const start2 = new Date(s2).setHours(0, 0, 0, 0);
+  const end2 = new Date(e2).setHours(23, 59, 59, 999);
+  
+  const overlapStart = Math.max(start1, start2);
+  const overlapEnd = Math.min(end1, end2);
+  
+  if (overlapStart <= overlapEnd) {
+    const diffTime = Math.abs(overlapEnd - overlapStart);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+  return 0;
+};
+
+const getDurationDays = (s, e) => {
+  if (!s || !e) return 1;
+  const start = new Date(s).setHours(0, 0, 0, 0);
+  const end = new Date(e).setHours(23, 59, 59, 999);
+  const diffTime = Math.abs(end - start);
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
 export default function AdminDashboard() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
@@ -558,8 +592,8 @@ export default function AdminDashboard() {
         "Program Type", 
         "Check-In Time", 
         "Check-Out Time", 
-        "Short Breaks", 
-        "Long Breaks", 
+        "Break 1", 
+        "Break 2", 
         "Active Minutes", 
         "Active Hours", 
         "GPS Check-In", 
@@ -706,7 +740,7 @@ export default function AdminDashboard() {
       
       const shorts = log.breaks?.filter(b => b.type === "short").length || 0;
       const longs = log.breaks?.filter(b => b.type === "long").length || 0;
-      const breaksStr = `${shorts} short, ${longs} long`;
+      const breaksStr = `${shorts} Break 1, ${longs} Break 2`;
       const hrsStr = `${((log.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs`;
 
       xOffset = 14;
@@ -760,8 +794,8 @@ export default function AdminDashboard() {
         "Date", 
         "Check-In Time", 
         "Check-Out Time", 
-        "Short Breaks", 
-        "Long Breaks", 
+        "Break 1", 
+        "Break 2", 
         "Active Minutes", 
         "Active Hours", 
         "GPS Check-In", 
@@ -2007,67 +2041,112 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-extrabold text-xs text-text-mut uppercase tracking-wider">
-                            TEAM AVAILABILITY: {selectedRequest.startDate && selectedRequest.endDate 
-                              ? `${new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - ${new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})}`
-                              : "OCT 24 - OCT 28"}
-                          </h4>
-                        </div>
+                      {(() => {
+                        const reqDept = selectedRequest.userDept || users.find(u => u.uid === selectedRequest.userId)?.department || "";
+                        const deptStaff = staffUsers.filter(u => u.department === reqDept);
+                        const totalCount = deptStaff.length || 1;
 
-                        <div className="space-y-4">
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-xs font-semibold">
-                              <span className="text-text-main">Emily Stone <span className="text-[10px] text-text-mut font-normal">(Product Manager)</span></span>
-                              <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
+                        const otherOverlappingStaff = deptStaff.filter(u => {
+                          if (u.uid === selectedRequest.userId) return false;
+                          return allRequests.some(req => 
+                            req.userId === u.uid && 
+                            req.status === "approved" && 
+                            hasOverlap(req.startDate, req.endDate, selectedRequest.startDate, selectedRequest.endDate)
+                          );
+                        });
+
+                        const offCount = 1 + otherOverlappingStaff.length; // Requester + anyone else already off
+
+                        return (
+                          <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-extrabold text-xs text-text-mut uppercase tracking-wider">
+                                TEAM AVAILABILITY: {selectedRequest.startDate && selectedRequest.endDate 
+                                  ? `${new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - ${new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})}`
+                                  : "OCT 24 - OCT 28"}
+                              </h4>
                             </div>
-                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-emerald-500 w-full" />
+
+                            <div className="space-y-4">
+                              {deptStaff.map(u => {
+                                const isRequester = u.uid === selectedRequest.userId;
+                                
+                                if (isRequester) {
+                                  return (
+                                    <div key={u.uid} className="space-y-1">
+                                      <div className="flex justify-between items-center text-xs font-semibold">
+                                        <span className="text-brand-primary font-bold">
+                                          {u.name} <span className="text-[10px] text-text-mut font-normal">({getMockDesignation(u.name)})</span>
+                                        </span>
+                                        <span className="text-brand-primary font-extrabold text-[10px] uppercase">Requested</span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full bg-brand-primary w-full" />
+                                      </div>
+                                      {selectedRequest.startDate && selectedRequest.endDate && (
+                                        <span className="text-[9px] text-brand-primary font-semibold block">
+                                          Duration: {new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - {new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} ({selectedRequest.duration})
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                const overlappingLeaves = allRequests.filter(req => 
+                                  req.userId === u.uid && 
+                                  req.status === "approved" && 
+                                  hasOverlap(req.startDate, req.endDate, selectedRequest.startDate, selectedRequest.endDate)
+                                );
+
+                                if (overlappingLeaves.length > 0) {
+                                  const oLeave = overlappingLeaves[0];
+                                  const overlapDays = getOverlapInfo(oLeave.startDate, oLeave.endDate, selectedRequest.startDate, selectedRequest.endDate);
+                                  const reqDays = getDurationDays(selectedRequest.startDate, selectedRequest.endDate);
+                                  const percentage = Math.min(100, Math.round((overlapDays / reqDays) * 100)) || 100;
+                                  const durationLabel = oLeave.duration || `${overlapDays} Day${overlapDays > 1 ? "s" : ""}`;
+
+                                  return (
+                                    <div key={u.uid} className="space-y-1">
+                                      <div className="flex justify-between items-center text-xs font-semibold">
+                                        <span className="text-text-main">
+                                          {u.name} <span className="text-[10px] text-text-mut font-normal">({getMockDesignation(u.name)})</span>
+                                        </span>
+                                        <span className="text-brand-danger font-extrabold text-[10px] uppercase">Off ({durationLabel})</span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full bg-brand-danger" style={{ width: `${percentage}%` }} />
+                                      </div>
+                                      {oLeave.startDate && oLeave.endDate && (
+                                        <span className="text-[9px] text-text-mut font-semibold block">
+                                          Duration: {new Date(oLeave.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - {new Date(oLeave.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div key={u.uid} className="space-y-1">
+                                    <div className="flex justify-between items-center text-xs font-semibold">
+                                      <span className="text-text-main">
+                                        {u.name} <span className="text-[10px] text-text-mut font-normal">({getMockDesignation(u.name)})</span>
+                                      </span>
+                                      <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                      <div className="h-full rounded-full bg-emerald-500 w-full" />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="border-t border-border-card pt-3 mt-1 text-[11px] text-text-sec font-semibold leading-relaxed">
+                              Approval will result in {offCount}/{totalCount} member{totalCount > 1 ? "s" : ""} off during this period.
                             </div>
                           </div>
-
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-xs font-semibold">
-                              <span className="text-text-main">Sarah Miller <span className="text-[10px] text-text-mut font-normal">(UI Designer)</span></span>
-                              <span className="text-brand-danger font-extrabold text-[10px] uppercase">Off (2 Days)</span>
-                            </div>
-                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-brand-danger w-2/5" />
-                            </div>
-                            <span className="text-[9px] text-text-mut font-semibold block">Duration: Oct 24 - Oct 25</span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-xs font-semibold">
-                              <span className="text-text-main">James Wilson <span className="text-[10px] text-text-mut font-normal">(DevOps Engineer)</span></span>
-                              <span className="text-emerald-500 font-extrabold text-[10px] uppercase">Available</span>
-                            </div>
-                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-emerald-500 w-full" />
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-xs font-semibold">
-                              <span className="text-brand-primary font-bold">{selectedRequest.userName} <span className="text-[10px] text-text-mut font-normal">({getMockDesignation(selectedRequest.userName)})</span></span>
-                              <span className="text-brand-primary font-extrabold text-[10px] uppercase">Requested</span>
-                            </div>
-                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-brand-primary w-full" />
-                            </div>
-                            {selectedRequest.startDate && selectedRequest.endDate && (
-                              <span className="text-[9px] text-brand-primary font-semibold block">
-                                Duration: {new Date(selectedRequest.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - {new Date(selectedRequest.endDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} ({selectedRequest.duration})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="border-t border-border-card pt-3 mt-1 text-[11px] text-text-sec font-semibold leading-relaxed">
-                          Approval will result in 2/5 members off during this period.
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-center py-16 text-text-mut text-sm font-semibold">

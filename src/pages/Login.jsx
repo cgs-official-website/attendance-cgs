@@ -32,7 +32,22 @@ export default function Login() {
         navigate("/dashboard");
       }
     } catch (error) {
-      showToast(error.message || "Failed to log in. Please check your credentials.", "error");
+      let msg = "Failed to log in. Please check your credentials.";
+      const errCode = error.code || "";
+      const errMsg = error.message || "";
+      if (
+        errCode === "auth/invalid-credential" ||
+        errCode === "auth/wrong-password" ||
+        errCode === "auth/user-not-found" ||
+        errMsg.toLowerCase().includes("invalid email or password") ||
+        errMsg.toLowerCase().includes("user-not-found") ||
+        errMsg.toLowerCase().includes("wrong-password")
+      ) {
+        msg = "Incorrect email or password. Please try again.";
+      } else if (errMsg) {
+        msg = errMsg;
+      }
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }

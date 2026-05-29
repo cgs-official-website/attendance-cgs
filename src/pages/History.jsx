@@ -437,8 +437,8 @@ export default function History() {
                                 <td className="py-3.5 px-4">
                                   {shorts > 0 || longs > 0 ? (
                                     <div className="flex gap-1 flex-wrap">
-                                      {shorts > 0 && <span className="bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold">{shorts} Short</span>}
-                                      {longs > 0 && <span className="bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold">{longs} Long</span>}
+                                      {shorts > 0 && <span className="bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold">{shorts} Break 1</span>}
+                                      {longs > 0 && <span className="bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded text-[10px] font-bold">{longs} Break 2</span>}
                                     </div>
                                   ) : (
                                     <span className="text-text-mut text-[10px]">No breaks</span>

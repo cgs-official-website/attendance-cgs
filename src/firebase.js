@@ -393,8 +393,8 @@ export const checkIn = async (user, location) => {
     status: "checked-in",
     breaks: [],
     totalWorkingMinutes: 0,
-    shortBreakBalance: 1200, // 20 mins in seconds
-    longBreakBalance: 2400   // 40 mins in seconds
+    shortBreakBalance: 1800, // 30 mins in seconds
+    longBreakBalance: 1800   // 30 mins in seconds
   };
 
   if (dbType === "firebase") {
@@ -525,8 +525,8 @@ export const startBreak = async (userId, breakType, location) => {
     }
 
     const balance = breakType === "short"
-      ? (currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1200)
-      : (currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2400);
+      ? (currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800)
+      : (currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800);
 
     if (balance <= 0) {
       throw new Error(`You have no remaining balance for today's ${breakType} break.`);
@@ -566,8 +566,8 @@ export const startBreak = async (userId, breakType, location) => {
     }
 
     const balance = breakType === "short"
-      ? (currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1200)
-      : (currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2400);
+      ? (currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800)
+      : (currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800);
 
     if (balance <= 0) {
       throw new Error(`You have no remaining balance for today's ${breakType} break.`);
@@ -634,8 +634,8 @@ export const resumeWork = async (userId, location) => {
     activeBreak.duration = Math.round(durationSeconds / 60);
     activeBreak.durationMinutes = parseFloat((durationSeconds / 60).toFixed(1));
 
-    let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1200;
-    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2400;
+    let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
+    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
 
     if (activeBreak.type === "short") {
       newShortBalance = Math.max(0, newShortBalance - durationSeconds);
@@ -681,8 +681,8 @@ export const resumeWork = async (userId, location) => {
     activeBreak.duration = Math.round(durationSeconds / 60);
     activeBreak.durationMinutes = parseFloat((durationSeconds / 60).toFixed(1));
 
-    let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1200;
-    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2400;
+    let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
+    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
 
     if (activeBreak.type === "short") {
       newShortBalance = Math.max(0, newShortBalance - durationSeconds);
@@ -890,21 +890,25 @@ function calculateWorkingMinutes(checkInTime, checkOutTime, breaks) {
   const checkOutDate = new Date(checkOutTime);
   let diffMs = checkOutDate.getTime() - checkInDate.getTime();
   
+  // If the user forgets to check out and the elapsed time exceeds 9 hours,
+  // automatically record exactly 8 hours of working time.
+  if (diffMs > 9 * 60 * 60 * 1000) {
+    return 480; // 8 hours in minutes
+  }
+  
   let breakMs = 0;
   if (breaks && breaks.length > 0) {
     breaks.forEach(b => {
       if (b.startTime) {
         const start = new Date(b.startTime);
-        const end = b.resumeTime ? new Date(b.resumeTime) : new Date(); // If not resumed, count until current checkout
+        const end = b.resumeTime ? new Date(b.resumeTime) : new Date(checkOutTime);
         breakMs += (end.getTime() - start.getTime());
       }
     });
   }
   
   const workingMs = diffMs - breakMs;
-  const minutes = Math.max(0, parseFloat((workingMs / 60000).toFixed(1)));
-  // Cap at 8 hours (480 minutes) if user forgets to logout
-  return Math.min(minutes, 480);
+  return Math.max(0, parseFloat((workingMs / 60000).toFixed(1)));
 }
 
 // ----------------------------------------------------
@@ -1143,12 +1147,10 @@ export const subscribeToLeaveRequests = (callback) => {
       let list = localStorage.getItem("att_leave_requests")
         ? JSON.parse(localStorage.getItem("att_leave_requests"))
         : [];
-      if (list.length === 0) {
-        list = [
-          { id: "l1", userId: "default-u1", userName: "Julia Vance", type: "Sick Leave", duration: "2 Days", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150", status: "pending", createdAt: new Date().toISOString() },
-          { id: "l2", userId: "default-u2", userName: "Tom Aris", type: "Annual Leave", duration: "5 Days", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=150", status: "pending", createdAt: new Date().toISOString() },
-          { id: "l3", userId: "default-u3", userName: "Sia Walsh", type: "Personal Leave", duration: "1 Day", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=150", status: "pending", createdAt: new Date().toISOString() }
-        ];
+      // Clean up any existing dummy leave requests if they are stored in localStorage
+      const originalLength = list.length;
+      list = list.filter(item => item.id !== "l1" && item.id !== "l2" && item.id !== "l3");
+      if (list.length !== originalLength) {
         localStorage.setItem("att_leave_requests", JSON.stringify(list));
       }
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -1223,8 +1225,8 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           status: "checked-out",
           breaks: [],
           totalWorkingMinutes: workingMinutes,
-          shortBreakBalance: 1200,
-          longBreakBalance: 2400
+          shortBreakBalance: 1800,
+          longBreakBalance: 1800
         };
         
         await setDoc(doc(db, "attendance", recordId), attendanceData);
@@ -1262,8 +1264,8 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           status: "checked-out",
           breaks: [],
           totalWorkingMinutes: workingMinutes,
-          shortBreakBalance: 1200,
-          longBreakBalance: 2400
+          shortBreakBalance: 1800,
+          longBreakBalance: 1800
         };
         
         const logs = localDb.getAttendance();

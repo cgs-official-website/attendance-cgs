@@ -8,6 +8,7 @@ import UserDashboard from "./pages/UserDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import History from "./pages/History";
 import Profile from "./pages/Profile";
+import ChatWidget from "./components/ChatWidget";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -129,7 +130,8 @@ export default function App() {
           } 
         />
       </Routes>
+      {/* Zuna AI Chatbot — floating on all pages */}
+      <ChatWidget />
     </div>
   );
 }
-

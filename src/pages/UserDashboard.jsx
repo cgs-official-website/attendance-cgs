@@ -1121,11 +1121,14 @@ export default function UserDashboard() {
                       )}
                     </span>
                     <button
+                      type="button"
                       onClick={(e) => handleDismissPaidLeave(e, pl.id)}
-                      className="p-1 rounded-full bg-slate-200/50 dark:bg-slate-800/50 hover:bg-red-500/10 hover:text-red-500 transition-colors text-text-sec cursor-pointer flex items-center justify-center"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="w-6 h-6 rounded-full bg-slate-200/60 dark:bg-slate-700/60 hover:bg-red-500 hover:text-white transition-all text-text-sec cursor-pointer flex items-center justify-center flex-shrink-0 shadow-sm"
                       title="Dismiss notice"
+                      aria-label="Dismiss paid leave notice"
                     >
-                      <X size={10} />
+                      <X size={11} />
                     </button>
                   </div>
                 </div>
@@ -1190,6 +1193,76 @@ export default function UserDashboard() {
               </span>
             </span>
           )}
+        </div>
+      </div>
+
+      {/* ── Attendance Presence Bar ── */}
+      <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+              !todayLog ? "bg-slate-400" :
+              todayLog.status === "checked-in" ? "bg-brand-success animate-pulse" :
+              todayLog.status === "on-break" ? "bg-brand-warning animate-pulse" :
+              "bg-brand-primary"
+            }`} />
+            <span className="text-sm font-extrabold text-text-main">
+              {!todayLog ? "Not Checked In" :
+               todayLog.status === "checked-in" ? "Currently Working" :
+               todayLog.status === "on-break" ? "On Break" :
+               "Shift Completed"}
+            </span>
+            <span className="text-[10px] font-bold text-text-mut bg-bg-base border border-border-card px-2 py-0.5 rounded-full ml-1">
+              {shiftProgressPercent}% of shift
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-xs font-semibold text-text-sec">
+            <span className="flex items-center gap-1">
+              <Clock size={12} className="text-brand-primary" />
+              <span className="font-bold text-text-main">{getActiveHoursText()}</span>
+              <span>/ {(getShiftDurationMinutes() / 60).toFixed(1)} hrs target</span>
+            </span>
+            {todayLog?.checkInTime && (
+              <span className="hidden sm:flex items-center gap-1">
+                <Play size={10} className="text-brand-success" fill="currentColor" />
+                In: {new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {todayLog?.checkOutTime && (
+              <span className="hidden sm:flex items-center gap-1">
+                <Square size={10} className="text-brand-danger" fill="currentColor" />
+                Out: {new Date(todayLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar track */}
+        <div className="w-full h-3 bg-bg-base rounded-full overflow-hidden border border-border-card">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ease-in-out relative overflow-hidden ${
+              shiftProgressPercent >= 100 ? "bg-brand-success" :
+              todayLog?.status === "on-break" ? "bg-brand-warning" :
+              todayLog?.status === "checked-in" ? "bg-brand-primary" :
+              "bg-slate-400"
+            }`}
+            style={{ width: `${Math.max(shiftProgressPercent > 0 ? 2 : 0, shiftProgressPercent)}%` }}
+          >
+            {/* Shimmer animation for active shift */}
+            {todayLog?.status === "checked-in" && (
+              <span
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                style={{ animation: "shimmer 2s infinite" }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Tick markers for 25%, 50%, 75% */}
+        <div className="flex justify-between mt-1.5 px-0.5">
+          {["25%", "50%", "75%", "100%"].map((label) => (
+            <span key={label} className="text-[9px] font-bold text-text-mut">{label}</span>
+          ))}
         </div>
       </div>
 

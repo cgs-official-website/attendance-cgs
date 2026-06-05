@@ -1554,12 +1554,15 @@ export const subscribeToMessages = (threadId, callback) => {
       query(
         collection(db, "messages"),
         where("threadId", "==", threadId),
-        where("isDeleted", "==", false),
-        orderBy("timestamp", "asc")
+        where("isDeleted", "==", false)
       ),
       (snapshot) => {
         const msgs = snapshot.docs.map(d => d.data());
+        msgs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
         callback(msgs);
+      },
+      (error) => {
+        console.error("Firestore subscribeToMessages failed:", error);
       }
     );
   } else {

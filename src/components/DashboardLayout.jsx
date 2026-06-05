@@ -22,7 +22,9 @@ import {
   ClipboardList,
   Mail,
   User,
-  Trash2
+  Trash2,
+  MessageSquare,
+  Monitor
 } from "lucide-react";
 import Logo from "./Logo";
 import { 
@@ -255,6 +257,18 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/admin?tab=rules"); setIsMobileOpen(false); }
     },
     {
+      label: "Team Hub",
+      icon: MessageSquare,
+      active: location.pathname === "/team-hub",
+      onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Chat Monitor",
+      icon: Monitor,
+      active: location.pathname === "/admin" && activeTabParam === "chat",
+      onClick: () => { navigate("/admin?tab=chat"); setIsMobileOpen(false); }
+    },
+    {
       label: "My Profile",
       icon: User,
       active: location.pathname === "/profile",
@@ -272,6 +286,12 @@ export default function DashboardLayout({ children }) {
       icon: Calendar,
       active: location.pathname === "/dashboard" && searchParams.get("tab") === "leaves",
       onClick: () => { navigate("/dashboard?tab=leaves"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Team Hub",
+      icon: MessageSquare,
+      active: location.pathname === "/team-hub",
+      onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
       label: "My History",

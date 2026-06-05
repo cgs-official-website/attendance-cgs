@@ -9,6 +9,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import History from "./pages/History";
 import Profile from "./pages/Profile";
 import ChatWidget from "./components/ChatWidget";
+import TeamHub from "./pages/TeamHub";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -101,6 +102,16 @@ export default function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <Profile />
+              </DashboardLayout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/team-hub" 
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <TeamHub />
               </DashboardLayout>
             </ProtectedRoute>
           } 

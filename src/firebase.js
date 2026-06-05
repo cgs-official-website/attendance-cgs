@@ -21,7 +21,10 @@ import {
   onSnapshot, 
   getDocs,
   serverTimestamp,
-  deleteDoc
+  deleteDoc,
+  limit,
+  arrayUnion,
+  arrayRemove
 } from "firebase/firestore";
 
 // Firebase Configuration
@@ -1325,5 +1328,353 @@ export const subscribeToRegularizationRequests = (callback) => {
     return () => {
       noticeListeners.delete(handler);
     };
+  }
+};
+
+// ============================================================
+// TEAM HUB — Channels, Direct Messages & File Sharing
+// ============================================================
+
+// --- Listeners for realtime simulation ---
+const channelListeners = new Set();
+const messageListeners = {};
+
+const notifyChannelListeners = () => channelListeners.forEach(cb => cb());
+const notifyMessageListeners = (threadId) => {
+  if (messageListeners[threadId]) {
+    messageListeners[threadId].forEach(cb => cb());
+  }
+};
+
+// --- Local DB helpers for Team Hub ---
+const getLocalChannels = () => {
+  const raw = localStorage.getItem("att_channels");
+  const channels = raw ? JSON.parse(raw) : [];
+  // Seed a default General channel
+  if (!channels.some(c => c.id === "general")) {
+    channels.push({
+      id: "general",
+      name: "general",
+      description: "Company-wide announcements and updates",
+      createdBy: "admin-uid-12345",
+      createdByName: "Super Admin",
+      memberIds: [],
+      isPrivate: false,
+      createdAt: new Date().toISOString()
+    });
+    localStorage.setItem("att_channels", JSON.stringify(channels));
+  }
+  return channels;
+};
+
+const saveLocalChannels = (channels) => {
+  localStorage.setItem("att_channels", JSON.stringify(channels));
+};
+
+const getLocalMessages = () => {
+  const raw = localStorage.getItem("att_messages");
+  return raw ? JSON.parse(raw) : [];
+};
+
+const saveLocalMessages = (messages) => {
+  localStorage.setItem("att_messages", JSON.stringify(messages));
+};
+
+const getLocalDmThreads = () => {
+  const raw = localStorage.getItem("att_dm_threads");
+  return raw ? JSON.parse(raw) : [];
+};
+
+const saveLocalDmThreads = (threads) => {
+  localStorage.setItem("att_dm_threads", JSON.stringify(threads));
+};
+
+// Seed on load
+if (dbType === "local") {
+  getLocalChannels();
+}
+
+// ============================================================
+// CHANNEL FUNCTIONS
+// ============================================================
+
+/**
+ * Create a new channel (admin only)
+ */
+export const createChannel = async (name, description, creatorId, creatorName) => {
+  const channelData = {
+    id: dbType === "firebase" ? "" : "ch-" + Math.random().toString(36).substr(2, 9),
+    name: name.toLowerCase().replace(/\s+/g, "-"),
+    displayName: name,
+    description: description || "",
+    createdBy: creatorId,
+    createdByName: creatorName,
+    memberIds: [creatorId],
+    isPrivate: false,
+    createdAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "channels"), channelData);
+    await updateDoc(docRef, { id: docRef.id });
+    return { ...channelData, id: docRef.id };
+  } else {
+    const channels = getLocalChannels();
+    channels.push(channelData);
+    saveLocalChannels(channels);
+    notifyChannelListeners();
+    return channelData;
+  }
+};
+
+/**
+ * Subscribe to channels list (real-time)
+ */
+export const subscribeToChannels = (callback) => {
+  if (dbType === "firebase") {
+    return onSnapshot(
+      query(collection(db, "channels"), orderBy("createdAt", "asc")),
+      (snapshot) => {
+        const list = snapshot.docs.map(d => d.data());
+        callback(list);
+      }
+    );
+  } else {
+    const handler = () => callback(getLocalChannels());
+    channelListeners.add(handler);
+    handler();
+    return () => channelListeners.delete(handler);
+  }
+};
+
+/**
+ * Join a channel
+ */
+export const joinChannel = async (channelId, userId) => {
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "channels", channelId), {
+      memberIds: arrayUnion(userId)
+    });
+  } else {
+    const channels = getLocalChannels();
+    const idx = channels.findIndex(c => c.id === channelId);
+    if (idx !== -1 && !channels[idx].memberIds.includes(userId)) {
+      channels[idx].memberIds.push(userId);
+      saveLocalChannels(channels);
+      notifyChannelListeners();
+    }
+  }
+};
+
+/**
+ * Leave a channel
+ */
+export const leaveChannel = async (channelId, userId) => {
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "channels", channelId), {
+      memberIds: arrayRemove(userId)
+    });
+  } else {
+    const channels = getLocalChannels();
+    const idx = channels.findIndex(c => c.id === channelId);
+    if (idx !== -1) {
+      channels[idx].memberIds = channels[idx].memberIds.filter(id => id !== userId);
+      saveLocalChannels(channels);
+      notifyChannelListeners();
+    }
+  }
+};
+
+/**
+ * Delete a channel (admin only)
+ */
+export const deleteChannel = async (channelId) => {
+  if (channelId === "general") return; // Never delete general
+  if (dbType === "firebase") {
+    await deleteDoc(doc(db, "channels", channelId));
+  } else {
+    const channels = getLocalChannels().filter(c => c.id !== channelId);
+    saveLocalChannels(channels);
+    notifyChannelListeners();
+  }
+};
+
+// ============================================================
+// MESSAGES FUNCTIONS
+// ============================================================
+
+/**
+ * Send a message to a channel or DM thread
+ */
+export const sendChatMessage = async (threadId, threadType, senderId, senderName, senderAvatar, text, fileData) => {
+  const msg = {
+    id: dbType === "firebase" ? "" : "msg-" + Math.random().toString(36).substr(2, 9),
+    threadId,
+    threadType, // 'channel' or 'dm'
+    senderId,
+    senderName,
+    senderAvatar: senderAvatar || "",
+    text: text || "",
+    fileData: fileData || null, // { name, url, driveId, size, mimeType }
+    isDeleted: false,
+    timestamp: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "messages"), msg);
+    await updateDoc(docRef, { id: docRef.id });
+    return { ...msg, id: docRef.id };
+  } else {
+    const messages = getLocalMessages();
+    messages.push(msg);
+    saveLocalMessages(messages);
+    notifyMessageListeners(threadId);
+    return msg;
+  }
+};
+
+/**
+ * Subscribe to messages for a thread (real-time)
+ */
+export const subscribeToMessages = (threadId, callback) => {
+  if (dbType === "firebase") {
+    return onSnapshot(
+      query(
+        collection(db, "messages"),
+        where("threadId", "==", threadId),
+        where("isDeleted", "==", false),
+        orderBy("timestamp", "asc")
+      ),
+      (snapshot) => {
+        const msgs = snapshot.docs.map(d => d.data());
+        callback(msgs);
+      }
+    );
+  } else {
+    if (!messageListeners[threadId]) {
+      messageListeners[threadId] = new Set();
+    }
+    const handler = () => {
+      const all = getLocalMessages()
+        .filter(m => m.threadId === threadId && !m.isDeleted)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      callback(all);
+    };
+    messageListeners[threadId].add(handler);
+    handler();
+    return () => {
+      if (messageListeners[threadId]) {
+        messageListeners[threadId].delete(handler);
+      }
+    };
+  }
+};
+
+/**
+ * Delete a message (admin moderation or sender)
+ */
+export const deleteChatMessage = async (messageId) => {
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "messages", messageId), { isDeleted: true, text: "[Message deleted]", fileData: null });
+  } else {
+    const messages = getLocalMessages();
+    const idx = messages.findIndex(m => m.id === messageId);
+    if (idx !== -1) {
+      messages[idx].isDeleted = true;
+      messages[idx].text = "[Message deleted]";
+      messages[idx].fileData = null;
+      saveLocalMessages(messages);
+      // Notify all thread listeners
+      Object.values(messageListeners).forEach(set => set.forEach(cb => cb()));
+    }
+  }
+};
+
+/**
+ * Get all messages (admin only — for monitoring)
+ */
+export const getAllMessagesAdmin = async () => {
+  if (dbType === "firebase") {
+    const snapshot = await getDocs(
+      query(collection(db, "messages"), orderBy("timestamp", "desc"))
+    );
+    return snapshot.docs.map(d => d.data());
+  } else {
+    return getLocalMessages().sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+};
+
+// ============================================================
+// DIRECT MESSAGE THREAD FUNCTIONS
+// ============================================================
+
+/**
+ * Get or create a DM thread between two users
+ */
+export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName) => {
+  // Canonical ID — always sorted so order doesn't matter
+  const threadId = [userAId, userBId].sort().join("_dm_");
+
+  if (dbType === "firebase") {
+    const docRef = doc(db, "dm_threads", threadId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      const thread = {
+        id: threadId,
+        participantIds: [userAId, userBId],
+        participantNames: { [userAId]: userAName, [userBId]: userBName },
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(docRef, thread);
+      return thread;
+    }
+    return snap.data();
+  } else {
+    const threads = getLocalDmThreads();
+    const existing = threads.find(t => t.id === threadId);
+    if (existing) return existing;
+    const thread = {
+      id: threadId,
+      participantIds: [userAId, userBId],
+      participantNames: { [userAId]: userAName, [userBId]: userBName },
+      createdAt: new Date().toISOString()
+    };
+    threads.push(thread);
+    saveLocalDmThreads(threads);
+    return thread;
+  }
+};
+
+/**
+ * Get all DM threads for a user
+ */
+export const subscribeToDmThreads = (userId, callback) => {
+  if (dbType === "firebase") {
+    return onSnapshot(
+      query(collection(db, "dm_threads"), where("participantIds", "array-contains", userId)),
+      (snapshot) => {
+        callback(snapshot.docs.map(d => d.data()));
+      }
+    );
+  } else {
+    const handler = () => {
+      const threads = getLocalDmThreads().filter(t => t.participantIds.includes(userId));
+      callback(threads);
+    };
+    channelListeners.add(handler); // reuse same notification bus
+    handler();
+    return () => channelListeners.delete(handler);
+  }
+};
+
+/**
+ * Get all DM threads (admin only)
+ */
+export const getAllDmThreadsAdmin = async () => {
+  if (dbType === "firebase") {
+    const snapshot = await getDocs(collection(db, "dm_threads"));
+    return snapshot.docs.map(d => d.data());
+  } else {
+    return getLocalDmThreads();
   }
 };

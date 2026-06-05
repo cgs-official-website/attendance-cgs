@@ -17,7 +17,11 @@ import {
   subscribeToAttendanceRules,
   updatePaidLeaveStatus,
   subscribeToRegularizationRequests,
-  updateRegularizationRequest
+  updateRegularizationRequest,
+  getAllMessagesAdmin,
+  getAllDmThreadsAdmin,
+  deleteChatMessage,
+  subscribeToChannels
 } from "../firebase";
 import { 
   Shield, 
@@ -192,6 +196,15 @@ export default function AdminDashboard() {
   const [showDeletePaidLeaveConfirm, setShowDeletePaidLeaveConfirm] = useState(false);
   const [selectedPaidLeave, setSelectedPaidLeave] = useState(null);
 
+  // Chat Monitor states
+  const [chatMessages, setChatMessages]       = useState([]);
+  const [chatChannels, setChatChannels]       = useState([]);
+  const [chatDmThreads, setChatDmThreads]     = useState([]);
+  const [chatLoading, setChatLoading]         = useState(false);
+  const [chatFilter, setChatFilter]           = useState(""); // search
+  const [chatTypeFilter, setChatTypeFilter]   = useState("all"); // 'all' | 'channel' | 'dm'
+  const [chatThreadFilter, setChatThreadFilter] = useState("all"); // specific thread id or 'all'
+
   const shiftPresets = [
     { label: "10 AM - 7 PM", start: "10:00", end: "19:00" },
     { label: "9 AM - 6 PM", start: "09:00", end: "18:00" },
@@ -279,6 +292,22 @@ export default function AdminDashboard() {
       unsubscribePaidLeaves();
     };
   }, [currentUser.role]);
+
+  // Load Chat Monitor data when tab=chat is active
+  useEffect(() => {
+    if (activeTab !== "chat" || currentUser.role !== "admin") return;
+    setChatLoading(true);
+    Promise.all([
+      getAllMessagesAdmin(),
+      getAllDmThreadsAdmin()
+    ]).then(([msgs, dms]) => {
+      setChatMessages(msgs || []);
+      setChatDmThreads(dms || []);
+    }).catch(() => {}).finally(() => setChatLoading(false));
+
+    const unsubCh = subscribeToChannels(setChatChannels);
+    return unsubCh;
+  }, [activeTab, currentUser.role]);
 
   useEffect(() => {
     if (leaveRequests.length > 0 && (!selectedRequestId || !leaveRequests.some(r => r.id === selectedRequestId))) {
@@ -3347,6 +3376,244 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* ─── CHAT MONITOR TAB ─── */}
+      {activeTab === "chat" && (() => {
+        const getThreadLabel = (msg) => {
+          if (msg.threadType === "channel") {
+            const ch = chatChannels.find(c => c.id === msg.threadId);
+            return "#" + (ch?.displayName || ch?.name || msg.threadId);
+          }
+          const dm = chatDmThreads.find(d => d.id === msg.threadId);
+          if (dm) {
+            const ids = dm.participantIds || [];
+            const names = ids.map(id => dm.participantNames?.[id] || id);
+            return "DM: " + names.join(" ↔ ");
+          }
+          return "DM: " + msg.threadId;
+        };
+
+        const filteredMsgs = chatMessages.filter(m => {
+          const matchType = chatTypeFilter === "all" || m.threadType === chatTypeFilter;
+          const matchThread = chatThreadFilter === "all" || m.threadId === chatThreadFilter;
+          const q = chatFilter.toLowerCase();
+          const matchSearch = !chatFilter ||
+            (m.senderName || "").toLowerCase().includes(q) ||
+            (m.text || "").toLowerCase().includes(q) ||
+            getThreadLabel(m).toLowerCase().includes(q);
+          return matchType && matchThread && matchSearch && !m.isDeleted;
+        });
+
+        const handleDeleteMsg = async (id) => {
+          if (!window.confirm("Delete this message permanently?")) return;
+          await deleteChatMessage(id);
+          setChatMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
+          showToast("Message removed", "success");
+        };
+
+        const handleExportChat = () => {
+          const rows = [
+            ["Timestamp", "Type", "Thread", "Sender", "Message", "File Name", "File URL"]
+          ];
+          filteredMsgs.forEach(m => {
+            rows.push([
+              m.timestamp ? new Date(m.timestamp).toLocaleString() : "",
+              m.threadType,
+              getThreadLabel(m),
+              m.senderName,
+              m.text || "",
+              m.fileData?.name || "",
+              m.fileData?.url || ""
+            ]);
+          });
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Chat Log");
+          const max_len = {};
+          rows.forEach(row => row.forEach((val, i) => {
+            max_len[i] = Math.max(max_len[i] || 10, String(val || "").length);
+          }));
+          ws["!cols"] = Object.keys(max_len).map(i => ({ wch: max_len[i] + 3 }));
+          XLSX.writeFile(wb, `Chat_Monitor_Export_${new Date().toISOString().split("T")[0]}.xlsx`);
+          showToast("Chat log exported!", "success");
+        };
+
+        const uniqueThreads = [...new Set(chatMessages.map(m => m.threadId))];
+
+        return (
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main">Chat Monitor</h1>
+                <p className="text-sm text-text-sec mt-1">View, search and moderate all team messages and direct conversations.</p>
+              </div>
+              <button
+                onClick={handleExportChat}
+                className="flex items-center gap-2 px-4 py-2.5 bg-brand-primary text-white text-sm font-bold rounded-[12px] hover:bg-brand-hover transition-colors cursor-pointer shadow-md"
+              >
+                <Download size={15} /> Export Chat Log
+              </button>
+            </div>
+
+            {/* Stats Row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: "💬", color: "text-brand-primary" },
+                { label: "Channels", val: chatChannels.length, icon: "#", color: "text-indigo-500" },
+                { label: "DM Threads", val: chatDmThreads.length, icon: "✉️", color: "text-amber-500" },
+                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: "📎", color: "text-emerald-500" }
+              ].map((s, i) => (
+                <div key={i} className="bg-bg-card border border-border-card rounded-[16px] p-4 flex items-center gap-3">
+                  <span className={`text-2xl font-black ${s.color}`}>{s.icon}</span>
+                  <div>
+                    <div className="text-[10px] font-bold text-text-mut uppercase tracking-wider">{s.label}</div>
+                    <div className="text-2xl font-extrabold text-text-main">{s.val}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 bg-bg-card border border-border-card rounded-[16px] p-4">
+              <div className="flex items-center gap-2 bg-bg-base border border-border-card rounded-[10px] px-3 py-2 min-w-[200px] flex-1">
+                <Search size={14} className="text-text-mut" />
+                <input
+                  type="text"
+                  value={chatFilter}
+                  onChange={e => setChatFilter(e.target.value)}
+                  placeholder="Search messages, users, channels..."
+                  className="bg-transparent text-sm text-text-main outline-none flex-1"
+                />
+              </div>
+              <select
+                value={chatTypeFilter}
+                onChange={e => { setChatTypeFilter(e.target.value); setChatThreadFilter("all"); }}
+                className="bg-bg-base border border-border-card text-text-main text-xs font-semibold rounded-[10px] px-3 py-2 outline-none cursor-pointer"
+              >
+                <option value="all">All Types</option>
+                <option value="channel">Channels Only</option>
+                <option value="dm">DMs Only</option>
+              </select>
+              <select
+                value={chatThreadFilter}
+                onChange={e => setChatThreadFilter(e.target.value)}
+                className="bg-bg-base border border-border-card text-text-main text-xs font-semibold rounded-[10px] px-3 py-2 outline-none cursor-pointer"
+              >
+                <option value="all">All Threads</option>
+                {uniqueThreads.map(tid => (
+                  <option key={tid} value={tid}>
+                    {chatMessages.find(m => m.threadId === tid) ? getThreadLabel(chatMessages.find(m => m.threadId === tid)) : tid}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Messages Table */}
+            <div className="bg-bg-card border border-border-card rounded-[20px] overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border-card flex items-center justify-between">
+                <span className="text-xs font-bold text-text-sec uppercase tracking-wider">
+                  {filteredMsgs.length} message{filteredMsgs.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {chatLoading ? (
+                <div className="py-12 text-center">
+                  <div className="w-8 h-8 border-2 border-brand-primary/30 border-t-brand-primary rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-text-mut">Loading chat history...</p>
+                </div>
+              ) : filteredMsgs.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-2xl mb-2">💬</p>
+                  <p className="text-sm font-semibold text-text-mut">No messages found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border-card bg-bg-base">
+                        {["Timestamp", "Type", "Thread / Channel", "Sender", "Message", "Attachment", "Actions"].map(h => (
+                          <th key={h} className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider px-4 py-3 text-left whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMsgs.slice(0, 200).map(msg => (
+                        <tr key={msg.id} className="border-b border-border-card hover:bg-bg-base transition-colors">
+                          <td className="px-4 py-3 text-[11px] text-text-mut whitespace-nowrap">
+                            {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${msg.threadType === "channel" ? "bg-indigo-500/10 text-indigo-500" : "bg-amber-500/10 text-amber-500"}`}>
+                              {msg.threadType === "channel" ? "# Channel" : "✉ DM"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs font-semibold text-text-sec whitespace-nowrap">
+                            {getThreadLabel(msg)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[9px] font-bold">
+                                {(msg.senderName || "?").charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-xs font-semibold text-text-main whitespace-nowrap">{msg.senderName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 max-w-[260px]">
+                            <span className="text-xs text-text-sec line-clamp-2">{msg.text || <span className="text-text-mut italic">—</span>}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {msg.fileData ? (
+                              <a
+                                href={msg.fileData.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-bold text-brand-primary hover:underline flex items-center gap-1 whitespace-nowrap"
+                              >
+                                📎 {msg.fileData.name?.substring(0, 20) || "File"}
+                              </a>
+                            ) : <span className="text-text-mut text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleDeleteMsg(msg.id)}
+                              className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
+                              title="Delete message"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Channels Overview */}
+            {chatChannels.length > 0 && (
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5">
+                <h3 className="text-sm font-extrabold text-text-main mb-4 flex items-center gap-2">
+                  <span className="text-lg">#</span> Channels Overview
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {chatChannels.map(ch => (
+                    <div key={ch.id} className="flex items-start gap-3 p-3 bg-bg-base rounded-[12px] border border-border-card">
+                      <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">#</div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-text-main truncate">{ch.displayName || ch.name}</div>
+                        <div className="text-[10px] text-text-mut truncate">{ch.description || "No description"}</div>
+                        <div className="text-[10px] text-text-mut mt-0.5">{ch.memberIds?.length || 0} members · by {ch.createdByName}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
     </div>
   );
 }

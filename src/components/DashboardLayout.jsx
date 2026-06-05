@@ -353,8 +353,12 @@ export default function DashboardLayout({ children }) {
         {/* Footer info & Logout */}
         <div className="p-4 border-t border-border-card flex items-center justify-between bg-bg-base/30">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs uppercase">
-              {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "AP"}
+            <div className="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs uppercase overflow-hidden">
+              {currentUser?.avatar ? (
+                <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "AP"
+              )}
             </div>
             <div className="flex flex-col text-left max-w-[110px]">
               <span className="font-bold text-xs text-text-main truncate">{currentUser?.name}</span>
@@ -549,10 +553,14 @@ export default function DashboardLayout({ children }) {
             {/* User profile avatar button */}
             <button
               onClick={() => navigate("/profile")}
-              className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 hover:border-brand-primary/60 hover:bg-brand-primary/25 transition-all flex items-center justify-center font-extrabold text-xs uppercase shadow-sm cursor-pointer focus:outline-none"
+              className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 hover:border-brand-primary/60 hover:bg-brand-primary/25 transition-all flex items-center justify-center font-extrabold text-xs uppercase shadow-sm cursor-pointer focus:outline-none overflow-hidden"
               title="View Profile"
             >
-              {currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"}
+              {currentUser?.avatar ? (
+                <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"
+              )}
             </button>
           </div>
         </header>
@@ -628,8 +636,12 @@ export default function DashboardLayout({ children }) {
             {/* Mobile Footer profile */}
             <div className="p-4 border-t border-border-card flex items-center justify-between bg-bg-base/30">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs uppercase">
-                  {currentUser?.name?.substring(0, 2) || "AP"}
+                <div className="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs uppercase overflow-hidden">
+                  {currentUser?.avatar ? (
+                    <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "AP"
+                  )}
                 </div>
                 <div className="flex flex-col text-left">
                   <span className="font-bold text-xs text-text-main truncate max-w-[110px]">{currentUser?.name}</span>

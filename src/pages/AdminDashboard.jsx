@@ -1883,9 +1883,16 @@ export default function AdminDashboard() {
                                   </div>
                                 </td>
                                 <td className="py-3.5 px-4">
-                                  <span className={`text-[10px] px-2 py-0.5 rounded font-extrabold uppercase ${typeBadge}`}>
-                                    {req.type}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-[10px] px-2 py-0.5 rounded font-extrabold uppercase ${typeBadge}`}>
+                                      {req.type}
+                                    </span>
+                                    {req.isEmergency && (
+                                      <span className="text-[10px] px-2 py-0.5 rounded font-extrabold uppercase bg-brand-warning/10 text-brand-warning border border-brand-warning/20">
+                                        Emergency
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="py-3.5 px-4 text-text-sec whitespace-nowrap">
                                   {startF && endF ? `${startF} - ${endF}` : "—"}
@@ -1958,7 +1965,14 @@ export default function AdminDashboard() {
                           </div>
                           <div className="flex-grow text-left">
                             <div className="flex justify-between items-center">
-                              <span className="font-extrabold text-sm text-text-main">{selectedRequest.userName}</span>
+                              <span className="font-extrabold text-sm text-text-main flex items-center gap-1.5">
+                                <span>{selectedRequest.userName}</span>
+                                {selectedRequest.isEmergency && (
+                                  <span className="bg-brand-warning/10 text-brand-warning border border-brand-warning/20 text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase whitespace-nowrap">
+                                    Emergency
+                                  </span>
+                                )}
+                              </span>
                               <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/30 text-[10px] px-3 py-1 rounded-[8px] font-black uppercase tracking-wider">
                                 PENDING
                               </span>

@@ -756,10 +756,10 @@ export const getAllRegisteredUsers = async () => {
 /**
  * Update a user record (Admin edit user)
  */
-export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves) => {
+export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", uid);
-    await updateDoc(docRef, {
+    const updates = {
       name,
       department,
       programType,
@@ -768,12 +768,16 @@ export const updateUserRecord = async (uid, name, department, programType, shift
       annualLeaves: Number(annualLeaves),
       sickLeaves: Number(sickLeaves),
       casualLeaves: Number(casualLeaves)
-    });
+    };
+    if (avatar !== undefined) {
+      updates.avatar = avatar;
+    }
+    await updateDoc(docRef, updates);
   } else {
     const users = localDb.getUsers();
     const idx = users.findIndex(u => u.uid === uid);
     if (idx !== -1) {
-      users[idx] = {
+      const updatedData = {
         ...users[idx],
         name,
         department,
@@ -784,12 +788,29 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         sickLeaves: Number(sickLeaves),
         casualLeaves: Number(casualLeaves)
       };
+      if (avatar !== undefined) {
+        updatedData.avatar = avatar;
+      }
+      users[idx] = updatedData;
       localStorage.setItem("att_users", JSON.stringify(users));
       
       // Update local storage current user profile if currently logged in user is updated
       const cur = localDb.getCurrentUser();
       if (cur && cur.uid === uid) {
-        const updatedUser = { ...cur, name, department, programType, shiftStart, shiftEnd, annualLeaves: Number(annualLeaves), sickLeaves: Number(sickLeaves), casualLeaves: Number(casualLeaves) };
+        const updatedUser = { 
+          ...cur, 
+          name, 
+          department, 
+          programType, 
+          shiftStart, 
+          shiftEnd, 
+          annualLeaves: Number(annualLeaves), 
+          sickLeaves: Number(sickLeaves), 
+          casualLeaves: Number(casualLeaves) 
+        };
+        if (avatar !== undefined) {
+          updatedUser.avatar = avatar;
+        }
         localDb.setCurrentUser(updatedUser);
         notifyAuthListeners(updatedUser);
       }
@@ -1037,7 +1058,7 @@ export const subscribeToAttendanceRules = (callback) => {
 };
 
 // 3. Leave Requests
-export const requestLeave = async (userId, userName, userDept, type, duration, startDate, endDate, reason, avatar) => {
+export const requestLeave = async (userId, userName, userDept, type, duration, startDate, endDate, reason, avatar, isEmergency = false) => {
   const req = {
     id: dbType === "firebase" ? "" : "lr-" + Math.random().toString(36).substr(2, 9),
     userId,
@@ -1050,6 +1071,7 @@ export const requestLeave = async (userId, userName, userDept, type, duration, s
     reason: reason || "",
     avatar: avatar || "",
     status: "pending",
+    isEmergency,
     createdAt: new Date().toISOString()
   };
 
@@ -1091,7 +1113,7 @@ export const updateLeaveRequest = async (id, status, managerComment) => {
           const days = parseDurationDays(reqData.duration);
           let field = "annualLeaves";
           if (reqData.type === "Sick Leave") field = "sickLeaves";
-          else if (reqData.type === "Casual Leave") field = "casualLeaves";
+          else if (reqData.type === "Casual Leave" || reqData.isEmergency) field = "casualLeaves";
           const currentBal = userData[field] !== undefined ? Number(userData[field]) : (field === "annualLeaves" ? 25 : (field === "sickLeaves" ? 10 : 6));
           await updateDoc(userDocRef, { [field]: Math.max(0, currentBal - days) });
         }
@@ -1112,7 +1134,7 @@ export const updateLeaveRequest = async (id, status, managerComment) => {
           const days = parseDurationDays(reqData.duration);
           let field = "annualLeaves";
           if (reqData.type === "Sick Leave") field = "sickLeaves";
-          else if (reqData.type === "Casual Leave") field = "casualLeaves";
+          else if (reqData.type === "Casual Leave" || reqData.isEmergency) field = "casualLeaves";
           const currentBal = users[uIdx][field] !== undefined ? Number(users[uIdx][field]) : (field === "annualLeaves" ? 25 : (field === "sickLeaves" ? 10 : 6));
           users[uIdx][field] = Math.max(0, currentBal - days);
           localStorage.setItem("att_users", JSON.stringify(users));

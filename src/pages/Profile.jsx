@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { updateUserRecord } from "../firebase";
@@ -13,8 +13,10 @@ export default function Profile() {
   const [programType, setProgramType] = useState(currentUser?.programType || "Internship");
   const [shiftStart, setShiftStart] = useState(currentUser?.shiftStart || "10:00");
   const [shiftEnd, setShiftEnd] = useState(currentUser?.shiftEnd || "19:00");
+  const [avatar, setAvatar] = useState(currentUser?.avatar || "");
   const [loading, setLoading] = useState(false);
 
+  const fileInputRef = useRef(null);
   const isAdmin = currentUser?.role === "admin";
 
   const handleSave = async (e) => {
@@ -40,7 +42,8 @@ export default function Profile() {
         finalShiftEnd,
         currentUser.annualLeaves || 25,
         currentUser.sickLeaves || 10,
-        currentUser.casualLeaves || 6
+        currentUser.casualLeaves || 6,
+        avatar
       );
 
       // Update state reactively
@@ -50,6 +53,7 @@ export default function Profile() {
         programType: finalProgram,
         shiftStart: finalShiftStart,
         shiftEnd: finalShiftEnd,
+        avatar
       });
 
       showToast("Profile updated successfully!", "success");
@@ -57,6 +61,25 @@ export default function Profile() {
       showToast(err.message || "Failed to update profile", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        return showToast("Image size must be less than 2MB.", "warning");
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatar(reader.result);
+        showToast("Profile picture selected. Click 'Save Settings' to upload.", "info");
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -76,12 +99,26 @@ export default function Profile() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Avatar & Account Badge */}
         <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col items-center justify-center text-center">
-          <div className="w-20 h-20 rounded-full bg-brand-primary/10 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-2xl uppercase shadow-md mb-4 relative overflow-hidden group">
-            {name ? name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"}
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity cursor-pointer">
+          <div 
+            onClick={handleAvatarClick}
+            className="w-20 h-20 rounded-full bg-brand-primary/10 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-2xl uppercase shadow-md mb-4 relative overflow-hidden group cursor-pointer"
+          >
+            {avatar ? (
+              <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              name ? name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"
+            )}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity">
               EDIT
             </div>
           </div>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            className="hidden"
+          />
 
           <h3 className="font-extrabold text-base text-text-main tracking-tight">{name}</h3>
           <p className="text-xs text-text-mut font-semibold mt-1 truncate max-w-full">{currentUser?.email}</p>
@@ -161,15 +198,26 @@ export default function Profile() {
                   <Building size={13} className="text-text-mut" />
                   Department / Domain
                 </label>
-                <input
-                  id="profile-dept"
-                  type="text"
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
-                  value={dept}
-                  onChange={(e) => setDept(e.target.value)}
-                  placeholder="e.g. Engineering"
-                  required
-                />
+                {isAdmin ? (
+                  <input
+                    id="profile-dept"
+                    type="text"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={dept}
+                    onChange={(e) => setDept(e.target.value)}
+                    placeholder="e.g. Engineering"
+                    required
+                  />
+                ) : (
+                  <input
+                    id="profile-dept"
+                    type="text"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-xs text-text-mut font-semibold outline-none cursor-not-allowed opacity-70"
+                    value={dept}
+                    readOnly
+                    disabled
+                  />
+                )}
               </div>
 
               {/* Program Type */}

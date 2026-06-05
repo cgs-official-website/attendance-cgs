@@ -4,14 +4,13 @@ import { sendMessage } from '../utils/gemini';
 const WELCOME_MESSAGE = {
   id: 'welcome',
   role: 'model',
-  content: `👋 Hi! I'm **Zuna AI**, your CGS assistant!
+  content: `Hi! I'm **Zuna AI**, your CGS assistant!
 
 I can help with:
-- 🏢 Our services (IT & BPO)
-- 💼 Careers & internships
-- 🛠️ Internal tools & tech
-- 📅 Attendance system info
-- 📞 Contact info
+- Our services (IT & BPO)
+- Careers & internships
+- Internal tools & tech
+- Contact info
 
 What would you like to know?`,
   timestamp: new Date(),
@@ -58,17 +57,18 @@ export function useChat() {
     } catch (err) {
       console.error('Zuna AI error:', err);
 
-      let errorMessage = '⚠️ Something went wrong. Please try again.';
-      if (err.message?.includes('VITE_GEMINI_API_KEY')) {
-        errorMessage = '🔑 API key missing. Add VITE_GEMINI_API_KEY to your .env file.';
-      } else if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('400')) {
-        errorMessage = '🔑 Invalid API key. Please check your VITE_GEMINI_API_KEY in .env';
-      } else if (err.message?.includes('quota') || err.message?.includes('429')) {
-        errorMessage = '⏳ Rate limit reached. Please wait a moment and try again.';
-      } else if (err.message?.includes('PERMISSION_DENIED') || err.message?.includes('403')) {
-        errorMessage = '🚫 API key lacks permission. Check your Google AI Studio key.';
+      let errorMessage = 'Something went wrong. Please try again.';
+      if (err.message?.includes('VITE_GROQ_API_KEY')) {
+        errorMessage = 'API key missing. Add VITE_GROQ_API_KEY to your .env file.';
+      } else if (err.message?.includes('model_decommissioned') || err.error?.code === 'model_decommissioned') {
+        errorMessage = 'The AI model specified is decommissioned. Please update the model ID in the code.';
+      } else if (err.status === 401 || err.message?.includes('API_KEY_INVALID')) {
+        errorMessage = 'Invalid API key. Please check your VITE_GROQ_API_KEY in .env';
+      } else if (err.status === 429 || err.message?.includes('quota')) {
+        errorMessage = 'Rate limit reached. Please wait a moment and try again.';
+      } else if (err.status === 400) {
+        errorMessage = `Bad Request: ${err.error?.message || err.message}`;
       }
-
       setError(errorMessage);
       setMessages((prev) => [
         ...prev,

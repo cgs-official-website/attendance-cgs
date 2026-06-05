@@ -40,12 +40,20 @@ export default function UserDashboard() {
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "dashboard";
 
+  const getLocalDateString = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const getTomorrowDateString = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split("T")[0];
+    return getLocalDateString(tomorrow);
   };
   const tomorrowStr = getTomorrowDateString();
+  const todayStr = getLocalDateString();
 
   const [dismissedLeaves, setDismissedLeaves] = useState(() => {
     const saved = localStorage.getItem("dismissed_paid_leaves");
@@ -77,6 +85,7 @@ export default function UserDashboard() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [leaveReason, setLeaveReason] = useState("");
+  const [isEmergency, setIsEmergency] = useState(false);
   const [myLeaveRequests, setMyLeaveRequests] = useState([]);
   const [selectedPaidLeaveDetail, setSelectedPaidLeaveDetail] = useState(null);
 
@@ -411,17 +420,42 @@ export default function UserDashboard() {
       return showToast("Please fill in all leave request fields.", "warning");
     }
 
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayString = getLocalDateString();
+    const tomorrowString = getTomorrowDateString();
 
     const startD = new Date(startDate);
     startD.setHours(0, 0, 0, 0);
     const endD = new Date(endDate);
     endD.setHours(0, 0, 0, 0);
 
-    if (startD < tomorrow) {
-      return showToast("You can only request leave starting from tomorrow.", "warning");
+    const todayDateObj = new Date(todayString);
+    todayDateObj.setHours(0, 0, 0, 0);
+
+    const tomorrowDateObj = new Date(tomorrowString);
+    tomorrowDateObj.setHours(0, 0, 0, 0);
+
+    // Validate standard leaves vs emergency leaves start date limits
+    if (!isEmergency) {
+      if (startDate === todayString || startD < tomorrowDateObj) {
+        return showToast("Standard leave requests must start from tomorrow. Choose Emergency Leave to apply for today.", "warning");
+      }
+    } else {
+      // Validate emergency leaves applied for today must be before shift start
+      if (startDate === todayString) {
+        if (currentUser.shiftStart) {
+          const now = new Date();
+          const [shiftH, shiftM] = currentUser.shiftStart.split(":").map(Number);
+          const shiftStartToday = new Date();
+          shiftStartToday.setHours(shiftH, shiftM, 0, 0);
+
+          if (now >= shiftStartToday) {
+            const formattedShiftTime = formatShiftTime(currentUser.shiftStart);
+            return showToast(`Emergency leave for today must be applied before your shift starts at ${formattedShiftTime}.`, "warning");
+          }
+        }
+      } else if (startD < todayDateObj) {
+        return showToast("Emergency leave cannot start in the past.", "warning");
+      }
     }
 
     if (endD < startD) {
@@ -443,13 +477,15 @@ export default function UserDashboard() {
         startDate,
         endDate,
         leaveReason,
-        null
+        null,
+        isEmergency
       );
       showToast("Leave request submitted successfully.", "success");
       setLeaveType("Annual Leave");
       setStartDate("");
       setEndDate("");
       setLeaveReason("");
+      setIsEmergency(false);
     } catch (err) {
       showToast(err.message || "Failed to submit leave request.", "error");
     } finally {
@@ -527,17 +563,26 @@ export default function UserDashboard() {
     const monday = new Date();
     monday.setDate(now.getDate() - distanceToMonday);
 
+    const todayStr = getLocalDateString();
+
     return days.map((dayName, index) => {
       const targetDate = new Date(monday);
       targetDate.setDate(monday.getDate() + index);
-      const targetDateStr = targetDate.toISOString().split("T")[0];
+      const targetDateStr = getLocalDateString(targetDate);
 
       const log = userLogs.find(l => l.date === targetDateStr);
-      const hrs = log ? (log.totalWorkingMinutes || 0) / 60 : 0;
+      let hrs = 0;
+      if (log) {
+        if (targetDateStr === todayStr && log.status !== "checked-out") {
+          hrs = getElapsedWorkingMs() / (1000 * 60 * 60);
+        } else {
+          hrs = (log.totalWorkingMinutes || 0) / 60;
+        }
+      }
       return {
         label: dayName,
         hours: parseFloat(hrs.toFixed(1)),
-        active: targetDateStr === new Date().toISOString().split("T")[0]
+        active: targetDateStr === todayStr
       };
     });
   };
@@ -727,6 +772,31 @@ export default function UserDashboard() {
                   </div>
                 </div>
 
+                {/* Emergency Leave Toggle */}
+                <div className="flex items-center gap-3 p-4 rounded-[16px] bg-brand-warning/5 border border-brand-warning/20 transition-all">
+                  <input
+                    id="emergency-leave-checkbox"
+                    type="checkbox"
+                    checked={isEmergency}
+                    onChange={(e) => {
+                      setIsEmergency(e.target.checked);
+                      if (!e.target.checked && startDate === todayStr) {
+                        setStartDate("");
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-brand-warning border-border-card focus:ring-brand-warning cursor-pointer"
+                  />
+                  <div className="text-left">
+                    <label htmlFor="emergency-leave-checkbox" className="text-xs font-extrabold text-brand-warning cursor-pointer flex items-center gap-1.5">
+                      <AlertCircle size={14} className="text-brand-warning" />
+                      Emergency Leave
+                    </label>
+                    <p className="text-[10px] text-text-sec font-semibold mt-0.5">
+                      Check this option if you need to apply for leave starting today. This must be requested before your shift starts at {formatShiftTime(currentUser.shiftStart)}.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Start Date */}
                   <div className="flex flex-col gap-1.5">
@@ -734,7 +804,7 @@ export default function UserDashboard() {
                     <input
                       id="start-date-input"
                       type="date"
-                      min={tomorrowStr}
+                      min={isEmergency ? todayStr : tomorrowStr}
                       className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
@@ -748,7 +818,7 @@ export default function UserDashboard() {
                     <input
                       id="end-date-input"
                       type="date"
-                      min={startDate || tomorrowStr}
+                      min={startDate || (isEmergency ? todayStr : tomorrowStr)}
                       className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
@@ -843,7 +913,16 @@ export default function UserDashboard() {
 
                         return (
                           <tr key={req.id} className="hover:bg-bg-base/30">
-                            <td className="py-3.5 pr-4 text-text-main font-bold">{req.type}</td>
+                            <td className="py-3.5 pr-4 text-text-main font-bold">
+                              <div className="flex items-center gap-1.5">
+                                <span>{req.type}</span>
+                                {req.isEmergency && (
+                                  <span className="bg-brand-warning/10 text-brand-warning text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase whitespace-nowrap">
+                                    Emergency
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="py-3.5 px-4 text-text-sec">{startF && endF ? `${startF} - ${endF}` : "—"}</td>
                             <td className="py-3.5 px-4 text-text-sec">{req.duration}</td>
                             <td className="py-3.5 px-4">
@@ -1460,20 +1539,30 @@ export default function UserDashboard() {
               {weeklyHoursData.map((d, idx) => {
                 const barPercent = Math.max(4, Math.min(100, Math.round((d.hours / maxWeeklyHours) * 100)));
                 return (
-                  <div key={idx} className="flex flex-col items-center gap-2 group w-8">
+                  <div key={idx} className="flex flex-col items-center gap-1.5 w-8 relative group">
                     {/* Tooltip */}
-                    <div className="opacity-0 group-hover:opacity-100 absolute transform -translate-y-12 bg-slate-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow pointer-events-none transition-opacity duration-150">
+                    <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-2 bg-slate-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow pointer-events-none transition-opacity duration-150 whitespace-nowrap z-10">
                       {d.hours} hrs
                     </div>
 
-                    {/* Bar */}
-                    <div
-                      className={`w-4 rounded-t-sm transition-all duration-500 relative overflow-hidden ${d.active
-                        ? "bg-brand-primary"
-                        : d.hours > 0 ? "bg-brand-primary/60" : "bg-slate-200 dark:bg-slate-800"
-                        }`}
-                      style={{ height: `${barPercent}%` }}
-                    />
+                    {/* Bar Container with fixed height */}
+                    <div className="w-4 h-28 flex items-end bg-slate-100 dark:bg-slate-800/40 rounded-t-sm overflow-hidden">
+                      <div
+                        className={`w-full rounded-t-sm transition-all duration-500 relative overflow-hidden ${d.active
+                          ? "bg-brand-primary"
+                          : d.hours > 0 ? "bg-brand-primary/60" : "bg-slate-200/50 dark:bg-slate-700/30"
+                          }`}
+                        style={{ height: `${barPercent}%` }}
+                      >
+                        {/* Shimmer for active bar */}
+                        {d.active && (
+                          <span
+                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent"
+                            style={{ animation: "shimmer 2s infinite" }}
+                          />
+                        )}
+                      </div>
+                    </div>
 
                     {/* Label */}
                     <span className={`text-[10px] font-extrabold tracking-tight ${d.active ? "text-brand-primary" : "text-text-sec"}`}>

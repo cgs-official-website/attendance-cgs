@@ -1346,6 +1346,18 @@ const notifyMessageListeners = (threadId) => {
   }
 };
 
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === "att_messages") {
+      Object.keys(messageListeners).forEach(threadId => {
+        notifyMessageListeners(threadId);
+      });
+    } else if (e.key === "att_channels" || e.key === "att_dm_threads") {
+      notifyChannelListeners();
+    }
+  });
+}
+
 // --- Local DB helpers for Team Hub ---
 const getLocalChannels = () => {
   const raw = localStorage.getItem("att_channels");
@@ -1562,7 +1574,14 @@ export const subscribeToMessages = (threadId, callback) => {
     };
     messageListeners[threadId].add(handler);
     handler();
+
+    // Polling interval as a robust fallback for other views/tabs in simulation mode
+    const pollId = setInterval(() => {
+      handler();
+    }, 3000);
+
     return () => {
+      clearInterval(pollId);
       if (messageListeners[threadId]) {
         messageListeners[threadId].delete(handler);
       }

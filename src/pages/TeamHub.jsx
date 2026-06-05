@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
   Users, ChevronRight, LogIn, LogOut, Trash2, ExternalLink,
-  AlertCircle, Check, Lock
+  AlertCircle, Check, Lock, RefreshCw, ArrowLeft
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -364,43 +364,77 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
 }
 
 // ─── Messages Thread Panel ────────────────────────────────────
-function ThreadPanel({ thread, currentUser, isAdmin }) {
+function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
   const [messages, setMessages] = useState([]);
   const bottomRef = useRef(null);
   const { showToast } = useToast();
-  const [refreshTick, setRefreshTick] = useState(0);
+  const prevThreadIdRef = useRef(null);
 
+  // Subscribe to real-time messages for the active thread
   useEffect(() => {
     if (!thread?.id) return;
+    
+    // Only clear messages when switching threads, not when refreshing
+    if (prevThreadIdRef.current !== thread.id) {
+      setMessages([]);
+      prevThreadIdRef.current = thread.id;
+    }
+    
     const unsub = subscribeToMessages(thread.id, (msgs) => {
       setMessages(msgs);
     });
     return unsub;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread?.id, refreshTick]);
+  }, [thread?.id, refreshKey]);
 
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSend = async (text, fileData) => {
-    await sendChatMessage(
-      thread.id,
-      thread.type,
-      currentUser.uid,
-      currentUser.name,
-      currentUser.avatar || "",
-      text,
-      fileData
-    );
-    // Force re-subscription to pick up new message in local simulation mode
-    setRefreshTick(t => t + 1);
+    // Build optimistic message so it appears instantly
+    const optimisticMsg = {
+      id: "opt-" + Date.now(),
+      threadId: thread.id,
+      threadType: thread.type,
+      senderId: currentUser.uid,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar || "",
+      text: text || "",
+      fileData: fileData || null,
+      isDeleted: false,
+      timestamp: new Date().toISOString(),
+      _optimistic: true,
+    };
+    // Show immediately — don't wait for Firebase/localStorage round-trip
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    try {
+      const savedMsg = await sendChatMessage(
+        thread.id,
+        thread.type,
+        currentUser.uid,
+        currentUser.name,
+        currentUser.avatar || "",
+        text,
+        fileData
+      );
+      // Replace the optimistic entry with the real one (has proper id)
+      setMessages(prev =>
+        prev.map(m => m.id === optimisticMsg.id ? { ...savedMsg, _optimistic: false } : m)
+      );
+    } catch (err) {
+      // Roll back optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+      throw err; // bubble up so MessageInput shows toast
+    }
   };
 
   const handleDelete = async (msgId) => {
     try {
+      // Optimistic removal — hide immediately
+      setMessages(prev => prev.filter(m => m.id !== msgId));
       await deleteChatMessage(msgId);
-      setRefreshTick(t => t + 1);
       showToast("Message deleted", "success");
     } catch (err) {
       showToast("Failed to delete message", "error");
@@ -475,6 +509,7 @@ export default function TeamHub() {
   const [searchQuery, setSearchQuery]     = useState("");
   const [joiningId, setJoiningId]         = useState(null);
   const [sidebarTab, setSidebarTab]       = useState("channels"); // 'channels' | 'dms'
+  const [refreshKey, setRefreshKey]       = useState(0);
 
   // Init Google Auth
   useEffect(() => {
@@ -558,9 +593,9 @@ export default function TeamHub() {
   const otherChannels = filteredChannels.filter(ch => !ch.memberIds?.includes(currentUser.uid));
 
   return (
-    <div className="flex h-[calc(100vh-70px)] bg-bg-base overflow-hidden rounded-[20px] border border-border-card shadow-sm">
+    <div className="flex h-[calc(100vh-100px)] sm:h-[calc(100vh-120px)] lg:h-[calc(100vh-140px)] bg-bg-base overflow-hidden rounded-[20px] border border-border-card shadow-sm">
       {/* ── Left Sidebar ── */}
-      <aside className="w-[260px] flex-shrink-0 bg-bg-card border-r border-border-card flex flex-col">
+      <aside className={`w-full md:w-[260px] ${activeThread ? "hidden md:flex" : "flex"} flex-shrink-0 bg-bg-card md:border-r border-border-card flex-col`}>
         {/* Sidebar header */}
         <div className="px-4 py-4 border-b border-border-card">
           <h2 className="font-extrabold text-sm text-text-main flex items-center gap-2">
@@ -720,12 +755,20 @@ export default function TeamHub() {
       </aside>
 
       {/* ── Right Thread Pane ── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 ${activeThread ? "flex" : "hidden md:flex"} flex-col min-w-0 h-full`}>
         {activeThread ? (
           <>
             {/* Thread Header */}
             <div className="px-6 py-3.5 border-b border-border-card bg-bg-card flex-shrink-0 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
+                {/* Back button on mobile */}
+                <button
+                  onClick={() => setActiveThread(null)}
+                  className="md:hidden p-1.5 rounded-full hover:bg-bg-base text-text-mut hover:text-brand-primary transition-colors cursor-pointer mr-1 flex items-center justify-center border border-border-card"
+                  title="Back to lists"
+                >
+                  <ArrowLeft size={16} />
+                </button>
                 {activeThread.type === "channel" ? (
                   <>
                     <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary flex items-center justify-center flex-shrink-0">
@@ -760,6 +803,17 @@ export default function TeamHub() {
                     {activeThread.memberIds?.length || 0} members
                   </span>
                 )}
+                {/* Refresh button */}
+                <button
+                  onClick={() => {
+                    setRefreshKey(prev => prev + 1);
+                    showToast("Syncing messages...", "info");
+                  }}
+                  className="p-1.5 rounded-full hover:bg-bg-base text-text-mut hover:text-brand-primary border border-transparent hover:border-border-card transition-all cursor-pointer flex items-center justify-center"
+                  title="Refresh chat thread"
+                >
+                  <RefreshCw size={14} className="hover:rotate-180 transition-transform duration-300" />
+                </button>
               </div>
             </div>
 
@@ -769,6 +823,7 @@ export default function TeamHub() {
                 thread={activeThread}
                 currentUser={currentUser}
                 isAdmin={isAdmin}
+                refreshKey={refreshKey}
               />
             </div>
           </>

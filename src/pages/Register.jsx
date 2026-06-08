@@ -9,7 +9,8 @@ export default function Register() {
   const [name, setName] = useState("");
   const [selectedDept, setSelectedDept] = useState("");
   const [customDept, setCustomDept] = useState("");
-  const [programType, setProgramType] = useState("Internship");
+  const [selectedProgram, setSelectedProgram] = useState("Internship");
+  const [customProgram, setCustomProgram] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +30,8 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const finalDept = selectedDept === "Other" ? customDept.trim() : selectedDept;
-    if (!name || !finalDept || !programType || !email || !password || !shiftStart || !shiftEnd) {
+    const finalProgram = selectedProgram === "Other" ? customProgram.trim() : selectedProgram;
+    if (!name || !finalDept || !finalProgram || !email || !password || !shiftStart || !shiftEnd) {
       return showToast("Please fill in all fields", "warning");
     }
 
@@ -39,7 +41,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await signup(name, finalDept, programType, email, password, shiftStart, shiftEnd);
+      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd);
       showToast("Account registered successfully! Welcome to the portal.", "success");
 
       if (email.toLowerCase() === "admin@teamcarrezza.com") {
@@ -232,15 +234,31 @@ export default function Register() {
                   <select
                     id="program-input"
                     className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main focus:bg-bg-card focus:border-brand-primary outline-none transition-all appearance-none"
-                    value={programType}
-                    onChange={(e) => setProgramType(e.target.value)}
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
                     disabled={loading}
                     required
                   >
                     <option value="Internship">Internship</option>
                     <option value="Training">Training</option>
+                    <option value="Full Time">Full Time</option>
+                    <option value="Part Time">Part Time</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
+                {selectedProgram === "Other" && (
+                  <div className="relative mt-2">
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
+                      placeholder="Enter custom program type"
+                      value={customProgram}
+                      onChange={(e) => setCustomProgram(e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">

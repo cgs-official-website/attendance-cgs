@@ -18,9 +18,10 @@ import {
   getOrCreateDmThread,
   subscribeToDmThreads,
   deleteChatMessage,
-  getAllRegisteredUsers
+  getAllRegisteredUsers,
+  uploadFileToFirebase
 } from "../firebase";
-import { pickAndUploadFile, formatFileSize, getFileIcon, initGoogleAuth } from "../utils/googleDrive";
+import { formatFileSize, getFileIcon, initGoogleAuth } from "../utils/googleDrive";
 
 // ─── Helpers ─────────────────────────────────────────────────
 const getInitials = (name = "") =>
@@ -45,14 +46,64 @@ function Avatar({ src, name, size = "w-8 h-8", textSize = "text-xs" }) {
   );
 }
 
+// Helper to convert Base64 Data URL to Blob
+const dataURLtoBlob = (dataurl) => {
+  try {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch (err) {
+    console.error("Error parsing base64 data URL to Blob:", err);
+    return null;
+  }
+};
+
 // ─── File Card ────────────────────────────────────────────────
 function FileCard({ file }) {
   const icon = getFileIcon(file.mimeType, file.name);
+
+  const handleOpenFile = (e) => {
+    if (file.url && file.url.startsWith("data:")) {
+      e.preventDefault();
+      try {
+        const blob = dataURLtoBlob(file.url);
+        if (!blob) throw new Error("Could not parse file data.");
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // If it's a PDF or Image, open in a new tab; otherwise download it
+        const isViewable = file.mimeType?.includes("image") || file.mimeType?.includes("pdf") || ["jpg","jpeg","png","gif","webp","pdf"].includes(file.name?.split(".").pop()?.toLowerCase());
+        
+        if (isViewable) {
+          window.open(blobUrl, "_blank");
+        } else {
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = file.name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+        
+        // Clean up the object URL after a short delay
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      } catch (err) {
+        console.error("Failed to download or open local file:", err);
+      }
+    }
+  };
+
   return (
     <a
       href={file.url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={handleOpenFile}
       className="inline-flex items-center gap-2 px-3 py-2 mt-1 rounded-[10px] border border-border-card bg-bg-base hover:bg-bg-card hover:border-brand-primary/30 transition-all group max-w-[260px]"
     >
       <span className="text-xl flex-shrink-0">{icon}</span>
@@ -146,7 +197,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
     try {
       let fileData = null;
       if (pendingFile) {
-        fileData = await pickAndUploadFile(pendingFile);
+        fileData = await uploadFileToFirebase(pendingFile);
       }
       await onSend(text.trim(), fileData);
       setText("");
@@ -168,13 +219,23 @@ function MessageInput({ onSend, placeholder, disabled }) {
   return (
     <div className="px-4 py-3 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
       {pendingFile && (
-        <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-[8px] text-xs font-semibold text-brand-primary">
-          <span className="text-base">{getFileIcon(pendingFile.type, pendingFile.name)}</span>
+        <div className={`mb-2 flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-[8px] text-xs font-semibold text-brand-primary ${uploading ? "animate-pulse" : ""}`}>
+          {uploading ? (
+            <RefreshCw size={14} className="animate-spin text-brand-primary" />
+          ) : (
+            <span className="text-base">{getFileIcon(pendingFile.type, pendingFile.name)}</span>
+          )}
           <span className="truncate max-w-[200px]">{pendingFile.name}</span>
           <span className="text-text-mut ml-1">({formatFileSize(pendingFile.size)})</span>
-          <button onClick={() => setPendingFile(null)} className="ml-auto text-text-mut hover:text-red-500 cursor-pointer">
-            <X size={12} />
-          </button>
+          {uploading ? (
+            <span className="ml-auto text-[10px] text-brand-primary font-bold animate-pulse">
+              Uploading...
+            </span>
+          ) : (
+            <button onClick={() => setPendingFile(null)} className="ml-auto text-text-mut hover:text-red-500 cursor-pointer">
+              <X size={12} />
+            </button>
+          )}
         </div>
       )}
       <div className="flex items-end gap-2 bg-bg-base rounded-[12px] border border-border-card px-3 py-2 focus-within:border-brand-primary/50 transition-colors">

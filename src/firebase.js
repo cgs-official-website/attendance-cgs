@@ -26,6 +26,12 @@ import {
   arrayUnion,
   arrayRemove
 } from "firebase/firestore";
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL
+} from "firebase/storage";
 
 // Firebase Configuration
 // Replace these with your actual Firebase project settings
@@ -46,13 +52,14 @@ const isDummy =
   !firebaseConfig.projectId ||
   firebaseConfig.projectId.includes("YOUR_");
 
-let app, auth, db, dbType;
+let app, auth, db, dbType, storage;
 
 if (!isDummy) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     db = getFirestore(app);
+    storage = getStorage(app);
     dbType = "firebase";
     console.log("Firebase initialized successfully in production mode.");
   } catch (error) {
@@ -1698,5 +1705,95 @@ export const getAllDmThreadsAdmin = async () => {
     return snapshot.docs.map(d => d.data());
   } else {
     return getLocalDmThreads();
+  }
+};
+
+/**
+ * Upload a file to Firebase Storage (or Base64 data URL if local mode)
+ * @param {File} file
+ * @returns {Promise<{ id: string, name: string, url: string, mimeType: string, size: number }>}
+ */
+export const uploadFileToFirebase = async (file) => {
+  if (dbType === "firebase") {
+    try {
+      if (!storage) {
+        throw new Error("Firebase Storage is not initialized.");
+      }
+      // Generate a unique path/filename
+      const uniqueId = Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+      const fileExtension = file.name.split(".").pop() || "bin";
+      const filePath = `chat_files/${uniqueId}.${fileExtension}`;
+      const fileRef = storageRef(storage, filePath);
+      
+      // Upload bytes with resumable task so we can cancel it on timeout
+      const uploadTask = uploadBytesResumable(fileRef, file);
+      
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => {
+          try {
+            uploadTask.cancel(); // Abort the upload to stop background retries
+          } catch (e) {
+            console.error("Failed to cancel upload task:", e);
+          }
+          reject(new Error("Firebase Storage upload timed out after 20 seconds."));
+        }, 20000)
+      );
+
+      // Race the upload task against the timeout
+      await Promise.race([uploadTask, timeoutPromise]);
+      
+      // Get public/read download URL
+      const downloadUrl = await getDownloadURL(fileRef);
+      
+      return {
+        id: uniqueId,
+        name: file.name,
+        url: downloadUrl,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size
+      };
+    } catch (storageError) {
+      console.warn("Firebase Storage upload failed, falling back to local Base64 upload:", storageError);
+      // Fallback to base64 encoding if file is small enough to fit in Firestore (Firestore limit is 1MB)
+      if (file.size > 800 * 1024) {
+        throw new Error("Firebase Storage upload failed, and the file is too large (>800KB) to share via fallback method. Details: " + storageError.message);
+      }
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve({
+            id: "fb-fallback-" + Date.now(),
+            name: file.name,
+            url: reader.result, // base64 data URL
+            mimeType: file.type || "application/octet-stream",
+            size: file.size,
+            isFallback: true
+          });
+        };
+        reader.onerror = (err) => {
+          reject(new Error("Failed to read file locally: " + err.message));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  } else {
+    // Local DB Mode: Convert file to Base64 Data URL so it is fully self-contained!
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve({
+          id: "local-" + Date.now(),
+          name: file.name,
+          url: reader.result, // base64 data URL
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          isLocal: true
+        });
+      };
+      reader.onerror = (err) => {
+        reject(new Error("Failed to read file locally: " + err.message));
+      };
+      reader.readAsDataURL(file);
+    });
   }
 };

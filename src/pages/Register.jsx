@@ -7,7 +7,8 @@ import Logo from "../components/Logo";
 
 export default function Register() {
   const [name, setName] = useState("");
-  const [department, setDepartment] = useState("");
+  const [selectedDept, setSelectedDept] = useState("");
+  const [customDept, setCustomDept] = useState("");
   const [programType, setProgramType] = useState("Internship");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +28,8 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !department || !programType || !email || !password || !shiftStart || !shiftEnd) {
+    const finalDept = selectedDept === "Other" ? customDept.trim() : selectedDept;
+    if (!name || !finalDept || !programType || !email || !password || !shiftStart || !shiftEnd) {
       return showToast("Please fill in all fields", "warning");
     }
 
@@ -37,7 +39,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await signup(name, department, programType, email, password, shiftStart, shiftEnd);
+      await signup(name, finalDept, programType, email, password, shiftStart, shiftEnd);
       showToast("Account registered successfully! Welcome to the portal.", "success");
 
       if (email.toLowerCase() === "admin@teamcarrezza.com") {
@@ -188,16 +190,34 @@ export default function Register() {
                 <select
                   id="dept-input"
                   className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main focus:bg-bg-card focus:border-brand-primary outline-none transition-all appearance-none"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
+                  value={selectedDept}
+                  onChange={(e) => setSelectedDept(e.target.value)}
                   disabled={loading}
                   required
                 >
                   <option value="">Select Department</option>
-                  <option value="Web Development">Web Development</option>
-                  <option value="UI/UX Designing">UI/UX Designing</option>
+                  <option value="Development">Development</option>
+                  <option value="Designing">Designing</option>
+                  <option value="Business Development">Business Development</option>
+                  <option value="Management">Management</option>
+                  <option value="Process Associate">Process Associate</option>
+                  <option value="Other">Other</option>
                 </select>
               </div>
+
+              {selectedDept === "Other" && (
+                <div className="relative mt-2">
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
+                    placeholder="Enter your department name"
+                    value={customDept}
+                    onChange={(e) => setCustomDept(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              )}
             </div>
 
             {/* Program & Presets */}

@@ -98,12 +98,15 @@ function FileCard({ file }) {
     }
   };
 
+  const isDataUrl = file.url && file.url.startsWith("data:");
+
   return (
     <a
-      href={file.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={isDataUrl ? undefined : file.url}
+      target={isDataUrl ? undefined : "_blank"}
+      rel={isDataUrl ? undefined : "noopener noreferrer"}
       onClick={handleOpenFile}
+      style={{ cursor: "pointer" }}
       className="inline-flex items-center gap-2 px-3 py-2 mt-1 rounded-[10px] border border-border-card bg-bg-base hover:bg-bg-card hover:border-brand-primary/30 transition-all group max-w-[260px]"
     >
       <span className="text-xl flex-shrink-0">{icon}</span>

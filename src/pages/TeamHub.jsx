@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
   Users, ChevronRight, LogIn, LogOut, Trash2, ExternalLink,
-  AlertCircle, Check, Lock, RefreshCw, ArrowLeft
+  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -76,24 +76,18 @@ function FileCard({ file }) {
         if (!blob) throw new Error("Could not parse file data.");
         const blobUrl = URL.createObjectURL(blob);
         
-        // If it's a PDF or Image, open in a new tab; otherwise download it
-        const isViewable = file.mimeType?.includes("image") || file.mimeType?.includes("pdf") || ["jpg","jpeg","png","gif","webp","pdf"].includes(file.name?.split(".").pop()?.toLowerCase());
-        
-        if (isViewable) {
-          window.open(blobUrl, "_blank");
-        } else {
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = file.name;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
+        // Download directly to bypass browser security policies blocking window.open on blobs/data URLs
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
         
         // Clean up the object URL after a short delay
         setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
       } catch (err) {
-        console.error("Failed to download or open local file:", err);
+        console.error("Failed to download local file:", err);
       }
     }
   };
@@ -434,9 +428,12 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
   const { showToast } = useToast();
   const prevThreadIdRef = useRef(null);
 
+  // Determine if user has access to view/message this channel
+  const isMember = thread.type !== "channel" || thread.id === "general" || thread.memberIds?.includes(currentUser.uid) || isAdmin;
+
   // Subscribe to real-time messages for the active thread
   useEffect(() => {
-    if (!thread?.id) return;
+    if (!thread?.id || !isMember) return;
     
     // Only clear messages when switching threads, not when refreshing
     if (prevThreadIdRef.current !== thread.id) {
@@ -448,7 +445,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
       setMessages(msgs);
     });
     return unsub;
-  }, [thread?.id, refreshKey]);
+  }, [thread?.id, refreshKey, isMember]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -504,6 +501,20 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
       showToast("Failed to delete message", "error");
     }
   };
+
+  if (!isMember) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center py-16 px-4">
+        <div className="w-14 h-14 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
+          <Lock size={24} />
+        </div>
+        <p className="font-bold text-text-main text-sm">Access Restricted</p>
+        <p className="text-xs text-text-mut mt-1 max-w-xs">
+          Only added members can view the messages and chat in #{thread.displayName || thread.name}.
+        </p>
+      </div>
+    );
+  }
 
   const grouped = messages.reduce((acc, msg) => {
     const date = new Date(msg.timestamp).toDateString();
@@ -574,6 +585,7 @@ export default function TeamHub() {
   const [joiningId, setJoiningId]         = useState(null);
   const [sidebarTab, setSidebarTab]       = useState("channels"); // 'channels' | 'dms'
   const [refreshKey, setRefreshKey]       = useState(0);
+  const [showAddMember, setShowAddMember] = useState(false);
 
   // Init Google Auth
   useEffect(() => {
@@ -608,6 +620,21 @@ export default function TeamHub() {
       showToast(err.message || "Failed to join", "error");
     } finally {
       setJoiningId(null);
+    }
+  };
+
+  const handleAddMember = async (user) => {
+    if (!activeThread || activeThread.type !== "channel") return;
+    try {
+      await joinChannel(activeThread.id, user.uid);
+      showToast(`${user.name} added to #${activeThread.displayName || activeThread.name}!`, "success");
+      // Update local state immediately
+      setActiveThread(prev => ({
+        ...prev,
+        memberIds: [...(prev.memberIds || []), user.uid]
+      }));
+    } catch (err) {
+      showToast(err.message || "Failed to add member", "error");
     }
   };
 
@@ -653,8 +680,8 @@ export default function TeamHub() {
     (ch.displayName || ch.name)?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const myChannels   = filteredChannels.filter(ch => ch.memberIds?.includes(currentUser.uid));
-  const otherChannels = filteredChannels.filter(ch => !ch.memberIds?.includes(currentUser.uid));
+  const myChannels   = filteredChannels.filter(ch => ch.id === "general" || ch.memberIds?.includes(currentUser.uid));
+  const otherChannels = filteredChannels.filter(ch => ch.id !== "general" && !ch.memberIds?.includes(currentUser.uid));
 
   return (
     <div className="flex h-[calc(100vh-100px)] sm:h-[calc(100vh-120px)] lg:h-[calc(100vh-140px)] bg-bg-base overflow-hidden rounded-[20px] border border-border-card shadow-sm">
@@ -736,7 +763,7 @@ export default function TeamHub() {
               )}
 
               {/* Available channels to join */}
-              {otherChannels.length > 0 && (
+              {isAdmin && otherChannels.length > 0 && (
                 <div className="px-3 mt-2">
                   <p className="text-[9px] font-extrabold text-text-mut uppercase tracking-widest mb-1 px-1">Other Channels</p>
                   {otherChannels.map(ch => (
@@ -867,6 +894,15 @@ export default function TeamHub() {
                     {activeThread.memberIds?.length || 0} members
                   </span>
                 )}
+                {activeThread.type === "channel" && isAdmin && (
+                  <button
+                    onClick={() => setShowAddMember(true)}
+                    className="p-1.5 rounded-full hover:bg-bg-base text-brand-primary border border-brand-primary/20 hover:border-brand-primary transition-all cursor-pointer flex items-center justify-center"
+                    title="Add Member"
+                  >
+                    <UserPlus size={14} />
+                  </button>
+                )}
                 {/* Refresh button */}
                 <button
                   onClick={() => {
@@ -937,6 +973,14 @@ export default function TeamHub() {
             onSelect={handleOpenDm}
           />
         )}
+        {showAddMember && activeThread?.type === "channel" && (
+          <AddMemberModal
+            channel={activeThread}
+            allUsers={allUsers}
+            onClose={() => setShowAddMember(false)}
+            onAdd={handleAddMember}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -983,6 +1027,71 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Add Member Modal ──────────────────────────────────────────
+function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
+  const [search, setSearch] = useState("");
+  
+  // Filter out users who are already members of this channel
+  const candidates = allUsers.filter(
+    u => !channel.memberIds?.includes(u.uid) &&
+    (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[100] p-4 animate-fade-in">
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="w-full max-w-sm bg-bg-card border border-border-card rounded-[20px] p-5 shadow-2xl"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-extrabold text-base text-text-main flex items-center gap-2">
+            <Users size={16} className="text-brand-primary" /> Add Member
+          </h3>
+          <button onClick={onClose} className="text-text-mut hover:text-text-main cursor-pointer"><X size={18} /></button>
+        </div>
+        <p className="text-[10px] text-text-mut mb-3">Add teammate to #{channel.displayName || channel.name}</p>
+        
+        <div className="flex items-center gap-2 border border-border-card rounded-[10px] px-3 py-2 mb-3 bg-bg-base focus-within:border-brand-primary/50">
+          <Search size={14} className="text-text-mut" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search teammates..."
+            className="flex-1 bg-transparent text-sm text-text-main outline-none"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto space-y-1">
+          {candidates.length === 0 ? (
+            <p className="text-xs text-text-mut text-center py-4">No eligible teammates found</p>
+          ) : candidates.map(u => (
+            <div
+              key={u.uid}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-[10px] hover:bg-bg-base transition-colors"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar src={u.avatar} name={u.name} />
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-text-main truncate">{u.name}</div>
+                  <div className="text-[9px] text-text-mut truncate">{u.department} · {u.email}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => onAdd(u)}
+                className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1 bg-brand-primary text-white rounded-full hover:bg-brand-hover transition-all cursor-pointer"
+              >
+                Add
+              </button>
+            </div>
+          ))}
+        </div>
+      </motion.div>
     </div>
   );
 }

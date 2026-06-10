@@ -14,6 +14,22 @@ export default function ChatWidget() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  const [unreadCount, setUnreadCount] = useState(1); // Start with 1 for the welcome message
+  const prevMessagesLength = useRef(messages.length);
+
+  // Track unread messages when widget is closed
+  useEffect(() => {
+    if (isOpen) {
+      setUnreadCount(0);
+    } else {
+      if (messages.length > prevMessagesLength.current) {
+        const diff = messages.length - prevMessagesLength.current;
+        setUnreadCount(prev => prev + diff);
+      }
+    }
+    prevMessagesLength.current = messages.length;
+  }, [messages, isOpen]);
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -77,6 +93,12 @@ export default function ChatWidget() {
               <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center text-white text-[9px] font-black shadow-md border border-emerald-400/20">
                 AI
               </span>
+              {/* Notification Badge */}
+              {unreadCount > 0 && (
+                <span className="absolute -top-2 -left-2 min-w-[20px] h-5 px-1.5 bg-gradient-to-r from-rose-500 to-red-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-[0_4px_12px_rgba(244,63,94,0.4)] border border-white/20 z-20 animate-bounce">
+                  {unreadCount}
+                </span>
+              )}
             </motion.button>
           )}
         </AnimatePresence>

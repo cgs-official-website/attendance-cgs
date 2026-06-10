@@ -1345,6 +1345,7 @@ export const subscribeToRegularizationRequests = (callback) => {
 // --- Listeners for realtime simulation ---
 const channelListeners = new Set();
 const messageListeners = {};
+const allMessagesListeners = new Set();
 
 const notifyChannelListeners = () => channelListeners.forEach(cb => cb());
 const notifyMessageListeners = (threadId) => {
@@ -1352,6 +1353,7 @@ const notifyMessageListeners = (threadId) => {
     messageListeners[threadId].forEach(cb => cb());
   }
 };
+const notifyAllMessagesListeners = () => allMessagesListeners.forEach(cb => cb());
 
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
@@ -1359,6 +1361,7 @@ if (typeof window !== "undefined") {
       Object.keys(messageListeners).forEach(threadId => {
         notifyMessageListeners(threadId);
       });
+      notifyAllMessagesListeners();
     } else if (e.key === "att_channels" || e.key === "att_dm_threads") {
       notifyChannelListeners();
     }
@@ -1548,6 +1551,7 @@ export const sendChatMessage = async (threadId, threadType, senderId, senderName
     messages.push(msg);
     saveLocalMessages(messages);
     notifyMessageListeners(threadId);
+    notifyAllMessagesListeners();
     return msg;
   }
 };
@@ -1600,6 +1604,47 @@ export const subscribeToMessages = (threadId, callback) => {
 };
 
 /**
+ * Subscribe to all chat messages (real-time) across channels and DMs
+ */
+export const subscribeToAllMessages = (callback) => {
+  if (dbType === "firebase") {
+    return onSnapshot(
+      query(
+        collection(db, "messages"),
+        where("isDeleted", "==", false)
+      ),
+      (snapshot) => {
+        const msgs = snapshot.docs.map(d => d.data());
+        msgs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        callback(msgs);
+      },
+      (error) => {
+        console.error("Firestore subscribeToAllMessages failed:", error);
+      }
+    );
+  } else {
+    const handler = () => {
+      const all = getLocalMessages()
+        .filter(m => !m.isDeleted)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      callback(all);
+    };
+    allMessagesListeners.add(handler);
+    handler();
+
+    // Polling interval as a robust fallback in simulation mode
+    const pollId = setInterval(() => {
+      handler();
+    }, 3000);
+
+    return () => {
+      clearInterval(pollId);
+      allMessagesListeners.delete(handler);
+    };
+  }
+};
+
+/**
  * Delete a message (admin moderation or sender)
  */
 export const deleteChatMessage = async (messageId) => {
@@ -1615,6 +1660,7 @@ export const deleteChatMessage = async (messageId) => {
       saveLocalMessages(messages);
       // Notify all thread listeners
       Object.values(messageListeners).forEach(set => set.forEach(cb => cb()));
+      notifyAllMessagesListeners();
     }
   }
 };

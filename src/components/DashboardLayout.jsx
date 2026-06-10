@@ -32,7 +32,8 @@ import {
   checkOut, 
   getTodayAttendanceLog,
   subscribeToLeaveRequests,
-  subscribeToAttendanceRules
+  subscribeToAttendanceRules,
+  subscribeToAllMessages
 } from "../firebase";
 
 export default function DashboardLayout({ children }) {
@@ -54,6 +55,7 @@ export default function DashboardLayout({ children }) {
   const [rules, setRules] = useState("");
   const [leaveRequestsList, setLeaveRequestsList] = useState([]);
   const [newUpdatesCount, setNewUpdatesCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [dismissedNotifs, setDismissedNotifs] = useState(() => {
     try {
       const saved = localStorage.getItem(`dismissed_notifs_${currentUser?.uid}`);
@@ -143,6 +145,39 @@ export default function DashboardLayout({ children }) {
     });
     setNewUpdatesCount(unseenCount);
   }, [leaveRequestsList, dismissedNotifs, currentUser]);
+
+  // Subscribe to all chat messages for notification counts
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const unsubscribe = subscribeToAllMessages((allMsgs) => {
+      // Find messages not sent by the current user
+      const otherMsgs = allMsgs.filter(m => m.senderId !== currentUser.uid);
+
+      // Determine unread messages based on last visited timestamp
+      const lastVisitedKey = `team_hub_last_visited_${currentUser.uid}`;
+      const lastVisited = localStorage.getItem(lastVisitedKey) || "1970-01-01T00:00:00.000Z";
+
+      if (location.pathname === "/team-hub") {
+        localStorage.setItem(lastVisitedKey, new Date().toISOString());
+        setUnreadMessagesCount(0);
+      } else {
+        const unread = otherMsgs.filter(m => new Date(m.timestamp) > new Date(lastVisited));
+        setUnreadMessagesCount(unread.length);
+      }
+    });
+
+    return unsubscribe;
+  }, [currentUser, location.pathname]);
+
+  // Update last visited when location changes to /team-hub
+  useEffect(() => {
+    if (currentUser && location.pathname === "/team-hub") {
+      const lastVisitedKey = `team_hub_last_visited_${currentUser.uid}`;
+      localStorage.setItem(lastVisitedKey, new Date().toISOString());
+      setUnreadMessagesCount(0);
+    }
+  }, [location.pathname, currentUser]);
 
   const handleOpenNotifications = () => {
     setShowNotifications(!showNotifications);
@@ -260,6 +295,7 @@ export default function DashboardLayout({ children }) {
       label: "Team Hub",
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
@@ -291,6 +327,7 @@ export default function DashboardLayout({ children }) {
       label: "Team Hub",
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
@@ -351,7 +388,13 @@ export default function DashboardLayout({ children }) {
                   <Icon size={18} />
                   <span>{item.label}</span>
                 </div>
-                {item.active && <ChevronRight size={14} />}
+                {item.badge ? (
+                  <span className="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center justify-center animate-pulse min-w-[20px]">
+                    {item.badge}
+                  </span>
+                ) : (
+                  item.active && <ChevronRight size={14} />
+                )}
               </button>
             );
           })}
@@ -635,6 +678,11 @@ export default function DashboardLayout({ children }) {
                       <Icon size={18} />
                       <span>{item.label}</span>
                     </div>
+                    {item.badge && (
+                      <span className="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center justify-center animate-pulse min-w-[20px]">
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}

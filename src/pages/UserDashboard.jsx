@@ -850,7 +850,7 @@ export default function UserDashboard() {
                       </svg>
                     </div>
                     <span className="text-xs font-bold text-text-main">Click to upload or drag and drop</span>
-                    <span className="text-[10px] text-text-mut font-semibold">PDF, PNG, JPG or DOCX (max. 10MB)</span>
+                    <span className="text-[10px] text-text-mut font-semibold">PDF, PNG, JPG or DOCX (max. 25MB)</span>
                   </div>
                 </div>
 

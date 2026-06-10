@@ -8,7 +8,7 @@ const DRIVE_FILES_URL   = "https://www.googleapis.com/drive/v3/files";
 const CLIENT_ID   = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const FOLDER_ID   = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID || "1DsIAklg29b3wmEHFpxQV4l4MeJCpWUdy";
 const SCOPES      = "https://www.googleapis.com/auth/drive.file";
-const MAX_SIZE_MB = 10;
+const MAX_SIZE_MB = 25;
 
 let _tokenClient = null;
 let _accessToken  = null;

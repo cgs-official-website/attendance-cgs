@@ -19,7 +19,8 @@ import {
   subscribeToDmThreads,
   deleteChatMessage,
   getAllRegisteredUsers,
-  uploadFileToFirebase
+  uploadFileToFirebase,
+  subscribeToAllMessages
 } from "../firebase";
 import { formatFileSize, getFileIcon, initGoogleAuth } from "../utils/googleDrive";
 
@@ -198,6 +199,9 @@ function MessageInput({ onSend, placeholder, disabled }) {
       }
       await onSend(text.trim(), fileData);
       setText("");
+      if (textRef.current) {
+        textRef.current.style.height = "auto";
+      }
       setPendingFile(null);
     } catch (err) {
       showToast(err.message || "Failed to send", "error");
@@ -248,13 +252,19 @@ function MessageInput({ onSend, placeholder, disabled }) {
         <textarea
           ref={textRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (textRef.current) {
+              textRef.current.style.height = "auto";
+              textRef.current.style.height = `${Math.min(textRef.current.scrollHeight, 160)}px`;
+            }
+          }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
           disabled={disabled || uploading}
-          className="flex-1 bg-transparent text-sm text-text-main placeholder-text-mut outline-none resize-none leading-relaxed max-h-24 overflow-y-auto"
-          style={{ scrollbarWidth: "none" }}
+          className="flex-1 bg-transparent text-sm text-text-main placeholder-text-mut outline-none resize-none leading-relaxed max-h-40 overflow-y-auto min-h-[24px]"
+          style={{ scrollbarWidth: "none", height: "auto" }}
         />
         <button
           onClick={handleSend}
@@ -443,9 +453,13 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
     
     const unsub = subscribeToMessages(thread.id, (msgs) => {
       setMessages(msgs);
+      // Update read receipt locally
+      if (thread.id) {
+        localStorage.setItem(`team_hub_read_${currentUser.uid}_${thread.id}`, new Date().toISOString());
+      }
     });
     return unsub;
-  }, [thread?.id, refreshKey, isMember]);
+  }, [thread?.id, refreshKey, isMember, currentUser.uid]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -586,6 +600,7 @@ export default function TeamHub() {
   const [sidebarTab, setSidebarTab]       = useState("channels"); // 'channels' | 'dms'
   const [refreshKey, setRefreshKey]       = useState(0);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [allMessages, setAllMessages]     = useState([]);
 
   // Init Google Auth
   useEffect(() => {
@@ -609,6 +624,21 @@ export default function TeamHub() {
   useEffect(() => {
     getAllRegisteredUsers().then(setAllUsers).catch(() => {});
   }, []);
+
+  // Subscribe to all messages for unread counts
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsub = subscribeToAllMessages(setAllMessages);
+    return unsub;
+  }, [currentUser?.uid]);
+
+  // Compute unread count helper
+  const getUnreadCount = useCallback((threadId) => {
+    const lastRead = localStorage.getItem(`team_hub_read_${currentUser?.uid}_${threadId}`) || "1970-01-01T00:00:00.000Z";
+    return allMessages.filter(
+      m => m.threadId === threadId && m.senderId !== currentUser?.uid && new Date(m.timestamp) > new Date(lastRead)
+    ).length;
+  }, [allMessages, currentUser?.uid]);
 
   const handleJoinChannel = async (ch) => {
     setJoiningId(ch.id);
@@ -757,6 +787,7 @@ export default function TeamHub() {
                       onClick={() => setActiveThread({ ...ch, type: "channel" })}
                       onLeave={() => handleLeaveChannel(ch)}
                       onDelete={() => handleDeleteChannel(ch)}
+                      unreadCount={getUnreadCount(ch.id)}
                     />
                   ))}
                 </div>
@@ -820,6 +851,11 @@ export default function TeamHub() {
                       <div className="text-xs font-bold text-text-main truncate">{otherName}</div>
                       <div className="text-[10px] text-text-mut truncate">{otherUser?.department || "Team member"}</div>
                     </div>
+                    {getUnreadCount(thread.id) > 0 && (
+                      <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                        {getUnreadCount(thread.id)}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -987,7 +1023,7 @@ export default function TeamHub() {
 }
 
 // ─── Channel List Item ────────────────────────────────────────
-function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLeave, onDelete }) {
+function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLeave, onDelete, unreadCount }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -997,9 +1033,14 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <button onClick={onClick} className="flex-1 flex items-center gap-2 px-3 py-2 text-left cursor-pointer">
-        <Hash size={13} className={isActive ? "text-brand-primary" : "text-text-mut"} />
-        <span className="text-xs font-semibold truncate">{ch.displayName || ch.name}</span>
+      <button onClick={onClick} className="flex-1 flex items-center gap-2 px-3 py-2 text-left cursor-pointer min-w-0">
+        <Hash size={13} className={`flex-shrink-0 ${isActive ? "text-brand-primary" : "text-text-mut"}`} />
+        <span className="text-xs font-semibold truncate flex-1">{ch.displayName || ch.name}</span>
+        {unreadCount > 0 && !isActive && (
+          <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold ml-1">
+            {unreadCount}
+          </span>
+        )}
         {!isMember && (
           <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary">
             {joiningId === ch.id ? "..." : "JOIN"}

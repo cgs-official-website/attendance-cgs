@@ -26,12 +26,9 @@ import {
   arrayUnion,
   arrayRemove
 } from "firebase/firestore";
-import {
-  getStorage,
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL
-} from "firebase/storage";
+import { getDownloadURL, uploadBytesResumable, ref as storageRef, deleteObject } from "firebase/storage";
+import { getStorage } from "firebase/storage";
+import { uploadFileToB2, isB2Configured } from "./utils/b2Storage";
 
 // Firebase Configuration
 // Replace these with your actual Firebase project settings
@@ -154,11 +151,19 @@ export const getDbType = () => dbType;
 /**
  * Register a new user
  */
-export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6) => {
+export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", project = "", tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "") => {
   const role = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : "user";
   
   if (dbType === "firebase") {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    let userCredential;
+    try {
+      userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      if (error.code === 'auth/email-already-in-use') throw new Error("Email is already registered. Please log in instead.");
+      if (error.code === 'auth/invalid-email') throw new Error("Please enter a valid email address.");
+      if (error.code === 'auth/weak-password') throw new Error("Password must be at least 6 characters long.");
+      throw new Error("Failed to register. Please try again.");
+    }
     const user = userCredential.user;
     
     // Fallback: update display name in Auth so it is always present
@@ -181,7 +186,15 @@ export const registerUser = async (name, department, programType, email, passwor
       annualLeaves: Number(annualLeaves),
       sickLeaves: Number(sickLeaves),
       casualLeaves: Number(casualLeaves),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      dob,
+      joiningDate,
+      project,
+      tasks,
+      jobType,
+      designation,
+      isProjectManager,
+      employeeId
     };
     
     await setDoc(doc(db, "users", user.uid), userData);
@@ -206,6 +219,14 @@ export const registerUser = async (name, department, programType, email, passwor
       sickLeaves: Number(sickLeaves),
       casualLeaves: Number(casualLeaves),
       createdAt: new Date().toISOString(),
+      dob,
+      joiningDate,
+      project,
+      tasks,
+      jobType,
+      designation,
+      isProjectManager,
+      employeeId,
       password // storing hashed or plain in local storage for local verification
     };
     
@@ -235,8 +256,6 @@ export const loginUser = async (email, password) => {
       if (userDoc.exists()) {
         return userDoc.data();
       } else {
-        // Create user doc if auth exists but firestore record was missing (e.g. legacy or admin)
-        const role = cleanEmail === "admin@teamcarrezza.com" ? "admin" : "user";
         const userData = {
           uid: user.uid,
           name: cleanEmail === "admin@teamcarrezza.com" ? "Super Admin" : user.displayName || "User",
@@ -766,7 +785,7 @@ export const getAllRegisteredUsers = async () => {
 /**
  * Update a user record (Admin edit user)
  */
-export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar) => {
+export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar, dob, joiningDate, project, tasks, jobType, designation, isProjectManager, employeeId) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", uid);
     const updates = {
@@ -779,9 +798,15 @@ export const updateUserRecord = async (uid, name, department, programType, shift
       sickLeaves: Number(sickLeaves),
       casualLeaves: Number(casualLeaves)
     };
-    if (avatar !== undefined) {
-      updates.avatar = avatar;
-    }
+    if (avatar !== undefined) updates.avatar = avatar;
+    if (dob !== undefined) updates.dob = dob;
+    if (joiningDate !== undefined) updates.joiningDate = joiningDate;
+    if (project !== undefined) updates.project = project;
+    if (tasks !== undefined) updates.tasks = tasks;
+    if (jobType !== undefined) updates.jobType = jobType;
+    if (designation !== undefined) updates.designation = designation;
+    if (isProjectManager !== undefined) updates.isProjectManager = isProjectManager;
+    if (employeeId !== undefined) updates.employeeId = employeeId;
     await updateDoc(docRef, updates);
   } else {
     const users = localDb.getUsers();
@@ -798,9 +823,15 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         sickLeaves: Number(sickLeaves),
         casualLeaves: Number(casualLeaves)
       };
-      if (avatar !== undefined) {
-        updatedData.avatar = avatar;
-      }
+      if (avatar !== undefined) updatedData.avatar = avatar;
+      if (dob !== undefined) updatedData.dob = dob;
+      if (joiningDate !== undefined) updatedData.joiningDate = joiningDate;
+      if (project !== undefined) updatedData.project = project;
+      if (tasks !== undefined) updatedData.tasks = tasks;
+      if (jobType !== undefined) updatedData.jobType = jobType;
+      if (designation !== undefined) updatedData.designation = designation;
+      if (isProjectManager !== undefined) updatedData.isProjectManager = isProjectManager;
+      if (employeeId !== undefined) updatedData.employeeId = employeeId;
       users[idx] = updatedData;
       localStorage.setItem("att_users", JSON.stringify(users));
       
@@ -818,9 +849,14 @@ export const updateUserRecord = async (uid, name, department, programType, shift
           sickLeaves: Number(sickLeaves), 
           casualLeaves: Number(casualLeaves) 
         };
-        if (avatar !== undefined) {
-          updatedUser.avatar = avatar;
-        }
+        if (avatar !== undefined) updatedUser.avatar = avatar;
+        if (dob !== undefined) updatedUser.dob = dob;
+        if (joiningDate !== undefined) updatedUser.joiningDate = joiningDate;
+        if (project !== undefined) updatedUser.project = project;
+        if (tasks !== undefined) updatedUser.tasks = tasks;
+        if (jobType !== undefined) updatedUser.jobType = jobType;
+        if (designation !== undefined) updatedUser.designation = designation;
+        if (isProjectManager !== undefined) updatedUser.isProjectManager = isProjectManager;
         localDb.setCurrentUser(updatedUser);
         notifyAuthListeners(updatedUser);
       }
@@ -1760,6 +1796,15 @@ export const getAllDmThreadsAdmin = async () => {
  * @returns {Promise<{ id: string, name: string, url: string, mimeType: string, size: number }>}
  */
 export const uploadFileToFirebase = async (file) => {
+  if (isB2Configured()) {
+    try {
+      return await uploadFileToB2(file);
+    } catch (error) {
+      console.warn("B2 Upload failed, falling back to Firebase/Local:", error);
+      // Fall through to existing logic
+    }
+  }
+
   if (dbType === "firebase") {
     try {
       if (!storage) {
@@ -1802,7 +1847,7 @@ export const uploadFileToFirebase = async (file) => {
       console.warn("Firebase Storage upload failed, falling back to local Base64 upload:", storageError);
       // Fallback to base64 encoding if file is small enough to fit in Firestore (Firestore limit is 1MB)
       if (file.size > 800 * 1024) {
-        throw new Error("Firebase Storage upload failed, and the file is too large (>800KB) to share via fallback method. Details: " + storageError.message);
+        throw new Error("File is too large to upload. Please select an image under 800KB.");
       }
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1843,3 +1888,119 @@ export const uploadFileToFirebase = async (file) => {
     });
   }
 };
+
+// ----------------------------------------------------
+// PROJECT & TASK MANAGEMENT: TASK REPORTS
+// ----------------------------------------------------
+
+export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
+  const reportData = {
+    taskId,
+    employeeId,
+    pmId,
+    reportText,
+    timestamp: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    await addDoc(collection(db, "task_reports"), reportData);
+  } else {
+    const current = localStorage.getItem("att_task_reports")
+      ? JSON.parse(localStorage.getItem("att_task_reports"))
+      : [];
+    reportData.id = "report_" + Date.now();
+    current.push(reportData);
+    localStorage.setItem("att_task_reports", JSON.stringify(current));
+    // Provide an event listener hook if we need real-time local updates
+    window.dispatchEvent(new Event("local-reports-updated"));
+  }
+};
+
+export const subscribeToTaskReports = (taskId, callback) => {
+  if (dbType === "firebase") {
+    const q = query(collection(db, "task_reports"), where("taskId", "==", taskId), orderBy("timestamp", "asc"));
+    return onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      const current = localStorage.getItem("att_task_reports")
+        ? JSON.parse(localStorage.getItem("att_task_reports"))
+        : [];
+      const list = current.filter(r => r.taskId === taskId).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      callback(list);
+    };
+    handler();
+    window.addEventListener("local-reports-updated", handler);
+    return () => window.removeEventListener("local-reports-updated", handler);
+  }
+};
+
+// ----------------------------------------------------
+// GENERIC NOTIFICATIONS
+// ----------------------------------------------------
+
+export const createNotification = async (userId, title, message, type = "info", link = "") => {
+  const notifData = {
+    userId,
+    title,
+    message,
+    type,
+    link,
+    read: false,
+    timestamp: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    await addDoc(collection(db, "notifications"), notifData);
+  } else {
+    const current = localStorage.getItem("att_notifications")
+      ? JSON.parse(localStorage.getItem("att_notifications"))
+      : [];
+    notifData.id = "notif_" + Date.now();
+    current.push(notifData);
+    localStorage.setItem("att_notifications", JSON.stringify(current));
+    window.dispatchEvent(new Event("local-notifications-updated"));
+  }
+};
+
+export const subscribeToNotifications = (userId, callback) => {
+  if (dbType === "firebase") {
+    const q = query(collection(db, "notifications"), where("userId", "==", userId), orderBy("timestamp", "desc"));
+    return onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      const current = localStorage.getItem("att_notifications")
+        ? JSON.parse(localStorage.getItem("att_notifications"))
+        : [];
+      const list = current.filter(n => n.userId === userId).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      callback(list);
+    };
+    handler();
+    window.addEventListener("local-notifications-updated", handler);
+    return () => window.removeEventListener("local-notifications-updated", handler);
+  }
+};
+
+export const markNotificationRead = async (notifId) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "notifications", notifId);
+    await updateDoc(docRef, { read: true });
+  } else {
+    const current = localStorage.getItem("att_notifications")
+      ? JSON.parse(localStorage.getItem("att_notifications"))
+      : [];
+    const index = current.findIndex(n => n.id === notifId);
+    if (index !== -1) {
+      current[index].read = true;
+      localStorage.setItem("att_notifications", JSON.stringify(current));
+      window.dispatchEvent(new Event("local-notifications-updated"));
+    }
+  }
+};
+
+export { db };

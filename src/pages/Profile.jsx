@@ -14,6 +14,7 @@ export default function Profile() {
   const [shiftStart, setShiftStart] = useState(currentUser?.shiftStart || "10:00");
   const [shiftEnd, setShiftEnd] = useState(currentUser?.shiftEnd || "19:00");
   const [avatar, setAvatar] = useState(currentUser?.avatar || "");
+  const [dob, setDob] = useState(currentUser?.dob || "");
   const [loading, setLoading] = useState(false);
 
   const fileInputRef = useRef(null);
@@ -43,7 +44,13 @@ export default function Profile() {
         currentUser.annualLeaves || 25,
         currentUser.sickLeaves || 10,
         currentUser.casualLeaves || 6,
-        avatar
+        avatar,
+        dob,
+        currentUser.joiningDate,
+        currentUser.project,
+        currentUser.tasks,
+        currentUser.jobType,
+        currentUser.designation
       );
 
       // Update state reactively
@@ -53,7 +60,8 @@ export default function Profile() {
         programType: finalProgram,
         shiftStart: finalShiftStart,
         shiftEnd: finalShiftEnd,
-        avatar
+        avatar,
+        dob
       });
 
       showToast("Profile updated successfully!", "success");
@@ -244,6 +252,24 @@ export default function Profile() {
                     disabled
                   />
                 )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Date of Birth */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec flex items-center gap-1.5" htmlFor="profile-dob">
+                  <User size={13} className="text-text-mut" />
+                  Date of Birth
+                </label>
+                <input
+                  id="profile-dob"
+                  type="date"
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  max={new Date().toISOString().split("T")[0]}
+                />
               </div>
             </div>
 

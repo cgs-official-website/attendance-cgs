@@ -8,7 +8,7 @@ import {
   subscribeToRegularizationRequests,
   subscribeToLeaveRequests
 } from "../firebase";
-import { Calendar, Search, MapPin, Coffee, Clock, BarChart2 } from "lucide-react";
+import { Calendar, Search, MapPin, Coffee, Clock, BarChart2, X } from "lucide-react";
 
 export default function History() {
   const { currentUser } = useAuth();
@@ -712,12 +712,7 @@ export default function History() {
                 <Clock size={20} className="text-brand-primary" />
                 <span>Request Time Regularization</span>
               </h3>
-              <button 
-                onClick={() => setShowRegModal(false)}
-                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
-              >
-                ✕
-              </button>
+              <button onClick={() => setShowRegModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
             </div>
 
             <form onSubmit={handleRegSubmit} className="space-y-4">

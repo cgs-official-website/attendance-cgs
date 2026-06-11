@@ -43,7 +43,12 @@ import {
   Info,
   Check,
   X,
-  ClipboardList
+  ClipboardList,
+  Trophy,
+  AlertTriangle,
+  MessageSquare,
+  Mail,
+  Paperclip
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -144,6 +149,13 @@ export default function AdminDashboard() {
   const [newAnnual, setNewAnnual] = useState(25);
   const [newSick, setNewSick] = useState(10);
   const [newCasual, setNewCasual] = useState(6);
+  
+  const [newDob, setNewDob] = useState("");
+  const [newJoiningDate, setNewJoiningDate] = useState("");
+  const [newProject, setNewProject] = useState("");
+  const [newJobType, setNewJobType] = useState("Full-time");
+  const [newDesignation, setNewDesignation] = useState("");
+  const [newIsProjectManager, setNewIsProjectManager] = useState(false);
 
   // Edit Form Fields
   const [editName, setEditName] = useState("");
@@ -154,6 +166,18 @@ export default function AdminDashboard() {
   const [editAnnual, setEditAnnual] = useState(25);
   const [editSick, setEditSick] = useState(10);
   const [editCasual, setEditCasual] = useState(6);
+
+  const [editDob, setEditDob] = useState("");
+  const [editJoiningDate, setEditJoiningDate] = useState("");
+  const [editProject, setEditProject] = useState("");
+  const [editJobType, setEditJobType] = useState("Full-time");
+  const [editDesignation, setEditDesignation] = useState("");
+  const [editIsProjectManager, setEditIsProjectManager] = useState(false);
+  const [editTasks, setEditTasks] = useState([]);
+  const [editEmployeeId, setEditEmployeeId] = useState("");
+
+  // Detail Modal State
+  const [showDetailModal, setShowDetailModal] = useState(false);
   
   // Action state loader
   const [actionLoading, setActionLoading] = useState(false);
@@ -1077,7 +1101,7 @@ export default function AdminDashboard() {
 
     setActionLoading(true);
     try {
-      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual);
+      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject, [], newJobType, newDesignation, newIsProjectManager);
       showToast(`Employee ${newName} registered successfully.`, "success");
       setShowAddModal(false);
       
@@ -1089,6 +1113,11 @@ export default function AdminDashboard() {
       setNewAnnual(25);
       setNewSick(10);
       setNewCasual(6);
+      setNewDob("");
+      setNewJoiningDate("");
+      setNewProject("");
+      setNewJobType("Full-time");
+      setNewDesignation("");
       
       // Refresh list
       loadDirectoryData();
@@ -1109,6 +1138,14 @@ export default function AdminDashboard() {
     setEditAnnual(user.annualLeaves !== undefined ? user.annualLeaves : 25);
     setEditSick(user.sickLeaves !== undefined ? user.sickLeaves : 10);
     setEditCasual(user.casualLeaves !== undefined ? user.casualLeaves : 6);
+    setEditDob(user.dob || "");
+    setEditJoiningDate(user.joiningDate || "");
+    setEditProject(user.project || "");
+    setEditJobType(user.jobType || "Full-time");
+    setEditDesignation(user.designation || "");
+    setEditTasks(user.tasks || []);
+    setEditEmployeeId(user.employeeId || "");
+    setEditIsProjectManager(user.isProjectManager || false);
     setShowEditModal(true);
   };
 
@@ -1134,7 +1171,16 @@ export default function AdminDashboard() {
         editShiftEnd,
         editAnnual,
         editSick,
-        editCasual
+        editCasual,
+        undefined, // avatar
+        editDob,
+        editJoiningDate,
+        editProject,
+        editTasks,
+        editJobType,
+        editDesignation,
+        editIsProjectManager,
+        editEmployeeId
       );
       
       setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? {
@@ -1146,7 +1192,13 @@ export default function AdminDashboard() {
         shiftEnd: editShiftEnd,
         annualLeaves: editAnnual,
         sickLeaves: editSick,
-        casualLeaves: editCasual
+        casualLeaves: editCasual,
+        dob: editDob,
+        joiningDate: editJoiningDate,
+        project: editProject,
+        tasks: editTasks,
+        jobType: editJobType,
+        designation: editDesignation
       } : u));
       
       showToast("User profile updated successfully.", "success");
@@ -1577,12 +1629,16 @@ export default function AdminDashboard() {
 
                       return (
                         <tr key={user.uid} className="hover:bg-bg-base/30">
-                          <td className="py-3.5 pr-4 flex items-center gap-3">
+                          <td 
+                            className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
+                            onClick={() => { setSelectedUser(user); setShowDetailModal(true); }}
+                            title="View Details"
+                          >
                             <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
                               {user.name ? getInitials(user.name) : "U"}
                             </div>
                             <div className="flex flex-col text-left">
-                              <span className="font-extrabold text-text-main">{user.name}</span>
+                              <span className="font-extrabold text-text-main hover:text-brand-primary transition-colors">{user.name}</span>
                               <span className="text-[10px] text-text-mut font-semibold mt-0.5">{user.email}</span>
                             </div>
                           </td>
@@ -2684,7 +2740,7 @@ export default function AdminDashboard() {
                       const isNearTarget = e.avgHours >= 6 && e.avgHours < 8;
 
                       // Rank visuals
-                      const rankEmoji = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : null;
+                      const rankEmoji = idx === 0 ? <Trophy size={14} className="text-yellow-500" /> : idx === 1 ? <Trophy size={14} className="text-slate-400" /> : idx === 2 ? <Trophy size={14} className="text-amber-600" /> : null;
                       const rankColors = [
                         "from-amber-400 to-yellow-300",   // 1st - gold
                         "from-slate-400 to-slate-300",    // 2nd - silver
@@ -2965,6 +3021,109 @@ export default function AdminDashboard() {
 
       {/* ------------------ MODALS ------------------ */}
 
+      {/* Employee Detail Modal */}
+      {showDetailModal && selectedUser && (
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+          <div className="w-full max-w-[600px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main">Employee Details</h3>
+              <button 
+                onClick={() => { setShowDetailModal(false); setSelectedUser(null); }} 
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="flex items-center gap-4 bg-brand-primary/5 p-4 rounded-[16px] border border-brand-primary/10">
+                <div className="w-16 h-16 rounded-full bg-brand-primary/15 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-2xl uppercase shadow-md flex-shrink-0">
+                  {selectedUser.name ? getInitials(selectedUser.name) : "U"}
+                </div>
+                <div>
+                  <h4 className="text-xl font-black text-text-main">{selectedUser.name}</h4>
+                  <p className="text-xs text-text-mut font-semibold">{selectedUser.email}</p>
+                  <p className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full inline-block mt-1 uppercase font-bold">{selectedUser.role}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Department</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.department || "—"}</span>
+                </div>
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Designation</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.designation || "—"}</span>
+                </div>
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Job Type</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.jobType || "Full-time"}</span>
+                </div>
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Assigned Project</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.project || "—"}</span>
+                </div>
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Date of Birth</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.dob || "—"}</span>
+                </div>
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Joining Date</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.joiningDate || "—"}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Shift Schedule</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.shiftStart || "10:00"} - {selectedUser.shiftEnd || "19:00"}</span>
+                </div>
+                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Program Type</span>
+                  <span className="text-sm font-bold text-text-main">{selectedUser.programType || "Internship"}</span>
+                </div>
+              </div>
+
+              <div className="bg-bg-base/30 p-4 rounded-[12px] border border-border-card mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h5 className="text-xs font-bold text-text-main">Assigned Tasks</h5>
+                  <span className="text-[10px] text-text-mut">
+                    {selectedUser.tasks?.filter(t => t.completed).length || 0} / {selectedUser.tasks?.length || 0} Completed
+                  </span>
+                </div>
+                
+                <div className="space-y-2">
+                  {!selectedUser.tasks || selectedUser.tasks.length === 0 ? (
+                    <p className="text-[10px] text-text-mut italic">No tasks assigned to this employee yet.</p>
+                  ) : (
+                    selectedUser.tasks.map((task, idx) => (
+                      <div key={task.id || idx} className={`flex items-center gap-3 p-2.5 rounded-[8px] border ${task.completed ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-bg-card border-border-card'}`}>
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${task.completed ? 'bg-emerald-500 text-white' : 'border border-text-mut'}`}>
+                          {task.completed && <Check size={10} strokeWidth={4} />}
+                        </div>
+                        <span className={`text-xs font-semibold ${task.completed ? 'text-text-mut line-through' : 'text-text-main'}`}>
+                          {task.title}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-border-card mt-4">
+              <button 
+                onClick={() => { setShowDetailModal(false); openEditModal(selectedUser); }}
+                className="py-2.5 px-6 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+              >
+                Edit Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add New Employee Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
@@ -2975,11 +3134,12 @@ export default function AdminDashboard() {
                 onClick={() => setShowAddModal(false)} 
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
             
-            <form onSubmit={handleAddNewEmployee} className="space-y-4">
+            <form onSubmit={handleAddNewEmployee} className="flex flex-col max-h-[75vh]">
+              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold text-text-sec">Full Name</label>
@@ -3062,6 +3222,82 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Date of Birth</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newDob}
+                    onChange={(e) => setNewDob(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Joining Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newJoiningDate}
+                    onChange={(e) => setNewJoiningDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Job Type</label>
+                  <select 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newJobType}
+                    onChange={(e) => setNewJobType(e.target.value)}
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Internship">Internship</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Designation</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={newDesignation}
+                    onChange={(e) => setNewDesignation(e.target.value)}
+                    placeholder="e.g. Frontend Dev"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Assigned Project</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                  value={newProject}
+                  onChange={(e) => setNewProject(e.target.value)}
+                  placeholder="e.g. Website Redesign"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 mt-2 bg-brand-primary/5 p-3 rounded-[12px] border border-brand-primary/10">
+                <input 
+                  type="checkbox" 
+                  id="new-pm-checkbox"
+                  className="w-4 h-4 accent-brand-primary cursor-pointer"
+                  checked={newIsProjectManager}
+                  onChange={(e) => setNewIsProjectManager(e.target.checked)}
+                />
+                <label htmlFor="new-pm-checkbox" className="text-xs font-bold text-brand-primary cursor-pointer select-none">
+                  Make Project Manager
+                </label>
+                <p className="text-[10px] text-text-mut ml-2 leading-tight">
+                  Grants access to Project Management panel
+                </p>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold text-text-sec">Annual Leaves</label>
@@ -3120,8 +3356,9 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
+              </div>
 
-              <div className="flex justify-end gap-3 border-t border-border-card pt-4">
+              <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
                 <button 
                   type="button" 
                   onClick={() => setShowAddModal(false)} 
@@ -3153,11 +3390,12 @@ export default function AdminDashboard() {
                 onClick={() => { setShowEditModal(false); setSelectedUser(null); }} 
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
             
-            <form onSubmit={handleSaveUserEdit} className="space-y-4">
+            <form onSubmit={handleSaveUserEdit} className="flex flex-col max-h-[75vh]">
+              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-bold text-text-sec">Full Name</label>
                 <input 
@@ -3177,6 +3415,17 @@ export default function AdminDashboard() {
                   value={editDept}
                   onChange={(e) => setEditDept(e.target.value)}
                   required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Employee ID (Optional)</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                  value={editEmployeeId}
+                  onChange={(e) => setEditEmployeeId(e.target.value)}
+                  placeholder="e.g. EMP-001"
                 />
               </div>
 
@@ -3212,6 +3461,133 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Date of Birth</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editDob}
+                    onChange={(e) => setEditDob(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Joining Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editJoiningDate}
+                    onChange={(e) => setEditJoiningDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Job Type</label>
+                  <select 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editJobType}
+                    onChange={(e) => setEditJobType(e.target.value)}
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Internship">Internship</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Designation</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    placeholder="e.g. Frontend Dev"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Assigned Project</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                  value={editProject}
+                  onChange={(e) => setEditProject(e.target.value)}
+                  placeholder="e.g. Website Redesign"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 mt-2 bg-brand-primary/5 p-3 rounded-[12px] border border-brand-primary/10">
+                <input 
+                  type="checkbox" 
+                  id="edit-pm-checkbox"
+                  className="w-4 h-4 accent-brand-primary cursor-pointer"
+                  checked={editIsProjectManager}
+                  onChange={(e) => setEditIsProjectManager(e.target.checked)}
+                />
+                <label htmlFor="edit-pm-checkbox" className="text-xs font-bold text-brand-primary cursor-pointer select-none">
+                  Make Project Manager
+                </label>
+                <p className="text-[10px] text-text-mut ml-2 leading-tight">
+                  Grants access to Project Management panel
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1 bg-bg-base/30 p-3 rounded-[12px] border border-border-card mb-4">
+                <label className="text-xs font-bold text-text-sec flex justify-between">
+                  Tasks
+                  <button 
+                    type="button"
+                    onClick={() => setEditTasks([...editTasks, { id: Date.now().toString(), title: "", completed: false }])}
+                    className="text-brand-primary hover:text-brand-hover text-[10px]"
+                  >
+                    + Add Task
+                  </button>
+                </label>
+                {editTasks.map((task, idx) => (
+                  <div key={task.id || idx} className="flex items-center gap-2 mt-2">
+                    <input 
+                      type="checkbox"
+                      checked={task.completed}
+                      onChange={(e) => {
+                        const updated = [...editTasks];
+                        updated[idx].completed = e.target.checked;
+                        setEditTasks(updated);
+                      }}
+                      className="accent-brand-primary cursor-pointer"
+                    />
+                    <input 
+                      type="text" 
+                      className="flex-1 px-2 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-xs text-text-main outline-none"
+                      value={task.title}
+                      onChange={(e) => {
+                        const updated = [...editTasks];
+                        updated[idx].title = e.target.value;
+                        setEditTasks(updated);
+                      }}
+                      placeholder="Task description"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = editTasks.filter((_, i) => i !== idx);
+                        setEditTasks(updated);
+                      }}
+                      className="text-red-500 hover:text-red-600 text-xs"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                ))}
+                {editTasks.length === 0 && (
+                  <p className="text-[10px] text-text-mut mt-1">No tasks assigned.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -3272,8 +3648,9 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
+              </div>
               
-              <div className="flex justify-end gap-3 border-t border-border-card pt-4">
+              <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
                 <button 
                   type="button" 
                   onClick={() => { setShowEditModal(false); setSelectedUser(null); }} 
@@ -3305,14 +3682,14 @@ export default function AdminDashboard() {
                 onClick={() => { setShowDeleteConfirm(false); setSelectedUser(null); }} 
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
             
             <div className="space-y-3 mb-6 text-sm text-text-sec leading-relaxed">
               <p>Are you sure you want to delete the profile for <strong>{selectedUser.name}</strong> ({selectedUser.email})?</p>
               <p className="text-brand-danger font-bold text-xs flex items-center gap-1">
-                ⚠️ Warning: This action is permanent and will remove the user record from the database directory.
+                <AlertTriangle size={18} className='text-amber-500 inline-block mr-1' /> Warning: This action is permanent and will remove the user record from the database directory.
               </p>
             </div>
             
@@ -3346,14 +3723,14 @@ export default function AdminDashboard() {
                 onClick={() => { setShowDeletePaidLeaveConfirm(false); setSelectedPaidLeave(null); }} 
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
             
             <div className="space-y-3 mb-6 text-sm text-text-sec leading-relaxed">
               <p>Are you sure you want to delete the paid leave announcement for <strong>{selectedPaidLeave.title}</strong>?</p>
               <p className="text-brand-danger font-bold text-xs flex items-center gap-1">
-                ⚠️ Warning: This action is permanent and will remove the announcement from the system.
+                <AlertTriangle size={18} className='text-amber-500 inline-block mr-1' /> Warning: This action is permanent and will remove the announcement from the system.
               </p>
             </div>
             
@@ -3458,10 +3835,10 @@ export default function AdminDashboard() {
             {/* Stats Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: "💬", color: "text-brand-primary" },
+                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: "<MessageSquare size={18} className='inline-block mr-1' />", color: "text-brand-primary" },
                 { label: "Channels", val: chatChannels.length, icon: "#", color: "text-indigo-500" },
-                { label: "DM Threads", val: chatDmThreads.length, icon: "✉️", color: "text-amber-500" },
-                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: "📎", color: "text-emerald-500" }
+                { label: "DM Threads", val: chatDmThreads.length, icon: "<Mail size={18} className='inline-block mr-1' />", color: "text-amber-500" },
+                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: "<Paperclip size={18} className='inline-block mr-1' />", color: "text-emerald-500" }
               ].map((s, i) => (
                 <div key={i} className="bg-bg-card border border-border-card rounded-[16px] p-4 flex items-center gap-3">
                   <span className={`text-2xl font-black ${s.color}`}>{s.icon}</span>
@@ -3523,7 +3900,7 @@ export default function AdminDashboard() {
                 </div>
               ) : filteredMsgs.length === 0 ? (
                 <div className="py-12 text-center">
-                  <p className="text-2xl mb-2">💬</p>
+                  <p className="text-2xl mb-2"><MessageSquare size={18} className='inline-block mr-1' /></p>
                   <p className="text-sm font-semibold text-text-mut">No messages found</p>
                 </div>
               ) : (
@@ -3544,7 +3921,7 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${msg.threadType === "channel" ? "bg-indigo-500/10 text-indigo-500" : "bg-amber-500/10 text-amber-500"}`}>
-                              {msg.threadType === "channel" ? "# Channel" : "✉ DM"}
+                              {msg.threadType === "channel" ? "Channel" : "DM"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs font-semibold text-text-sec whitespace-nowrap">
@@ -3569,7 +3946,7 @@ export default function AdminDashboard() {
                                 rel="noopener noreferrer"
                                 className="text-[10px] font-bold text-brand-primary hover:underline flex items-center gap-1 whitespace-nowrap"
                               >
-                                📎 {msg.fileData.name?.substring(0, 20) || "File"}
+                                <Paperclip size={18} className='inline-block mr-1' /> {msg.fileData.name?.substring(0, 20) || "File"}
                               </a>
                             ) : <span className="text-text-mut text-xs">—</span>}
                           </td>

@@ -30,7 +30,16 @@ import {
   LogOut,
   CalendarDays,
   Umbrella,
-  X
+  X,
+  Briefcase,
+  Calendar as CalendarIcon,
+  Target,
+  CheckCircle2,
+  AlertTriangle,
+  MessageSquare,
+  Cake,
+  Newspaper,
+  Check
 } from "lucide-react";
 
 export default function UserDashboard() {
@@ -93,6 +102,8 @@ export default function UserDashboard() {
   const [leavesPage, setLeavesPage] = useState(1);
   const [teamMembers, setTeamMembers] = useState([]);
   const [teamOnLeaveCount, setTeamOnLeaveCount] = useState(0);
+  const [birthdays, setBirthdays] = useState([]);
+  const [news, setNews] = useState([]);
 
   const toastShownRef = useRef(false);
 
@@ -151,7 +162,7 @@ export default function UserDashboard() {
 
   useEffect(() => {
     if (isForgotToCheckIn && !toastShownRef.current) {
-      showToast("⚠️ Shift Started! You forgot to check-in today. Please check-in immediately.", "warning", 6000);
+      showToast("Shift Started! You forgot to check-in today. Please check-in immediately.", "warning", 6000);
       toastShownRef.current = true;
     } else if (!isForgotToCheckIn) {
       toastShownRef.current = false;
@@ -239,7 +250,41 @@ export default function UserDashboard() {
     getAllRegisteredUsers().then(usersList => {
       const deptUsers = usersList.filter(u => u.department === currentUser.department && u.uid !== currentUser.uid && u.role !== "admin");
       setTeamMembers(deptUsers);
+      
+      const todayDate = new Date();
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+
+      const todayMonth = todayDate.getMonth() + 1;
+      const todayDay = todayDate.getDate();
+      const tmrwMonth = tomorrowDate.getMonth() + 1;
+      const tmrwDay = tomorrowDate.getDate();
+
+      const upcomingBirthdays = usersList.filter(u => {
+        if (!u.dob) return false;
+        const parts = u.dob.split('-');
+        if (parts.length !== 3) return false;
+        const month = parseInt(parts[1], 10);
+        const day = parseInt(parts[2], 10);
+        return (month === todayMonth && day === todayDay) || (month === tmrwMonth && day === tmrwDay);
+      }).map(u => {
+        const parts = u.dob.split('-');
+        const month = parseInt(parts[1], 10);
+        const day = parseInt(parts[2], 10);
+        return { ...u, isBirthdayToday: month === todayMonth && day === todayDay };
+      });
+      setBirthdays(upcomingBirthdays);
     }).catch(err => console.warn("Failed to fetch team members:", err));
+
+    // Fetch News unconditionally
+    fetch('https://saurav.tech/NewsAPI/top-headlines/category/technology/in.json')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.articles) {
+          setNews(data.articles.filter(a => a.title).slice(0, 3));
+        }
+      })
+      .catch(err => console.warn("Failed to fetch news:", err));
 
     return () => {
       unsubscribe();
@@ -1084,6 +1129,62 @@ export default function UserDashboard() {
                   </svg>
                 </button>
               </div>
+              </div>
+            </div>
+
+            {/* Birthdays & News Card */}
+            <div className="bg-bg-card border border-border-card rounded-[24px] overflow-hidden shadow-sm">
+              <div className="bg-gradient-to-r from-brand-primary to-indigo-600 p-5 text-white text-left flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">HAPPENING NOW</span>
+                  <h3 className="font-extrabold text-base text-white mt-0.5 flex items-center gap-2">
+                    {birthdays.length > 0 ? (
+                      <>Upcoming Birthdays <Cake size={18} /></>
+                    ) : (
+                      <>Important Updates <Newspaper size={18} /></>
+                    )}
+                  </h3>
+                </div>
+                {birthdays.length > 0 ? (
+                  <div className="bg-white/20 p-2 rounded-full animate-pulse flex-shrink-0">
+                    <svg className="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                  </div>
+                ) : (
+                  <div className="bg-white/20 p-2 rounded-full flex-shrink-0">
+                    <svg className="w-5 h-5 text-blue-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2.5 2.5 0 00-2.5-2.5H15M9 11l3 3L22 4"/></svg>
+                  </div>
+                )}
+              </div>
+              <div className="p-5 text-left">
+                {birthdays.length > 0 ? (
+                  <div className="space-y-4">
+                    {birthdays.map((b, idx) => (
+                      <div key={idx} className="flex items-center gap-3 p-3 bg-bg-base/30 rounded-[12px] border border-border-card hover:border-brand-primary/30 transition-colors">
+                        <div className="w-10 h-10 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0">
+                          {b.name ? b.name.charAt(0) : "U"}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-text-main">{b.name}</h4>
+                          <p className={`text-xs font-semibold ${b.isBirthdayToday ? 'text-emerald-500' : 'text-brand-primary'}`}>
+                            {b.isBirthdayToday ? "Today!" : "Tomorrow!"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : news.length > 0 ? (
+                  <div className="space-y-3">
+                    {news.map((item, idx) => (
+                      <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="block p-3 bg-bg-base/30 rounded-[12px] border border-border-card hover:border-brand-primary/30 hover:bg-bg-base/50 transition-all">
+                        <h4 className="font-bold text-xs text-text-main line-clamp-2 leading-tight mb-1">{item.title}</h4>
+                        <p className="text-[9px] text-text-mut font-semibold">{new Date(item.publishedAt).toLocaleDateString()}</p>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-mut text-center py-4 italic font-semibold">No new updates today.</p>
+                )}
+              </div>
             </div>
 
             {/* Policy Reminders Card */}
@@ -1120,7 +1221,7 @@ export default function UserDashboard() {
             </div>
           </div>
         </div>
-      </div>
+      // </div>
     );
   }
 
@@ -1699,7 +1800,7 @@ export default function UserDashboard() {
                 onClick={() => setShowCheckoutConfirm(false)}
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
             <p className="text-sm text-text-sec leading-relaxed mb-6">
@@ -1740,7 +1841,7 @@ export default function UserDashboard() {
                 onClick={() => setSelectedPaidLeaveDetail(null)}
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 

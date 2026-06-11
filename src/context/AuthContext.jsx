@@ -31,10 +31,10 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const signup = async (name, department, programType, email, password, shiftStart, shiftEnd) => {
+  const signup = async (name, department, programType, email, password, shiftStart, shiftEnd, employeeId = "") => {
     setLoading(true);
     try {
-      const user = await registerUser(name, department, programType, email, password, shiftStart, shiftEnd);
+      const user = await registerUser(name, department, programType, email, password, shiftStart, shiftEnd, 25, 10, 6, "", "", "", [], "Full-time", "", false, employeeId);
       setCurrentUser(user);
       return user;
     } finally {

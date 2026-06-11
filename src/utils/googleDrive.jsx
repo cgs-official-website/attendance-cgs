@@ -2,6 +2,8 @@
  * Google Drive REST API v3 utilities
  * Uses OAuth 2.0 token obtained via Google Identity Services (GIS)
  */
+import React from 'react';
+import { FileText, Image as ImageIcon, File as FileIcon, BarChart2, Presentation, Archive, Video, Music } from 'lucide-react';
 
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const DRIVE_FILES_URL   = "https://www.googleapis.com/drive/v3/files";
@@ -161,16 +163,16 @@ export const formatFileSize = (bytes) => {
 /**
  * Get file type icon label for display
  */
-export const getFileIcon = (mimeType, name) => {
+export const getFileIcon = (mimeType, name, size = 16) => {
   const ext = name?.split(".").pop()?.toLowerCase();
-  if (!mimeType && !ext) return "📄";
-  if (mimeType?.includes("image") || ["jpg","jpeg","png","gif","webp","svg"].includes(ext)) return "🖼️";
-  if (mimeType?.includes("pdf") || ext === "pdf") return "📕";
-  if (mimeType?.includes("spreadsheet") || ["xlsx","xls","csv"].includes(ext)) return "📊";
-  if (mimeType?.includes("presentation") || ["pptx","ppt"].includes(ext)) return "📊";
-  if (mimeType?.includes("document") || ["docx","doc"].includes(ext)) return "📝";
-  if (["zip","rar","7z","tar","gz"].includes(ext)) return "🗜️";
-  if (["mp4","mov","avi","mkv"].includes(ext)) return "🎬";
-  if (["mp3","wav","ogg"].includes(ext)) return "🎵";
-  return "📄";
+  if (!mimeType && !ext) return <FileText size={size} />;
+  if (mimeType?.includes("image") || ["jpg","jpeg","png","gif","webp","svg"].includes(ext)) return <ImageIcon size={size} />;
+  if (mimeType?.includes("pdf") || ext === "pdf") return <FileIcon size={size} className="text-red-500" />;
+  if (mimeType?.includes("spreadsheet") || ["xlsx","xls","csv"].includes(ext)) return <BarChart2 size={size} className="text-green-500" />;
+  if (mimeType?.includes("presentation") || ["pptx","ppt"].includes(ext)) return <Presentation size={size} className="text-orange-500" />;
+  if (mimeType?.includes("document") || ["docx","doc"].includes(ext)) return <FileText size={size} className="text-blue-500" />;
+  if (["zip","rar","7z","tar","gz"].includes(ext)) return <Archive size={size} />;
+  if (["mp4","mov","avi","mkv"].includes(ext)) return <Video size={size} />;
+  if (["mp3","wav","ogg"].includes(ext)) return <Music size={size} />;
+  return <FileText size={size} />;
 };

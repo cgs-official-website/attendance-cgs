@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { User, Mail, Lock, Building, Briefcase, Clock, Sparkles, EyeOff, Eye } from "lucide-react";
+import { User, Mail, Lock, Building, Briefcase, Clock, Sparkles, EyeOff, Eye, Hash } from "lucide-react";
 import Logo from "../components/Logo";
 
 export default function Register() {
@@ -11,6 +11,7 @@ export default function Register() {
   const [customDept, setCustomDept] = useState("");
   const [selectedProgram, setSelectedProgram] = useState("Internship");
   const [customProgram, setCustomProgram] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,7 +42,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd);
+      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd, employeeId);
       showToast("Account registered successfully! Welcome to the portal.", "success");
 
       if (email.toLowerCase() === "admin@teamcarrezza.com") {
@@ -170,6 +171,26 @@ export default function Register() {
                   onChange={(e) => setName(e.target.value)}
                   disabled={loading}
                   required
+                />
+              </div>
+            </div>
+
+            {/* Employee ID */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-text-sec" htmlFor="empid-input">Employee ID (Optional)</label>
+              <div className="relative">
+                <Hash
+                  size={16}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut pointer-events-none"
+                />
+                <input
+                  id="empid-input"
+                  type="text"
+                  className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
+                  placeholder="e.g., EMP-001"
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
+                  disabled={loading}
                 />
               </div>
             </div>

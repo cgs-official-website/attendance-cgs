@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import {
+import { Mailbox, AlertTriangle, Check,
   LayoutGrid,
   Shield,
   Users,
@@ -24,7 +24,9 @@ import {
   User,
   Trash2,
   MessageSquare,
-  Monitor
+  Monitor,
+  Briefcase,
+  CheckSquare
 } from "lucide-react";
 import Logo from "./Logo";
 import { 
@@ -33,7 +35,9 @@ import {
   getTodayAttendanceLog,
   subscribeToLeaveRequests,
   subscribeToAttendanceRules,
-  subscribeToAllMessages
+  subscribeToAllMessages,
+  subscribeToNotifications,
+  markNotificationRead
 } from "../firebase";
 
 export default function DashboardLayout({ children }) {
@@ -56,6 +60,7 @@ export default function DashboardLayout({ children }) {
   const [leaveRequestsList, setLeaveRequestsList] = useState([]);
   const [newUpdatesCount, setNewUpdatesCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [systemNotifications, setSystemNotifications] = useState([]);
   const [dismissedNotifs, setDismissedNotifs] = useState(() => {
     try {
       const saved = localStorage.getItem(`dismissed_notifs_${currentUser?.uid}`);
@@ -128,6 +133,15 @@ export default function DashboardLayout({ children }) {
     };
   }, [currentUser]);
 
+  // Subscribe to system notifications
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = subscribeToNotifications(currentUser.uid, (data) => {
+      setSystemNotifications(data);
+    });
+    return () => unsub();
+  }, [currentUser]);
+
   // Compute unseen notifications count
   useEffect(() => {
     if (!currentUser || currentUser.role === "admin") {
@@ -190,6 +204,33 @@ export default function DashboardLayout({ children }) {
       setNewUpdatesCount(0);
     }
   };
+
+  const handleSystemNotifClick = async (notif) => {
+    if (!notif.read) {
+      await markNotificationRead(notif.id);
+    }
+    if (notif.link) {
+      navigate(notif.link);
+      setShowNotifications(false);
+    }
+  };
+
+  const combinedNotifs = [
+    ...systemNotifications.map(n => ({
+      ...n,
+      isSystemNotif: true,
+      sortDate: new Date(n.timestamp).getTime()
+    })),
+    ...activeNotifications.map(r => ({
+      ...r,
+      isLeaveNotif: true,
+      sortDate: new Date(r.updatedAt || r.createdAt).getTime()
+    }))
+  ].sort((a, b) => b.sortDate - a.sortDate);
+
+  const systemUnread = systemNotifications.filter(n => !n.read).length;
+  const leaveUnread = currentUser?.role === "admin" ? activeNotifications.length : newUpdatesCount;
+  const totalUnreadCount = systemUnread + leaveUnread;
 
   const toggleTheme = () => {
     setTheme(prev => prev === "light" ? "dark" : "light");
@@ -305,6 +346,18 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/admin?tab=chat"); setIsMobileOpen(false); }
     },
     {
+      label: "Project Management",
+      icon: Briefcase,
+      active: location.pathname === "/project-management",
+      onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Task Management",
+      icon: CheckSquare,
+      active: location.pathname === "/task-management",
+      onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
+    },
+    {
       label: "My Profile",
       icon: User,
       active: location.pathname === "/profile",
@@ -329,6 +382,19 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/team-hub",
       badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Project Management",
+      icon: Briefcase,
+      active: location.pathname === "/project-management",
+      hidden: !currentUser?.isProjectManager,
+      onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Task Management",
+      icon: CheckSquare,
+      active: location.pathname === "/task-management",
+      onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
     },
     {
       label: "My History",
@@ -374,6 +440,7 @@ export default function DashboardLayout({ children }) {
         {/* Sidebar Nav links */}
         <nav className="flex-grow px-3 py-2 space-y-1.5 overflow-y-auto">
           {menuItems.map((item, idx) => {
+            if (item.hidden) return null;
             const Icon = item.icon;
             return (
               <button
@@ -506,7 +573,7 @@ export default function DashboardLayout({ children }) {
                 title="Notifications"
               >
                 <Bell size={15} />
-                {((currentUser?.role === "admin" && activeNotifications.length > 0) || (currentUser?.role !== "admin" && newUpdatesCount > 0)) && (
+                {totalUnreadCount > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-primary rounded-full border-2 border-bg-card" />
                 )}
               </button>
@@ -518,81 +585,108 @@ export default function DashboardLayout({ children }) {
                   {/* Dropdown panel - fixed so it's never clipped by parent overflow/z-index */}
                   <div className="fixed top-[65px] sm:top-[75px] right-3 sm:right-4 lg:right-8 w-[calc(100vw-1.5rem)] max-w-[340px] bg-bg-card border border-border-card rounded-[16px] shadow-2xl p-4 z-[200] text-left animate-scale-up">
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-border-card">
-                      <span className="font-extrabold text-xs text-text-main uppercase tracking-wider">🔔 Leave Updates</span>
-                      {((currentUser?.role === "admin" && activeNotifications.length > 0) || (currentUser?.role !== "admin" && newUpdatesCount > 0)) && (
+                      <span className="font-extrabold text-xs text-text-main uppercase tracking-wider"><Bell size={14} className='inline-block mr-1' /> Notifications</span>
+                      {totalUnreadCount > 0 && (
                         <span className="bg-brand-primary text-white px-2 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
-                          {currentUser?.role === "admin" ? activeNotifications.length : newUpdatesCount} New
+                          {totalUnreadCount} New
                         </span>
                       )}
                     </div>
 
-                    {activeNotifications.length === 0 ? (
+                    {combinedNotifs.length === 0 ? (
                       <div className="py-8 text-center">
-                        <div className="text-3xl mb-2">📭</div>
+                        <div className="text-3xl mb-2"><Mailbox size={32} className='mx-auto text-brand-primary' /></div>
                         <p className="text-xs text-text-mut font-semibold">No notifications yet.</p>
                       </div>
                     ) : (
                       <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1 overscroll-contain">
-                        {activeNotifications.slice(0, 10).map((req) => {
-                          const isApproved = req.status === "approved";
-                          const isRejected = req.status === "rejected";
-
-                          let badgeColor = "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400";
-                          let symbol = "⏳";
-                          if (isApproved) {
-                            badgeColor = "bg-emerald-500/10 text-emerald-500";
-                            symbol = "✓";
-                          } else if (isRejected) {
-                            badgeColor = "bg-red-500/10 text-red-500";
-                            symbol = "✗";
-                          }
-
-                          const seenStr = localStorage.getItem(`seen_leaves_${currentUser?.uid}`);
-                          const seen = seenStr ? JSON.parse(seenStr) : {};
-                          const isNewUpdate = currentUser?.role !== "admin" && seen[req.id] !== req.status && req.status !== "pending";
-
-                          return (
-                            <div 
-                              key={req.id} 
-                              className={`p-2.5 rounded-[12px] border text-xs flex flex-col gap-1 transition-all ${
-                                isNewUpdate 
-                                  ? "bg-brand-primary/10 border-brand-primary/20 shadow-sm" 
-                                  : "bg-bg-base/30 border-border-card"
-                              }`}
-                            >
-                              <div className="flex justify-between items-center">
-                                <span className="font-extrabold text-text-main truncate max-w-[150px]">{req.type}</span>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  {isNewUpdate && (
+                        {combinedNotifs.slice(0, 15).map((item) => {
+                          if (item.isSystemNotif) {
+                            return (
+                              <div 
+                                key={item.id} 
+                                onClick={() => handleSystemNotifClick(item)}
+                                className={`p-2.5 rounded-[12px] border text-xs flex flex-col gap-1 transition-all cursor-pointer ${
+                                  !item.read 
+                                    ? "bg-brand-primary/10 border-brand-primary/20 shadow-sm" 
+                                    : "bg-bg-base/30 border-border-card"
+                                }`}
+                              >
+                                <div className="flex justify-between items-center">
+                                  <span className="font-extrabold text-text-main truncate max-w-[150px]">{item.title}</span>
+                                  {!item.read && (
                                     <span className="bg-brand-primary text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">NEW</span>
                                   )}
-                                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${badgeColor}`}>
-                                    {symbol} {req.status}
-                                  </span>
-                                  <button
-                                    onClick={(e) => handleDeleteNotification(e, req.id)}
-                                    className="p-1 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded transition-colors cursor-pointer ml-1 flex items-center justify-center"
-                                    title="Delete Notification"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
                                 </div>
+                                <p className="text-[10px] text-text-sec">{item.message}</p>
+                                <span className="text-[8px] text-text-mut self-end mt-0.5 font-semibold">
+                                  {new Date(item.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
                               </div>
-                              <p className="text-[10px] text-text-sec">
-                                {currentUser?.role === "admin" 
-                                  ? `${req.userName} requested ${req.type} (${req.duration}).`
-                                  : `Your ${req.type} request for ${req.duration} was ${req.status}.`}
-                              </p>
-                              {req.managerComment && (
-                                <p className="text-[10px] text-brand-primary italic mt-0.5 bg-brand-primary/5 p-1.5 rounded border border-brand-primary/10">
-                                  Comment: "{req.managerComment}"
+                            );
+                          } else if (item.isLeaveNotif) {
+                            const req = item;
+                            const isApproved = req.status === "approved";
+                            const isRejected = req.status === "rejected";
+
+                            let badgeColor = "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400";
+                            let symbol = "⏳";
+                            if (isApproved) {
+                              badgeColor = "bg-emerald-500/10 text-emerald-500";
+                              symbol = "✓";
+                            } else if (isRejected) {
+                              badgeColor = "bg-red-500/10 text-red-500";
+                              symbol = "✗";
+                            }
+
+                            const seenStr = localStorage.getItem(`seen_leaves_${currentUser?.uid}`);
+                            const seen = seenStr ? JSON.parse(seenStr) : {};
+                            const isNewUpdate = currentUser?.role !== "admin" && seen[req.id] !== req.status && req.status !== "pending";
+
+                            return (
+                              <div 
+                                key={req.id} 
+                                className={`p-2.5 rounded-[12px] border text-xs flex flex-col gap-1 transition-all ${
+                                  isNewUpdate 
+                                    ? "bg-brand-primary/10 border-brand-primary/20 shadow-sm" 
+                                    : "bg-bg-base/30 border-border-card"
+                                }`}
+                              >
+                                <div className="flex justify-between items-center">
+                                  <span className="font-extrabold text-text-main truncate max-w-[150px]">{req.type}</span>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {isNewUpdate && (
+                                      <span className="bg-brand-primary text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">NEW</span>
+                                    )}
+                                    <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${badgeColor}`}>
+                                      {symbol} {req.status}
+                                    </span>
+                                    <button
+                                      onClick={(e) => handleDeleteNotification(e, req.id)}
+                                      className="p-1 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded transition-colors cursor-pointer ml-1 flex items-center justify-center"
+                                      title="Delete Notification"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-text-sec">
+                                  {currentUser?.role === "admin" 
+                                    ? `${req.userName} requested ${req.type} (${req.duration}).`
+                                    : `Your ${req.type} request for ${req.duration} was ${req.status}.`}
                                 </p>
-                              )}
-                              <span className="text-[8px] text-text-mut self-end mt-0.5 font-semibold">
-                                {new Date(req.updatedAt || req.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          );
+                                {req.managerComment && (
+                                  <p className="text-[10px] text-brand-primary italic mt-0.5 bg-brand-primary/5 p-1.5 rounded border border-brand-primary/10">
+                                    Comment: "{req.managerComment}"
+                                  </p>
+                                )}
+                                <span className="text-[8px] text-text-mut self-end mt-0.5 font-semibold">
+                                  {new Date(req.updatedAt || req.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            );
+                          }
+                          return null;
                         })}
                       </div>
                     )}
@@ -664,6 +758,7 @@ export default function DashboardLayout({ children }) {
             {/* Nav links */}
             <nav className="flex-grow px-3 py-4 space-y-1 overflow-y-auto">
               {menuItems.map((item, idx) => {
+                if (item.hidden) return null;
                 const Icon = item.icon;
                 return (
                   <button
@@ -740,7 +835,7 @@ export default function DashboardLayout({ children }) {
                 onClick={() => setShowQuickCheckModal(false)}
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 
@@ -789,13 +884,13 @@ export default function DashboardLayout({ children }) {
 
               {todayLog && todayLog.status === "on-break" && (
                 <p className="text-xs text-brand-warning font-bold">
-                  ⚠️ Please resume work on the main Dashboard page to end your break.
+                  <AlertTriangle size={16} className='inline-block mr-1 text-amber-500' /> Please resume work on the main Dashboard page to end your break.
                 </p>
               )}
 
               {todayLog && todayLog.status === "checked-out" && (
                 <p className="text-xs text-brand-success font-bold">
-                  ✓ Shift completed for today!
+                  <Check size={16} className='inline-block mr-1 text-emerald-500' /> Shift completed for today!
                 </p>
               )}
 
@@ -824,7 +919,7 @@ export default function DashboardLayout({ children }) {
                 onClick={() => setShowRulesModal(false)}
                 className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 

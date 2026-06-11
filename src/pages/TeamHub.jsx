@@ -181,8 +181,8 @@ function MessageInput({ onSend, placeholder, disabled }) {
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 25 * 1024 * 1024) {
-      showToast("File must be under 25MB", "error");
+    if (file.size > 35 * 1024 * 1024) {
+      showToast("File must be under 35MB", "error");
       return;
     }
     setPendingFile(file);
@@ -244,7 +244,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           className="flex-shrink-0 p-1 text-text-mut hover:text-brand-primary transition-colors cursor-pointer"
-          title="Attach file (max 25MB)"
+          title="Attach file (max 35MB)"
         >
           <Paperclip size={16} />
         </button>

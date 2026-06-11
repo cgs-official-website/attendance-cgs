@@ -1797,12 +1797,7 @@ export const getAllDmThreadsAdmin = async () => {
  */
 export const uploadFileToFirebase = async (file) => {
   if (isB2Configured()) {
-    try {
-      return await uploadFileToB2(file);
-    } catch (error) {
-      console.warn("B2 Upload failed, falling back to Firebase/Local:", error);
-      // Fall through to existing logic
-    }
+    return await uploadFileToB2(file);
   }
 
   if (dbType === "firebase") {

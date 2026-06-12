@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { useModal } from "../context/ModalContext";
 import { 
   getAllRegisteredUsers, 
   subscribeToAdminDashboard,
@@ -121,6 +122,7 @@ const getDurationDays = (s, e) => {
 export default function AdminDashboard() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
+  const { showConfirm } = useModal();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Sync activeTab with sidebar parameters: 'live' | 'logs' | 'users' | 'analytics'
@@ -3782,10 +3784,11 @@ export default function AdminDashboard() {
         });
 
         const handleDeleteMsg = async (id) => {
-          if (!window.confirm("Delete this message permanently?")) return;
-          await deleteChatMessage(id);
-          setChatMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
-          showToast("Message removed", "success");
+          showConfirm("Delete Message", "Delete this message permanently?", async () => {
+            await deleteChatMessage(id);
+            setChatMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
+            showToast("Message removed", "success");
+          }, { confirmText: "Delete", cancelText: "Cancel" });
         };
 
         const handleExportChat = () => {

@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext"; // Vite cache bust
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
 import { db, getDbType, createNotification, subscribeToTaskReports } from "../firebase";
+import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -11,6 +12,7 @@ import * as XLSX from "xlsx";
 export default function ProjectManagement() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
+  const { showConfirm } = useModal();
   
   const [teamMembers, setTeamMembers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -205,25 +207,25 @@ export default function ProjectManagement() {
   };
 
   const handleRemoveMember = async (member) => {
-    if (!window.confirm(`Are you sure you want to remove ${member.name} from the project?`)) return;
-    
-    try {
-      if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", member.uid), { project: "", tasks: [] });
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users"));
-        const idx = users.findIndex(u => u.uid === member.uid);
-        if (idx !== -1) {
-          users[idx].project = "";
-          users[idx].tasks = [];
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
+    showConfirm("Remove Team Member", `Are you sure you want to remove ${member.name} from the project?`, async () => {
+      try {
+        if (getDbType() === "firebase") {
+          await updateDoc(doc(db, "users", member.uid), { project: "", tasks: [] });
+        } else {
+          const users = JSON.parse(localStorage.getItem("att_users"));
+          const idx = users.findIndex(u => u.uid === member.uid);
+          if (idx !== -1) {
+            users[idx].project = "";
+            users[idx].tasks = [];
+            localStorage.setItem("att_users", JSON.stringify(users));
+            window.dispatchEvent(new Event("local-auth-updated"));
+          }
         }
+        showToast(`${member.name} removed from the project`, "success");
+      } catch (err) {
+        showToast("Failed to remove member", "error");
       }
-      showToast(`${member.name} removed from the project`, "success");
-    } catch (err) {
-      showToast("Failed to remove member", "error");
-    }
+    }, { confirmText: "Remove", cancelText: "Cancel" });
   };
 
   const openEditMemberModal = (member) => {
@@ -319,27 +321,27 @@ export default function ProjectManagement() {
   };
 
   const handleDeleteTask = async (taskIdx) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
-    
-    let currentTasks = taskTargetUser.tasks || [];
-    currentTasks.splice(taskIdx, 1);
-    
-    try {
-      if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", taskTargetUser.uid), { tasks: currentTasks });
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users"));
-        const idx = users.findIndex(u => u.uid === taskTargetUser.uid);
-        if (idx !== -1) {
-          users[idx].tasks = currentTasks;
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
+    showConfirm("Delete Task", "Are you sure you want to delete this task?", async () => {
+      let currentTasks = taskTargetUser.tasks || [];
+      currentTasks.splice(taskIdx, 1);
+      
+      try {
+        if (getDbType() === "firebase") {
+          await updateDoc(doc(db, "users", taskTargetUser.uid), { tasks: currentTasks });
+        } else {
+          const users = JSON.parse(localStorage.getItem("att_users"));
+          const idx = users.findIndex(u => u.uid === taskTargetUser.uid);
+          if (idx !== -1) {
+            users[idx].tasks = currentTasks;
+            localStorage.setItem("att_users", JSON.stringify(users));
+            window.dispatchEvent(new Event("local-auth-updated"));
+          }
         }
+        showToast("Task deleted", "success");
+      } catch (err) {
+        showToast("Failed to delete task", "error");
       }
-      showToast("Task deleted", "success");
-    } catch (err) {
-      showToast("Failed to delete task", "error");
-    }
+    }, { confirmText: "Delete", cancelText: "Cancel" });
   };
 
   const filteredTeam = teamMembers.filter(m => 

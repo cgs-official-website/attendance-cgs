@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { useModal } from "../context/ModalContext";
 import {
   subscribeToChannels,
   joinChannel,
@@ -590,6 +591,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
 export default function TeamHub() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
+  const { showConfirm } = useModal();
   const isAdmin = currentUser?.role === "admin";
 
   const [channels, setChannels]           = useState([]);
@@ -681,14 +683,15 @@ export default function TeamHub() {
 
   const handleDeleteChannel = async (ch) => {
     if (!isAdmin) return;
-    if (!window.confirm(`Delete #${ch.displayName || ch.name}? This cannot be undone.`)) return;
-    try {
-      await deleteChannel(ch.id);
-      if (activeThread?.id === ch.id) setActiveThread(null);
-      showToast(`Channel deleted`, "success");
-    } catch (err) {
-      showToast(err.message || "Failed to delete", "error");
-    }
+    showConfirm("Delete Channel", `Delete #${ch.displayName || ch.name}? This cannot be undone.`, async () => {
+      try {
+        await deleteChannel(ch.id);
+        if (activeThread?.id === ch.id) setActiveThread(null);
+        showToast(`Channel deleted`, "success");
+      } catch (err) {
+        showToast(err.message || "Failed to delete", "error");
+      }
+    }, { confirmText: "Delete", cancelText: "Cancel" });
   };
 
   const handleOpenDm = async (targetUser) => {

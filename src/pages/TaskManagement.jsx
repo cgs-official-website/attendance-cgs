@@ -3,7 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
 import { db, getDbType, createNotification, addTaskReport, subscribeToTaskReports } from "../firebase";
-import { CheckCircle, Clock, Send, MessageSquare, Play, X } from "lucide-react";
+import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download } from "lucide-react";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 export default function TaskManagement() {
   const { currentUser } = useAuth();
@@ -13,6 +16,7 @@ export default function TaskManagement() {
   const [loading, setLoading] = useState(true);
   
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showAllReportsModal, setShowAllReportsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [reportText, setReportText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -132,13 +136,88 @@ export default function TaskManagement() {
   const activeTasks = tasks.filter(t => !t.completed);
   const completedTasks = tasks.filter(t => t.completed);
 
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    doc.text("My Task Reports", 14, 15);
+    
+    const tableData = [];
+    tasks.forEach(t => {
+      const status = t.completed ? "Done" : "Active";
+      tableData.push([t.title, status, `${t.duration || 0}h`]);
+      
+      const reports = taskReports[t.id] || [];
+      reports.forEach(r => {
+        tableData.push(["", `Report: ${r.reportText}`, new Date(r.timestamp).toLocaleDateString()]);
+      });
+    });
+
+    if (tableData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
+    }
+
+    doc.autoTable({
+      head: [["Task Details", "Status", "Duration/Date"]],
+      body: tableData,
+      startY: 20,
+      styles: { fontSize: 9 },
+      columnStyles: { 0: { cellWidth: 100 } }
+    });
+    
+    doc.save(`My_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleDownloadExcel = () => {
+    const tableData = [];
+    tasks.forEach(t => {
+      const status = t.completed ? "Done" : "Active";
+      tableData.push({
+        "Task Title": t.title,
+        "Status": status,
+        "Est. Hours": t.duration || 0,
+        "Report Detail": "",
+        "Report Date": ""
+      });
+      
+      const reports = taskReports[t.id] || [];
+      reports.forEach(r => {
+        tableData.push({
+          "Task Title": "",
+          "Status": "",
+          "Est. Hours": "",
+          "Report Detail": r.reportText,
+          "Report Date": new Date(r.timestamp).toLocaleString()
+        });
+      });
+    });
+
+    if (tableData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(tableData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "My Reports");
+    XLSX.writeFile(wb, `My_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   return (
     <div className="animate-fade-in pb-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-black text-text-main tracking-tight">Task Management</h1>
-        <p className="text-sm text-text-mut font-medium mt-1">
-          Your current project: <span className="font-bold text-brand-primary">{currentUser.project || "Unassigned"}</span>
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-text-main tracking-tight">Task Management</h1>
+          <p className="text-sm text-text-mut font-medium mt-1">
+            Your current project: <span className="font-bold text-brand-primary">{currentUser.project || "Unassigned"}</span>
+          </p>
+        </div>
+        <button 
+          onClick={() => setShowAllReportsModal(true)}
+          className="bg-bg-base hover:bg-bg-card border border-border-card text-text-main text-xs font-bold py-2.5 px-4 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+        >
+          <FileText size={16} className="text-brand-primary" />
+          <span>My Reports</span>
+        </button>
       </div>
 
       {loading ? (
@@ -303,6 +382,84 @@ export default function TaskManagement() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      {/* All Reports Modal */}
+      {showAllReportsModal && (
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+          <div className="w-full max-w-[800px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b border-border-card pb-4 gap-4 flex-shrink-0">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <FileText size={18} className="text-brand-primary" />
+                My Reports
+              </h3>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleDownloadPDF}
+                  className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download size={13} />
+                  <span>PDF</span>
+                </button>
+                <button 
+                  onClick={handleDownloadExcel}
+                  className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download size={13} />
+                  <span>Excel</span>
+                </button>
+                <button onClick={() => setShowAllReportsModal(false)} className="p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base rounded-[8px]"><X size={16} /></button>
+              </div>
+            </div>
+            
+            <div className="overflow-y-auto pr-2 custom-scrollbar flex-grow">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                    <th className="p-3 font-bold">Task Title</th>
+                    <th className="p-3 font-bold">Status</th>
+                    <th className="p-3 font-bold text-right">Est. Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.length === 0 ? (
+                    <tr>
+                      <td colSpan="3" className="p-6 text-center text-xs text-text-mut">No tasks found.</td>
+                    </tr>
+                  ) : (
+                    tasks.map((task, idx) => (
+                      <React.Fragment key={task.id || idx}>
+                        <tr className="border-b border-border-card/50">
+                          <td className="p-3 text-xs font-bold text-text-main">{task.title}</td>
+                          <td className="p-3 text-xs">
+                            {task.completed ? (
+                              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
+                            ) : (
+                              <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-xs text-right font-medium text-text-sec">{task.duration}h</td>
+                        </tr>
+                        {taskReports[task.id] && taskReports[task.id].length > 0 && (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="3" className="p-3 bg-bg-base/30">
+                              <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
+                                {taskReports[task.id].map(r => (
+                                  <div key={r.id} className="text-[10px]">
+                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
+                                    <span className="text-text-main ml-2">{r.reportText}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

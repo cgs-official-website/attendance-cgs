@@ -2,8 +2,11 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext"; // Vite cache bust
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
-import { db, getDbType, createNotification } from "../firebase";
-import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X } from "lucide-react";
+import { db, getDbType, createNotification, subscribeToTaskReports } from "../firebase";
+import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download } from "lucide-react";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 export default function ProjectManagement() {
   const { currentUser } = useAuth();
@@ -24,6 +27,13 @@ export default function ProjectManagement() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDuration, setNewTaskDuration] = useState(1);
   const [editingTaskIndex, setEditingTaskIndex] = useState(null);
+
+  const [showEditMemberModal, setShowEditMemberModal] = useState(false);
+  const [memberToEdit, setMemberToEdit] = useState(null);
+  const [editDesignation, setEditDesignation] = useState("");
+
+  const [showReportsModal, setShowReportsModal] = useState(false);
+  const [allTaskReports, setAllTaskReports] = useState({});
 
   useEffect(() => {
     if (!currentUser) return;
@@ -72,6 +82,97 @@ export default function ProjectManagement() {
     }
   }, [currentUser, taskTargetUser?.uid]);
 
+  useEffect(() => {
+    if (showReportsModal && teamMembers.length > 0) {
+      const allTaskIds = teamMembers.flatMap(m => (m.tasks || []).map(t => t.id));
+      const unsubs = [];
+      const newReports = {};
+      
+      allTaskIds.forEach(taskId => {
+        const unsub = subscribeToTaskReports(taskId, (reports) => {
+          setAllTaskReports(prev => ({ ...prev, [taskId]: reports }));
+        });
+        unsubs.push(unsub);
+      });
+      
+      return () => {
+        unsubs.forEach(fn => fn());
+      };
+    }
+  }, [showReportsModal, teamMembers]);
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Project Task Reports", 14, 15);
+    
+    const tableData = [];
+    teamMembers.forEach(m => {
+      (m.tasks || []).forEach(t => {
+        const status = t.completed ? "Done" : "Active";
+        tableData.push([m.name, t.title, status, `${t.duration || 0}h`]);
+        
+        const reports = allTaskReports[t.id] || [];
+        reports.forEach(r => {
+          tableData.push(["", `Report: ${r.reportText}`, "", new Date(r.timestamp).toLocaleDateString()]);
+        });
+      });
+    });
+
+    if (tableData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
+    }
+
+    doc.autoTable({
+      head: [["Employee", "Task Details", "Status", "Duration/Date"]],
+      body: tableData,
+      startY: 20,
+      styles: { fontSize: 9 },
+      columnStyles: { 1: { cellWidth: 90 } }
+    });
+    
+    doc.save(`Project_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleDownloadExcel = () => {
+    const tableData = [];
+    teamMembers.forEach(m => {
+      (m.tasks || []).forEach(t => {
+        const status = t.completed ? "Done" : "Active";
+        tableData.push({
+          "Employee": m.name,
+          "Task Title": t.title,
+          "Status": status,
+          "Est. Hours": t.duration || 0,
+          "Report Detail": "",
+          "Report Date": ""
+        });
+        
+        const reports = allTaskReports[t.id] || [];
+        reports.forEach(r => {
+          tableData.push({
+            "Employee": "",
+            "Task Title": "",
+            "Status": "",
+            "Est. Hours": "",
+            "Report Detail": r.reportText,
+            "Report Date": new Date(r.timestamp).toLocaleString()
+          });
+        });
+      });
+    });
+
+    if (tableData.length === 0) {
+      showToast("No data to export", "warning");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(tableData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Project Reports");
+    XLSX.writeFile(wb, `Project_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const handleAddTeamMember = async (e) => {
     e.preventDefault();
     if (!selectedUserForTeam) return showToast("Please select a user", "warning");
@@ -100,6 +201,55 @@ export default function ProjectManagement() {
       setAdminProjectInput("");
     } catch (err) {
       showToast("Failed to add member", "error");
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!window.confirm(`Are you sure you want to remove ${member.name} from the project?`)) return;
+    
+    try {
+      if (getDbType() === "firebase") {
+        await updateDoc(doc(db, "users", member.uid), { project: "", tasks: [] });
+      } else {
+        const users = JSON.parse(localStorage.getItem("att_users"));
+        const idx = users.findIndex(u => u.uid === member.uid);
+        if (idx !== -1) {
+          users[idx].project = "";
+          users[idx].tasks = [];
+          localStorage.setItem("att_users", JSON.stringify(users));
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+      showToast(`${member.name} removed from the project`, "success");
+    } catch (err) {
+      showToast("Failed to remove member", "error");
+    }
+  };
+
+  const openEditMemberModal = (member) => {
+    setMemberToEdit(member);
+    setEditDesignation(member.designation || member.jobType || "");
+    setShowEditMemberModal(true);
+  };
+
+  const handleSaveMemberEdit = async (e) => {
+    e.preventDefault();
+    try {
+      if (getDbType() === "firebase") {
+        await updateDoc(doc(db, "users", memberToEdit.uid), { designation: editDesignation });
+      } else {
+        const users = JSON.parse(localStorage.getItem("att_users"));
+        const idx = users.findIndex(u => u.uid === memberToEdit.uid);
+        if (idx !== -1) {
+          users[idx].designation = editDesignation;
+          localStorage.setItem("att_users", JSON.stringify(users));
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+      showToast("Member updated successfully", "success");
+      setShowEditMemberModal(false);
+    } catch (err) {
+      showToast("Failed to update member", "error");
     }
   };
 
@@ -221,13 +371,22 @@ export default function ProjectManagement() {
             )}
           </p>
         </div>
-        <button 
-          onClick={() => setShowAddTeamModal(true)}
-          className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2.5 px-5 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-primary/20 hover:shadow-brand-primary/40 cursor-pointer"
-        >
-          <UserPlus size={16} />
-          <span>{currentUser?.role === "admin" ? "Assign Project" : "Add Team Member"}</span>
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowReportsModal(true)}
+            className="bg-bg-base hover:bg-bg-card border border-border-card text-text-main text-xs font-bold py-2.5 px-4 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+          >
+            <FileText size={16} className="text-brand-primary" />
+            <span>Project Reports</span>
+          </button>
+          <button 
+            onClick={() => setShowAddTeamModal(true)}
+            className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2.5 px-5 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-primary/20 hover:shadow-brand-primary/40 cursor-pointer"
+          >
+            <UserPlus size={16} />
+            <span>{currentUser?.role === "admin" ? "Assign Project" : "Add Team Member"}</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
@@ -324,13 +483,30 @@ export default function ProjectManagement() {
                         </div>
                       </td>
                       <td className="p-4 text-right">
-                        <button
-                          onClick={() => openTaskModal(member)}
-                          className="py-1.5 px-3 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[8px] text-[11px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                        >
-                          <span>Manage Tasks</span>
-                          <ChevronRight size={14} />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openTaskModal(member)}
+                            className="py-1.5 px-3 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[8px] text-[11px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                            title="Manage Tasks"
+                          >
+                            <span>Tasks</span>
+                            <ChevronRight size={14} />
+                          </button>
+                          <button
+                            onClick={() => openEditMemberModal(member)}
+                            className="p-1.5 bg-bg-base border border-border-card text-text-sec hover:text-brand-primary hover:border-brand-primary rounded-[8px] transition-colors cursor-pointer"
+                            title="Edit Member Designation"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveMember(member)}
+                            className="p-1.5 bg-bg-base border border-border-card text-text-sec hover:text-red-500 hover:border-red-500 hover:bg-red-500/5 rounded-[8px] transition-colors cursor-pointer"
+                            title="Remove from Project"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -517,6 +693,132 @@ export default function ProjectManagement() {
                 )}
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Team Member Modal */}
+      {showEditMemberModal && memberToEdit && (
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+          <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <Edit2 size={18} className="text-brand-primary" />
+                Edit Team Member
+              </h3>
+              <button onClick={() => setShowEditMemberModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+            </div>
+            
+            <form onSubmit={handleSaveMemberEdit} className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Member Name</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-mut outline-none cursor-not-allowed"
+                  value={memberToEdit.name}
+                  disabled
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Designation / Role</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Frontend Developer"
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={editDesignation}
+                  onChange={(e) => setEditDesignation(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-border-card mt-4">
+                <button type="button" onClick={() => setShowEditMemberModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
+                <button type="submit" className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Project Reports Modal */}
+      {showReportsModal && (
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+          <div className="w-full max-w-[800px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b border-border-card pb-4 gap-4 flex-shrink-0">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <FileText size={18} className="text-brand-primary" />
+                Project Reports
+              </h3>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleDownloadPDF}
+                  className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download size={13} />
+                  <span>PDF</span>
+                </button>
+                <button 
+                  onClick={handleDownloadExcel}
+                  className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download size={13} />
+                  <span>Excel</span>
+                </button>
+                <button onClick={() => setShowReportsModal(false)} className="p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base rounded-[8px]"><X size={16} /></button>
+              </div>
+            </div>
+            
+            <div className="overflow-y-auto pr-2 custom-scrollbar flex-grow">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                    <th className="p-3 font-bold">Employee</th>
+                    <th className="p-3 font-bold">Task Title</th>
+                    <th className="p-3 font-bold">Status</th>
+                    <th className="p-3 font-bold text-right">Est. Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamMembers.flatMap(m => (m.tasks || []).map(t => ({...t, employeeName: m.name}))).length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found in this project.</td>
+                    </tr>
+                  ) : (
+                    teamMembers.flatMap(m => (m.tasks || []).map(t => ({...t, employeeName: m.name}))).map((task, idx) => (
+                      <React.Fragment key={task.id || idx}>
+                        <tr className="border-b border-border-card/50">
+                          <td className="p-3 text-xs font-bold text-text-main">{task.employeeName}</td>
+                          <td className="p-3 text-xs text-text-main">{task.title}</td>
+                          <td className="p-3 text-xs">
+                            {task.completed ? (
+                              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
+                            ) : (
+                              <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-xs text-right font-medium text-text-sec">{task.duration}h</td>
+                        </tr>
+                        {allTaskReports[task.id] && allTaskReports[task.id].length > 0 && (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="4" className="p-3 bg-bg-base/30">
+                              <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
+                                {allTaskReports[task.id].map(r => (
+                                  <div key={r.id} className="text-[10px]">
+                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
+                                    <span className="text-text-main ml-2">{r.reportText}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

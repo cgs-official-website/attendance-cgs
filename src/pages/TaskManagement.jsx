@@ -385,6 +385,8 @@ export default function TaskManagement() {
             </div>
           </div>
         </div>
+      )}
+
       {/* All Reports Modal */}
       {showAllReportsModal && (
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">

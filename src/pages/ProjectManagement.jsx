@@ -772,13 +772,13 @@ export default function ProjectManagement() {
               </div>
             </div>
             
-            <div className="overflow-y-auto pr-2 custom-scrollbar flex-grow">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-auto pr-2 custom-scrollbar flex-grow">
+              <table className="w-full min-w-[600px] text-left border-collapse">
                 <thead>
                   <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
                     <th className="p-3 font-bold">Employee</th>
-                    <th className="p-3 font-bold">Task Title</th>
-                    <th className="p-3 font-bold">Status</th>
+                    <th className="p-3 font-bold text-center">Task Title</th>
+                    <th className="p-3 font-bold text-center">Status</th>
                     <th className="p-3 font-bold text-right">Est. Hours</th>
                   </tr>
                 </thead>
@@ -792,15 +792,15 @@ export default function ProjectManagement() {
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
                           <td className="p-3 text-xs font-bold text-text-main">{task.employeeName}</td>
-                          <td className="p-3 text-xs text-text-main">{task.title}</td>
-                          <td className="p-3 text-xs">
+                          <td className="p-3 text-xs text-text-main text-center">{task.title}</td>
+                          <td className="p-3 text-xs text-center">
                             {task.completed ? (
                               <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
                             ) : (
                               <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
                             )}
                           </td>
-                          <td className="p-3 text-xs text-right font-medium text-text-sec">{task.duration}h</td>
+                          <td className="p-3 text-xs font-bold text-text-main text-right">{task.duration || 0}h</td>
                         </tr>
                         {allTaskReports[task.id] && allTaskReports[task.id].length > 0 && (
                           <tr className="border-b border-border-card">

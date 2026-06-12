@@ -463,8 +463,8 @@ export default function DashboardLayout({ children }) {
             }}
           />
           <div className="flex flex-col text-left">
-            <span className="font-bold text-xs text-text-main">Carrezza Portal</span>
-            <span className="text-[9px] text-text-mut uppercase font-semibold tracking-wider">Attendance System</span>
+            <span className="font-bold text-[11px] leading-tight text-text-main">Carrezza Global Solutions Private Limited</span>
+            <span className="text-[9px] text-text-mut uppercase font-semibold tracking-wider mt-0.5">Attendance System</span>
           </div>
         </div>
 

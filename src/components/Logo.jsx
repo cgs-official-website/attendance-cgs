@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import zunaLogo from "../assets/zuna-logo.png";
 
 export default function Logo({ size = 32, showText = true }) {
   const [imgFailed, setImgFailed] = useState(false);
@@ -8,8 +9,8 @@ export default function Logo({ size = 32, showText = true }) {
       {/* Icon/Logo Image or SVG Fallback */}
       {!imgFailed ? (
         <img 
-          src="/logo.png" 
-          alt="Carrezza Global Solutions Logo" 
+          src={zunaLogo} 
+          alt="Zuna Logo" 
           className="object-contain rounded-[8px] shadow-sm flex-shrink-0"
           style={{ width: size, height: size }}
           onError={() => setImgFailed(true)}
@@ -38,10 +39,7 @@ export default function Logo({ size = 32, showText = true }) {
       {showText && (
         <div className="flex flex-col text-left leading-[1.15] flex-shrink-0">
           <span className="font-sans font-extrabold text-[1.05rem] tracking-tight text-text-main">
-            Carrezza <span className="text-brand-primary">Global</span>
-          </span>
-          <span className="font-sans font-bold text-[0.68rem] tracking-wider text-text-sec uppercase">
-            Solutions Pvt Ltd
+            Zuna
           </span>
         </div>
       )}

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
-import { db, getDbType, createNotification, addTaskReport, subscribeToTaskReports } from "../firebase";
-import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download } from "lucide-react";
+import { db, getDbType, createNotification, addTaskReport, subscribeToTaskReports, startTaskTimer, stopTaskTimer } from "../firebase";
+import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -23,6 +23,12 @@ export default function TaskManagement() {
 
   // For storing fetched reports per task ID
   const [taskReports, setTaskReports] = useState({});
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -272,15 +278,48 @@ export default function TaskManagement() {
                         <MessageSquare size={12} />
                         <span>{taskReports[task.id]?.length || 0} Updates</span>
                       </div>
+                      {task.timerStartedAt && (
+                        <div className="flex items-center gap-1 bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-[6px] animate-pulse">
+                          <Activity size={12} />
+                          <span>
+                            {(() => {
+                              const elapsed = Math.floor((now - new Date(task.timerStartedAt).getTime()) / 1000);
+                              const h = Math.floor(elapsed / 3600);
+                              const m = Math.floor((elapsed % 3600) / 60);
+                              const s = elapsed % 60;
+                              return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
+                            })()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     
-                    <div className="pt-4 border-t border-border-card/50 flex justify-end">
+                    <div className="pt-4 border-t border-border-card/50 flex justify-between items-center">
+                      <div className="flex gap-2">
+                        {!task.timerStartedAt ? (
+                          <button 
+                            onClick={() => startTaskTimer(currentUser.uid, task.id)}
+                            className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <Play size={12} />
+                            <span>Start</span>
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
+                            className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <Square size={12} fill="currentColor" />
+                            <span>Stop Timer</span>
+                          </button>
+                        )}
+                      </div>
                       <button 
                         onClick={() => handleOpenReportModal(task)}
                         className="py-1.5 px-3 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
                       >
                         <Send size={12} />
-                        <span>Send Hourly Update</span>
+                        <span>Manual Update</span>
                       </button>
                     </div>
                   </div>

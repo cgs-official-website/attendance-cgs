@@ -455,6 +455,9 @@ export const checkOut = async (userId, location) => {
   const recordId = `${userId}_${dateStr}`;
   const timeStr = new Date().toISOString();
 
+  // Stop any active task timers before checking out
+  await stopAllTaskTimers(userId);
+
   if (dbType === "firebase") {
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
@@ -941,6 +944,164 @@ export const subscribeToAdminDashboard = (callback) => {
     return () => {
       attendanceListeners.delete(handler);
     };
+  }
+};
+
+// ----------------------------------------------------
+// TASK TIMERS
+// ----------------------------------------------------
+
+export const startTaskTimer = async (userId, taskId) => {
+  const timestamp = new Date().toISOString();
+  if (dbType === "firebase") {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.tasks) {
+        const taskIdx = userData.tasks.findIndex(t => t.id === taskId);
+        if (taskIdx !== -1) {
+          userData.tasks[taskIdx].timerStartedAt = timestamp;
+          await updateDoc(userRef, { tasks: userData.tasks });
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+    }
+  } else {
+    const users = localDb.getUsers();
+    const uIdx = users.findIndex(u => u.uid === userId);
+    if (uIdx !== -1 && users[uIdx].tasks) {
+      const tIdx = users[uIdx].tasks.findIndex(t => t.id === taskId);
+      if (tIdx !== -1) {
+        users[uIdx].tasks[tIdx].timerStartedAt = timestamp;
+        localStorage.setItem("att_users", JSON.stringify(users));
+        
+        const cur = localDb.getCurrentUser();
+        if (cur && cur.uid === userId) {
+          cur.tasks[tIdx].timerStartedAt = timestamp;
+          localDb.setCurrentUser(cur);
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+    }
+  }
+};
+
+export const stopTaskTimer = async (userId, taskId, pmId) => {
+  let elapsedMinutes = 0;
+  if (dbType === "firebase") {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.tasks) {
+        const taskIdx = userData.tasks.findIndex(t => t.id === taskId);
+        if (taskIdx !== -1 && userData.tasks[taskIdx].timerStartedAt) {
+          const startedAt = new Date(userData.tasks[taskIdx].timerStartedAt).getTime();
+          elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+          
+          userData.tasks[taskIdx].timerStartedAt = null;
+          await updateDoc(userRef, { tasks: userData.tasks });
+          window.dispatchEvent(new Event("local-auth-updated"));
+          
+          if (elapsedMinutes > 0) {
+            const hrs = Math.floor(elapsedMinutes / 60);
+            const mins = elapsedMinutes % 60;
+            const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+            await addTaskReport(taskId, userId, pmId, `Worked for ${timeStr}`);
+          }
+        }
+      }
+    }
+  } else {
+    const users = localDb.getUsers();
+    const uIdx = users.findIndex(u => u.uid === userId);
+    if (uIdx !== -1 && users[uIdx].tasks) {
+      const tIdx = users[uIdx].tasks.findIndex(t => t.id === taskId);
+      if (tIdx !== -1 && users[uIdx].tasks[tIdx].timerStartedAt) {
+        const startedAt = new Date(users[uIdx].tasks[tIdx].timerStartedAt).getTime();
+        elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+        
+        users[uIdx].tasks[tIdx].timerStartedAt = null;
+        localStorage.setItem("att_users", JSON.stringify(users));
+        
+        const cur = localDb.getCurrentUser();
+        if (cur && cur.uid === userId) {
+          cur.tasks[tIdx].timerStartedAt = null;
+          localDb.setCurrentUser(cur);
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+        
+        if (elapsedMinutes > 0) {
+          const hrs = Math.floor(elapsedMinutes / 60);
+          const mins = elapsedMinutes % 60;
+          const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+          await addTaskReport(taskId, userId, pmId, `Worked for ${timeStr}`);
+        }
+      }
+    }
+  }
+};
+
+export const stopAllTaskTimers = async (userId) => {
+  if (dbType === "firebase") {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.tasks) {
+        let updated = false;
+        for (let task of userData.tasks) {
+          if (task.timerStartedAt) {
+            const startedAt = new Date(task.timerStartedAt).getTime();
+            const elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+            task.timerStartedAt = null;
+            updated = true;
+            
+            if (elapsedMinutes > 0) {
+              const hrs = Math.floor(elapsedMinutes / 60);
+              const mins = elapsedMinutes % 60;
+              const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+              await addTaskReport(task.id, userId, task.assignedBy, `Auto-stopped on check-out. Worked for ${timeStr}`);
+            }
+          }
+        }
+        if (updated) {
+          await updateDoc(userRef, { tasks: userData.tasks });
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+    }
+  } else {
+    const users = localDb.getUsers();
+    const uIdx = users.findIndex(u => u.uid === userId);
+    if (uIdx !== -1 && users[uIdx].tasks) {
+      let updated = false;
+      for (let task of users[uIdx].tasks) {
+        if (task.timerStartedAt) {
+          const startedAt = new Date(task.timerStartedAt).getTime();
+          const elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+          task.timerStartedAt = null;
+          updated = true;
+          
+          if (elapsedMinutes > 0) {
+            const hrs = Math.floor(elapsedMinutes / 60);
+            const mins = elapsedMinutes % 60;
+            const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+            await addTaskReport(task.id, userId, task.assignedBy, `Auto-stopped on check-out. Worked for ${timeStr}`);
+          }
+        }
+      }
+      if (updated) {
+        localStorage.setItem("att_users", JSON.stringify(users));
+        const cur = localDb.getCurrentUser();
+        if (cur && cur.uid === userId) {
+          cur.tasks = users[uIdx].tasks;
+          localDb.setCurrentUser(cur);
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+    }
   }
 };
 

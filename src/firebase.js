@@ -1680,6 +1680,49 @@ export const subscribeToAllMessages = (callback) => {
   }
 };
 
+
+/**
+ * Mark a thread as read (updates centralized user read receipts)
+ */
+export const markThreadAsRead = async (userId, threadId) => {
+  if (!userId || !threadId) return;
+  const timestamp = new Date().toISOString();
+  
+  if (dbType === "firebase") {
+    try {
+      const docRef = doc(db, "users", userId);
+      const updates = {};
+      updates[`teamHubReadReceipts.${threadId}`] = timestamp;
+      await updateDoc(docRef, updates);
+    } catch (e) {
+      console.warn("Failed to mark thread as read in Firebase:", e);
+    }
+  } else {
+    try {
+      const users = localDb.getUsers();
+      const idx = users.findIndex(u => u.uid === userId);
+      if (idx !== -1) {
+        if (!users[idx].teamHubReadReceipts) {
+          users[idx].teamHubReadReceipts = {};
+        }
+        users[idx].teamHubReadReceipts[threadId] = timestamp;
+        localStorage.setItem("att_users", JSON.stringify(users));
+        
+        // Ensure local current user gets the live update
+        const cur = localDb.getCurrentUser();
+        if (cur && cur.uid === userId) {
+          if (!cur.teamHubReadReceipts) cur.teamHubReadReceipts = {};
+          cur.teamHubReadReceipts[threadId] = timestamp;
+          localDb.setCurrentUser(cur);
+          notifyAuthListeners(cur);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to mark thread as read in local db:", e);
+    }
+  }
+};
+
 /**
  * Delete a message (admin moderation or sender)
  */
@@ -1821,8 +1864,8 @@ export const uploadFileToFirebase = async (file) => {
           } catch (e) {
             console.error("Failed to cancel upload task:", e);
           }
-          reject(new Error("Firebase Storage upload timed out after 20 seconds."));
-        }, 20000)
+          reject(new Error("Firebase Storage upload timed out after 5 minutes."));
+        }, 300000)
       );
 
       // Race the upload task against the timeout
@@ -1889,16 +1932,31 @@ export const uploadFileToFirebase = async (file) => {
 // ----------------------------------------------------
 
 export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
+  const timestamp = new Date().toISOString();
   const reportData = {
     taskId,
     employeeId,
     pmId,
     reportText,
-    timestamp: new Date().toISOString()
+    timestamp
   };
 
   if (dbType === "firebase") {
     await addDoc(collection(db, "task_reports"), reportData);
+    
+    // Update lastReportedAt on the user's task
+    const userRef = doc(db, "users", employeeId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.tasks) {
+        const taskIdx = userData.tasks.findIndex(t => t.id === taskId);
+        if (taskIdx !== -1) {
+          userData.tasks[taskIdx].lastReportedAt = timestamp;
+          await updateDoc(userRef, { tasks: userData.tasks });
+        }
+      }
+    }
   } else {
     const current = localStorage.getItem("att_task_reports")
       ? JSON.parse(localStorage.getItem("att_task_reports"))
@@ -1906,8 +1964,62 @@ export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
     reportData.id = "report_" + Date.now();
     current.push(reportData);
     localStorage.setItem("att_task_reports", JSON.stringify(current));
+    
+    // Update lastReportedAt locally
+    const users = localDb.getUsers();
+    const uIdx = users.findIndex(u => u.uid === employeeId);
+    if (uIdx !== -1 && users[uIdx].tasks) {
+      const tIdx = users[uIdx].tasks.findIndex(t => t.id === taskId);
+      if (tIdx !== -1) {
+        users[uIdx].tasks[tIdx].lastReportedAt = timestamp;
+        localStorage.setItem("att_users", JSON.stringify(users));
+        
+        const cur = localDb.getCurrentUser();
+        if (cur && cur.uid === employeeId) {
+          cur.tasks[tIdx].lastReportedAt = timestamp;
+          localDb.setCurrentUser(cur);
+        }
+      }
+    }
+    
     // Provide an event listener hook if we need real-time local updates
     window.dispatchEvent(new Event("local-reports-updated"));
+    window.dispatchEvent(new Event("local-auth-updated"));
+  }
+};
+
+export const updateTaskWarningSent = async (employeeId, taskId) => {
+  const timestamp = new Date().toISOString();
+  if (dbType === "firebase") {
+    const userRef = doc(db, "users", employeeId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.tasks) {
+        const taskIdx = userData.tasks.findIndex(t => t.id === taskId);
+        if (taskIdx !== -1) {
+          userData.tasks[taskIdx].lastWarningSentAt = timestamp;
+          await updateDoc(userRef, { tasks: userData.tasks });
+        }
+      }
+    }
+  } else {
+    const users = localDb.getUsers();
+    const uIdx = users.findIndex(u => u.uid === employeeId);
+    if (uIdx !== -1 && users[uIdx].tasks) {
+      const tIdx = users[uIdx].tasks.findIndex(t => t.id === taskId);
+      if (tIdx !== -1) {
+        users[uIdx].tasks[tIdx].lastWarningSentAt = timestamp;
+        localStorage.setItem("att_users", JSON.stringify(users));
+        
+        const cur = localDb.getCurrentUser();
+        if (cur && cur.uid === employeeId) {
+          cur.tasks[tIdx].lastWarningSentAt = timestamp;
+          localDb.setCurrentUser(cur);
+        }
+      }
+    }
+    window.dispatchEvent(new Event("local-auth-updated"));
   }
 };
 

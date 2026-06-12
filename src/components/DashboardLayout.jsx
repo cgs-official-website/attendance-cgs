@@ -37,7 +37,9 @@ import {
   subscribeToAttendanceRules,
   subscribeToAllMessages,
   subscribeToNotifications,
-  markNotificationRead
+  markNotificationRead,
+  createNotification,
+  updateTaskWarningSent
 } from "../firebase";
 
 export default function DashboardLayout({ children }) {
@@ -168,30 +170,59 @@ export default function DashboardLayout({ children }) {
       // Find messages not sent by the current user
       const otherMsgs = allMsgs.filter(m => m.senderId !== currentUser.uid);
 
-      // Determine unread messages based on last visited timestamp
-      const lastVisitedKey = `team_hub_last_visited_${currentUser.uid}`;
-      const lastVisited = localStorage.getItem(lastVisitedKey) || "1970-01-01T00:00:00.000Z";
-
-      if (location.pathname === "/team-hub") {
-        localStorage.setItem(lastVisitedKey, new Date().toISOString());
-        setUnreadMessagesCount(0);
-      } else {
-        const unread = otherMsgs.filter(m => new Date(m.timestamp) > new Date(lastVisited));
-        setUnreadMessagesCount(unread.length);
-      }
+      // Determine unread messages based on centralized read receipts
+      const receipts = currentUser.teamHubReadReceipts || {};
+      
+      const unread = otherMsgs.filter(m => {
+        const threadReadTime = receipts[m.threadId] || "1970-01-01T00:00:00.000Z";
+        return new Date(m.timestamp) > new Date(threadReadTime);
+      });
+      
+      setUnreadMessagesCount(unread.length);
     });
 
     return unsubscribe;
-  }, [currentUser, location.pathname]);
+  }, [currentUser]);
 
-  // Update last visited when location changes to /team-hub
+  // Check for missing hourly task reports
   useEffect(() => {
-    if (currentUser && location.pathname === "/team-hub") {
-      const lastVisitedKey = `team_hub_last_visited_${currentUser.uid}`;
-      localStorage.setItem(lastVisitedKey, new Date().toISOString());
-      setUnreadMessagesCount(0);
-    }
-  }, [location.pathname, currentUser]);
+    if (!currentUser || !currentUser.tasks || currentUser.tasks.length === 0) return;
+
+    // Check every minute
+    const interval = setInterval(() => {
+      const activeTasks = currentUser.tasks.filter(t => !t.completed);
+      const now = Date.now();
+      
+      activeTasks.forEach(async (task) => {
+        const lastActionTime = new Date(task.lastReportedAt || task.assignedAt).getTime();
+        const hoursSinceAction = (now - lastActionTime) / (1000 * 60 * 60);
+        
+        // If more than 2 hours passed since last report/assignment
+        if (hoursSinceAction > 2) {
+          const lastWarningTime = task.lastWarningSentAt ? new Date(task.lastWarningSentAt).getTime() : 0;
+          const hoursSinceWarning = (now - lastWarningTime) / (1000 * 60 * 60);
+          
+          // Only send warning if we haven't sent one in the last 2 hours
+          if (hoursSinceWarning > 2) {
+            try {
+              await createNotification(
+                currentUser.uid,
+                "Missing Hourly Report",
+                `Reminder: You have not submitted an hourly update for task "${task.title}" in over 2 hours!`,
+                "warning",
+                "/dashboard?tab=tasks"
+              );
+              await updateTaskWarningSent(currentUser.uid, task.id);
+            } catch (err) {
+              console.error("Failed to send task warning notification", err);
+            }
+          }
+        }
+      });
+    }, 60000); // 1 minute interval
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   const handleOpenNotifications = () => {
     setShowNotifications(!showNotifications);

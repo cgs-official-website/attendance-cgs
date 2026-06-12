@@ -19,10 +19,11 @@ import {
   subscribeToDmThreads,
   deleteChatMessage,
   getAllRegisteredUsers,
+  subscribeToAllMessages,
   uploadFileToFirebase,
-  subscribeToAllMessages
+  markThreadAsRead
 } from "../firebase";
-import { formatFileSize, getFileIcon, initGoogleAuth } from "../utils/googleDrive";
+import { formatFileSize, getFileIcon } from "../utils/fileUtils";
 
 // ─── Helpers ─────────────────────────────────────────────────
 const getInitials = (name = "") =>
@@ -102,12 +103,14 @@ function FileCard({ file }) {
       rel={isDataUrl ? undefined : "noopener noreferrer"}
       onClick={handleOpenFile}
       style={{ cursor: "pointer" }}
-      className="inline-flex items-center gap-2 px-3 py-2 mt-1 rounded-[10px] border border-border-card bg-bg-base hover:bg-bg-card hover:border-brand-primary/30 transition-all group max-w-[260px]"
+      className="flex items-center gap-2 w-full max-w-[260px] px-3 py-2 mt-1 rounded-[10px] border border-border-card bg-bg-base hover:bg-bg-card hover:border-brand-primary/30 transition-all group overflow-hidden"
     >
-      <span className="text-xl flex-shrink-0">{icon}</span>
-      <div className="flex flex-col min-w-0">
-        <span className="text-xs font-semibold text-text-main truncate max-w-[180px]">{file.name}</span>
-        <span className="text-[10px] text-text-mut">{formatFileSize(file.size)}</span>
+      <span className="flex-shrink-0 flex items-center justify-center text-xl">
+        {icon}
+      </span>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="text-xs font-semibold text-text-main truncate block w-full">{file.name}</span>
+        <span className="text-[10px] text-text-mut truncate block w-full">{formatFileSize(file.size)}</span>
       </div>
       <ExternalLink size={12} className="text-text-mut group-hover:text-brand-primary flex-shrink-0 ml-auto" />
     </a>
@@ -181,8 +184,8 @@ function MessageInput({ onSend, placeholder, disabled }) {
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 35 * 1024 * 1024) {
-      showToast("File must be under 35MB", "error");
+    if (file.size > 40 * 1024 * 1024) {
+      showToast("File must be under 40MB", "error");
       return;
     }
     setPendingFile(file);
@@ -218,7 +221,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
   };
 
   return (
-    <div className="px-4 py-3 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
+    <div className="px-4 pt-3 pb-20 md:pb-6 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
       {pendingFile && (
         <div className={`mb-2 flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-[8px] text-xs font-semibold text-brand-primary ${uploading ? "animate-pulse" : ""}`}>
           {uploading ? (
@@ -244,7 +247,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           className="flex-shrink-0 p-1 text-text-mut hover:text-brand-primary transition-colors cursor-pointer"
-          title="Attach file (max 35MB)"
+          title="Attach file (max 40MB)"
         >
           <Paperclip size={16} />
         </button>
@@ -283,7 +286,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
         </button>
       </div>
       <p className="text-[10px] text-text-mut text-center mt-1.5">
-        Press Enter to send · Shift+Enter for new line · Files uploaded to Google Drive
+        Press Enter to send · Shift+Enter for new line · Files uploaded securely to the cloud
       </p>
     </div>
   );
@@ -453,9 +456,9 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
     
     const unsub = subscribeToMessages(thread.id, (msgs) => {
       setMessages(msgs);
-      // Update read receipt locally
-      if (thread.id) {
-        localStorage.setItem(`team_hub_read_${currentUser.uid}_${thread.id}`, new Date().toISOString());
+      // Update read receipt dynamically
+      if (thread.id && currentUser?.uid) {
+        markThreadAsRead(currentUser.uid, thread.id);
       }
     });
     return unsub;
@@ -602,11 +605,6 @@ export default function TeamHub() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [allMessages, setAllMessages]     = useState([]);
 
-  // Init Google Auth
-  useEffect(() => {
-    initGoogleAuth().catch(() => {}); // silent fail if GIS not loaded yet
-  }, []);
-
   // Subscribe to channels
   useEffect(() => {
     const unsub = subscribeToChannels(setChannels);
@@ -634,11 +632,13 @@ export default function TeamHub() {
 
   // Compute unread count helper
   const getUnreadCount = useCallback((threadId) => {
-    const lastRead = localStorage.getItem(`team_hub_read_${currentUser?.uid}_${threadId}`) || "1970-01-01T00:00:00.000Z";
+    const receipts = currentUser?.teamHubReadReceipts || {};
+    const lastRead = receipts[threadId] || "1970-01-01T00:00:00.000Z";
+    
     return allMessages.filter(
       m => m.threadId === threadId && m.senderId !== currentUser?.uid && new Date(m.timestamp) > new Date(lastRead)
     ).length;
-  }, [allMessages, currentUser?.uid]);
+  }, [allMessages, currentUser?.uid, currentUser?.teamHubReadReceipts]);
 
   const handleJoinChannel = async (ch) => {
     setJoiningId(ch.id);

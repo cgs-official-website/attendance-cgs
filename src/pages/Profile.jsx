@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { updateUserRecord } from "../firebase";
+import { updateUserRecord, uploadFileToFirebase } from "../firebase";
 import { User, Mail, Shield, ShieldAlert, Award, Clock, Save, Building } from "lucide-react";
 
 export default function Profile() {
@@ -76,18 +76,23 @@ export default function Profile() {
     fileInputRef.current.click();
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
         return showToast("Image size must be less than 2MB.", "warning");
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result);
-        showToast("Profile picture selected. Click 'Save Settings' to upload.", "info");
-      };
-      reader.readAsDataURL(file);
+      try {
+        setLoading(true);
+        showToast("Uploading profile picture to cloud...", "info");
+        const fileData = await uploadFileToFirebase(file);
+        setAvatar(fileData.url);
+        showToast("Profile picture uploaded to cloud. Click 'Save Settings' to save.", "success");
+      } catch (err) {
+        showToast("Failed to upload image: " + err.message, "error");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 

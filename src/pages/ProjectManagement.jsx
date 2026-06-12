@@ -81,12 +81,15 @@ export default function ProjectManagement() {
 
     try {
       if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", selectedUserForTeam), { project: targetProject });
+        const updates = { project: targetProject };
+        if (currentUser.role === "admin") updates.isProjectManager = true;
+        await updateDoc(doc(db, "users", selectedUserForTeam), updates);
       } else {
         const users = JSON.parse(localStorage.getItem("att_users"));
         const idx = users.findIndex(u => u.uid === selectedUserForTeam);
         if (idx !== -1) {
           users[idx].project = targetProject;
+          if (currentUser.role === "admin") users[idx].isProjectManager = true;
           localStorage.setItem("att_users", JSON.stringify(users));
           window.dispatchEvent(new Event("local-auth-updated"));
         }

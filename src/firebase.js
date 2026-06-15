@@ -152,7 +152,7 @@ export const getDbType = () => dbType;
 /**
  * Register a new user
  */
-export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", project = "", tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "") => {
+export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "") => {
   const role = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : "user";
   
   if (dbType === "firebase") {
@@ -190,7 +190,7 @@ export const registerUser = async (name, department, programType, email, passwor
       createdAt: new Date().toISOString(),
       dob,
       joiningDate,
-      project,
+      projects,
       tasks,
       jobType,
       designation,
@@ -222,7 +222,7 @@ export const registerUser = async (name, department, programType, email, passwor
       createdAt: new Date().toISOString(),
       dob,
       joiningDate,
-      project,
+      projects,
       tasks,
       jobType,
       designation,
@@ -333,40 +333,52 @@ export const logoutUser = async () => {
  */
 export const onAuthUserChanged = (callback) => {
   if (dbType === "firebase") {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeSnapshot = null;
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
       if (firebaseUser) {
-        // Fetch Firestore profile
-        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (userDoc.exists()) {
-          callback(userDoc.data());
-        } else {
-          // Default fallbacks and automatic profile synchronization
-          const role = firebaseUser.email === "admin@teamcarrezza.com" ? "admin" : "user";
-          const fallbackData = {
-            uid: firebaseUser.uid,
-            name: firebaseUser.displayName || firebaseUser.email.split("@")[0] || "User",
-            email: firebaseUser.email,
-            role,
-            department: "Engineering",
-            programType: "Internship",
-            createdAt: new Date().toISOString()
-          };
-          
-          // Auto-sync write to Firestore
-          setDoc(doc(db, "users", firebaseUser.uid), fallbackData)
-            .then(() => {
-              console.log("Auto-synchronized missing Firestore user profile document.");
-            })
-            .catch((err) => {
-              console.warn("Could not auto-synchronize missing user document:", err);
-            });
+        unsubscribeSnapshot = onSnapshot(doc(db, "users", firebaseUser.uid), (userDoc) => {
+          if (userDoc.exists()) {
+            callback(userDoc.data());
+          } else {
+            // Default fallbacks and automatic profile synchronization
+            const role = firebaseUser.email === "admin@teamcarrezza.com" ? "admin" : "user";
+            const fallbackData = {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email.split("@")[0] || "User",
+              email: firebaseUser.email,
+              role,
+              department: "Engineering",
+              programType: "Internship",
+              createdAt: new Date().toISOString()
+            };
+            
+            // Auto-sync write to Firestore
+            setDoc(doc(db, "users", firebaseUser.uid), fallbackData)
+              .then(() => {
+                console.log("Auto-synchronized missing Firestore user profile document.");
+              })
+              .catch((err) => {
+                console.warn("Could not auto-synchronize missing user document:", err);
+              });
 
-          callback(fallbackData);
-        }
+            callback(fallbackData);
+          }
+        }, (error) => {
+          console.error("Firestore user onSnapshot failed:", error);
+        });
       } else {
         callback(null);
       }
     });
+
+    return () => {
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+      unsubscribeAuth();
+    };
   } else {
     authListeners.add(callback);
     // Initial trigger
@@ -789,7 +801,7 @@ export const getAllRegisteredUsers = async () => {
 /**
  * Update a user record (Admin edit user)
  */
-export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar, dob, joiningDate, project, tasks, jobType, designation, isProjectManager, employeeId) => {
+export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar, dob, joiningDate, projects, tasks, jobType, designation, isProjectManager, employeeId) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", uid);
     const updates = {
@@ -805,7 +817,7 @@ export const updateUserRecord = async (uid, name, department, programType, shift
     if (avatar !== undefined) updates.avatar = avatar;
     if (dob !== undefined) updates.dob = dob;
     if (joiningDate !== undefined) updates.joiningDate = joiningDate;
-    if (project !== undefined) updates.project = project;
+    if (projects !== undefined) updates.projects = projects;
     if (tasks !== undefined) updates.tasks = tasks;
     if (jobType !== undefined) updates.jobType = jobType;
     if (designation !== undefined) updates.designation = designation;
@@ -830,7 +842,7 @@ export const updateUserRecord = async (uid, name, department, programType, shift
       if (avatar !== undefined) updatedData.avatar = avatar;
       if (dob !== undefined) updatedData.dob = dob;
       if (joiningDate !== undefined) updatedData.joiningDate = joiningDate;
-      if (project !== undefined) updatedData.project = project;
+      if (projects !== undefined) updatedData.projects = projects;
       if (tasks !== undefined) updatedData.tasks = tasks;
       if (jobType !== undefined) updatedData.jobType = jobType;
       if (designation !== undefined) updatedData.designation = designation;
@@ -856,7 +868,7 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         if (avatar !== undefined) updatedUser.avatar = avatar;
         if (dob !== undefined) updatedUser.dob = dob;
         if (joiningDate !== undefined) updatedUser.joiningDate = joiningDate;
-        if (project !== undefined) updatedUser.project = project;
+        if (projects !== undefined) updatedUser.projects = projects;
         if (tasks !== undefined) updatedUser.tasks = tasks;
         if (jobType !== undefined) updatedUser.jobType = jobType;
         if (designation !== undefined) updatedUser.designation = designation;
@@ -2223,9 +2235,10 @@ export const updateTaskWarningSent = async (employeeId, taskId) => {
 
 export const subscribeToTaskReports = (taskId, callback) => {
   if (dbType === "firebase") {
-    const q = query(collection(db, "task_reports"), where("taskId", "==", taskId), orderBy("timestamp", "asc"));
+    const q = query(collection(db, "task_reports"), where("taskId", "==", taskId));
     return onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       callback(list);
     });
   } else {
@@ -2272,9 +2285,10 @@ export const createNotification = async (userId, title, message, type = "info", 
 
 export const subscribeToNotifications = (userId, callback) => {
   if (dbType === "firebase") {
-    const q = query(collection(db, "notifications"), where("userId", "==", userId), orderBy("timestamp", "desc"));
+    const q = query(collection(db, "notifications"), where("userId", "==", userId));
     return onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       callback(list);
     });
   } else {

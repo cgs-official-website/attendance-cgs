@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext"; // Vite cache bust
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
@@ -6,7 +7,7 @@ import { db, getDbType, createNotification, subscribeToTaskReports } from "../fi
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download } from "lucide-react";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 
 export default function ProjectManagement() {
@@ -22,6 +23,7 @@ export default function ProjectManagement() {
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
   const [selectedUserForTeam, setSelectedUserForTeam] = useState("");
   const [adminProjectInput, setAdminProjectInput] = useState("");
+  const [filterProject, setFilterProject] = useState("All");
   
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskTargetUser, setTaskTargetUser] = useState(null);
@@ -48,7 +50,12 @@ export default function ProjectManagement() {
         if (currentUser.role === "admin") {
           setTeamMembers(users.filter(u => u.role !== "admin"));
         } else {
-          setTeamMembers(users.filter(u => u.project === currentUser.project && u.uid !== currentUser.uid));
+          const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
+          setTeamMembers(users.filter(u => {
+            if (u.uid === currentUser.uid) return false;
+            const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
+            return uProjects.some(p => currentUserProjects.includes(p));
+          }));
         }
         
         // Update taskTargetUser if it's currently selected
@@ -68,7 +75,12 @@ export default function ProjectManagement() {
         if (currentUser.role === "admin") {
           setTeamMembers(users.filter(u => u.role !== "admin"));
         } else {
-          setTeamMembers(users.filter(u => u.project === currentUser.project && u.uid !== currentUser.uid));
+          const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
+          setTeamMembers(users.filter(u => {
+            if (u.uid === currentUser.uid) return false;
+            const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
+            return uProjects.some(p => currentUserProjects.includes(p));
+          }));
         }
         
         if (taskTargetUser) {
@@ -125,7 +137,7 @@ export default function ProjectManagement() {
       return;
     }
 
-    doc.autoTable({
+    autoTable(doc, {
       head: [["Employee", "Task Details", "Status", "Duration/Date"]],
       body: tableData,
       startY: 20,
@@ -179,19 +191,30 @@ export default function ProjectManagement() {
     e.preventDefault();
     if (!selectedUserForTeam) return showToast("Please select a user", "warning");
     
-    const targetProject = currentUser.role === "admin" ? adminProjectInput : currentUser.project;
-    if (!targetProject) return showToast("Please specify a project", "warning");
+    const targetProjects = currentUser.role === "admin" 
+      ? adminProjectInput.split(',').map(s=>s.trim()).filter(Boolean)
+      : (currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []));
+      
+    if (!targetProjects.length) return showToast("Please specify a project", "warning");
 
     try {
       if (getDbType() === "firebase") {
-        const updates = { project: targetProject };
+        const u = allUsers.find(user => user.uid === selectedUserForTeam);
+        const currentProjects = u?.projects?.length ? u.projects : (u?.project ? [u.project] : []);
+        const newProjects = [...new Set([...currentProjects, ...targetProjects])];
+        
+        const updates = { projects: newProjects, project: newProjects[0] || "" };
         if (currentUser.role === "admin") updates.isProjectManager = true;
         await updateDoc(doc(db, "users", selectedUserForTeam), updates);
       } else {
         const users = JSON.parse(localStorage.getItem("att_users"));
         const idx = users.findIndex(u => u.uid === selectedUserForTeam);
         if (idx !== -1) {
-          users[idx].project = targetProject;
+          const currentProjects = users[idx].projects?.length ? users[idx].projects : (users[idx].project ? [users[idx].project] : []);
+          const newProjects = [...new Set([...currentProjects, ...targetProjects])];
+          
+          users[idx].projects = newProjects;
+          users[idx].project = newProjects[0] || "";
           if (currentUser.role === "admin") users[idx].isProjectManager = true;
           localStorage.setItem("att_users", JSON.stringify(users));
           window.dispatchEvent(new Event("local-auth-updated"));
@@ -210,11 +233,12 @@ export default function ProjectManagement() {
     showConfirm("Remove Team Member", `Are you sure you want to remove ${member.name} from the project?`, async () => {
       try {
         if (getDbType() === "firebase") {
-          await updateDoc(doc(db, "users", member.uid), { project: "", tasks: [] });
+          await updateDoc(doc(db, "users", member.uid), { projects: [], project: "", tasks: [] });
         } else {
           const users = JSON.parse(localStorage.getItem("att_users"));
           const idx = users.findIndex(u => u.uid === member.uid);
           if (idx !== -1) {
+            users[idx].projects = [];
             users[idx].project = "";
             users[idx].tasks = [];
             localStorage.setItem("att_users", JSON.stringify(users));
@@ -344,14 +368,24 @@ export default function ProjectManagement() {
     }, { confirmText: "Delete", cancelText: "Cancel" });
   };
 
-  const filteredTeam = teamMembers.filter(m => 
-    m.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    m.designation?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const uniqueProjects = Array.from(new Set(teamMembers.flatMap(m => m.projects?.length ? m.projects : (m.project ? [m.project] : [])))).filter(Boolean);
+
+  const filteredTeam = teamMembers.filter(m => {
+    const matchesSearch = m.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          m.designation?.toLowerCase().includes(searchQuery.toLowerCase());
+    const mProjects = m.projects?.length ? m.projects : (m.project ? [m.project] : []);
+    const matchesProject = filterProject === "All" || mProjects.includes(filterProject);
+    return matchesSearch && matchesProject;
+  });
 
   const availableUsersToAdd = currentUser?.role === "admin"
     ? allUsers.filter(u => u.uid !== currentUser?.uid && u.role !== "admin")
-    : allUsers.filter(u => u.project !== currentUser?.project && u.uid !== currentUser?.uid && u.role !== "admin");
+    : allUsers.filter(u => {
+        if (u.uid === currentUser?.uid || u.role === "admin") return false;
+        const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
+        const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
+        return !uProjects.some(p => currentUserProjects.includes(p));
+      });
 
   if (!currentUser?.isProjectManager && currentUser?.role !== "admin") {
     return (
@@ -369,7 +403,7 @@ export default function ProjectManagement() {
           <h1 className="text-2xl font-black text-text-main tracking-tight">Project Management</h1>
           <p className="text-sm text-text-mut font-medium mt-1">
             {currentUser?.role === "admin" ? "Managing All Projects & Tasks" : (
-              <>Managing Team for: <span className="font-bold text-brand-primary">{currentUser.project || "Unassigned"}</span></>
+              <>Managing Team for: <span className="font-bold text-brand-primary">{(currentUser.projects && currentUser.projects.length > 0) ? currentUser.projects.join(', ') : (currentUser.project || "Unassigned")}</span></>
             )}
           </p>
         </div>
@@ -402,6 +436,18 @@ export default function ProjectManagement() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm inset-shadow-sm"
             />
+          </div>
+          <div className="relative w-full sm:max-w-[200px] mt-2 sm:mt-0">
+            <select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              className="w-full px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+            >
+              <option value="All">All Projects</option>
+              {uniqueProjects.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -458,8 +504,12 @@ export default function ProjectManagement() {
                       </td>
                       {currentUser?.role === "admin" && (
                         <td className="p-4 text-xs font-medium text-text-main">
-                          {member.project ? (
-                            <span className="px-2 py-1 bg-brand-primary/10 text-brand-primary rounded-[6px]">{member.project}</span>
+                          {member.projects && member.projects.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {member.projects.map(p => <span key={p} className="px-2 py-1 bg-brand-primary/10 text-brand-primary text-[10px] rounded-[6px]">{p}</span>)}
+                            </div>
+                          ) : member.project ? (
+                            <span className="px-2 py-1 bg-brand-primary/10 text-brand-primary text-[10px] rounded-[6px]">{member.project}</span>
                           ) : (
                             <span className="text-text-mut">Unassigned</span>
                           )}
@@ -520,7 +570,7 @@ export default function ProjectManagement() {
       </div>
 
       {/* Add Team Member Modal */}
-      {showAddTeamModal && (
+      {showAddTeamModal && createPortal(
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
@@ -570,11 +620,12 @@ export default function ProjectManagement() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Manage Tasks Modal */}
-      {showTaskModal && taskTargetUser && (
+      {showTaskModal && taskTargetUser && createPortal(
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
           <div className="w-full max-w-[600px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4 flex-shrink-0">
@@ -697,11 +748,12 @@ export default function ProjectManagement() {
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit Team Member Modal */}
-      {showEditMemberModal && memberToEdit && (
+      {showEditMemberModal && memberToEdit && createPortal(
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
@@ -741,48 +793,56 @@ export default function ProjectManagement() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Project Reports Modal */}
-      {showReportsModal && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
-          <div className="w-full max-w-[800px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b border-border-card pb-4 gap-4 flex-shrink-0">
-              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
-                <FileText size={18} className="text-brand-primary" />
+      {showReportsModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-[800px] bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            <button 
+              onClick={() => setShowReportsModal(false)} 
+              className="absolute top-4 right-4 p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base hover:bg-bg-card rounded-[8px] transition-colors z-10"
+            >
+              <X size={16} />
+            </button>
+            
+            <div className="flex flex-col items-center justify-center mb-5 border-b border-border-card pb-5 gap-3 flex-shrink-0 relative mt-2">
+              <h3 className="font-bold text-xl text-text-main flex items-center justify-center gap-2 text-center w-full">
+                <FileText size={20} className="text-brand-primary" />
                 Project Reports
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-3 w-full flex-wrap">
                 <button 
                   onClick={handleDownloadPDF}
-                  className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
                 >
-                  <Download size={13} />
-                  <span>PDF</span>
+                  <Download size={14} />
+                  <span>Download PDF</span>
                 </button>
                 <button 
                   onClick={handleDownloadExcel}
-                  className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="py-2 px-4 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
                 >
-                  <Download size={13} />
-                  <span>Excel</span>
+                  <Download size={14} />
+                  <span>Download Excel</span>
                 </button>
-                <button onClick={() => setShowReportsModal(false)} className="p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base rounded-[8px]"><X size={16} /></button>
               </div>
             </div>
             
             <div className="overflow-auto pr-2 custom-scrollbar flex-grow">
-              <table className="w-full min-w-[600px] text-left border-collapse">
-                <thead>
-                  <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
-                    <th className="p-3 font-bold">Employee</th>
-                    <th className="p-3 font-bold text-center">Task Title</th>
-                    <th className="p-3 font-bold text-center">Status</th>
-                    <th className="p-3 font-bold text-right">Est. Hours</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <div className="min-w-[500px]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                      <th className="p-3 font-bold w-1/4">Employee</th>
+                      <th className="p-3 font-bold w-1/2">Task Title</th>
+                      <th className="p-3 font-bold text-center w-auto">Status</th>
+                      <th className="p-3 font-bold text-right whitespace-nowrap">Est. Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                   {teamMembers.flatMap(m => (m.tasks || []).map(t => ({...t, employeeName: m.name}))).length === 0 ? (
                     <tr>
                       <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found in this project.</td>
@@ -824,7 +884,9 @@ export default function ProjectManagement() {
             </div>
           </div>
         </div>
-      )}
+      </div>,
+      document.body
+    )}
 
     </div>
   );

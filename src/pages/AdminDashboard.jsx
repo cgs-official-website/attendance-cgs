@@ -1103,7 +1103,7 @@ export default function AdminDashboard() {
 
     setActionLoading(true);
     try {
-      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject, [], newJobType, newDesignation, newIsProjectManager);
+      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, newIsProjectManager);
       showToast(`Employee ${newName} registered successfully.`, "success");
       setShowAddModal(false);
       
@@ -1142,7 +1142,7 @@ export default function AdminDashboard() {
     setEditCasual(user.casualLeaves !== undefined ? user.casualLeaves : 6);
     setEditDob(user.dob || "");
     setEditJoiningDate(user.joiningDate || "");
-    setEditProject(user.project || "");
+    setEditProject(user.projects ? user.projects.join(', ') : (user.project || ""));
     setEditJobType(user.jobType || "Full-time");
     setEditDesignation(user.designation || "");
     setEditTasks(user.tasks || []);
@@ -1177,7 +1177,7 @@ export default function AdminDashboard() {
         undefined, // avatar
         editDob,
         editJoiningDate,
-        editProject,
+        editProject.split(',').map(s=>s.trim()).filter(Boolean),
         editTasks,
         editJobType,
         editDesignation,
@@ -1197,7 +1197,7 @@ export default function AdminDashboard() {
         casualLeaves: editCasual,
         dob: editDob,
         joiningDate: editJoiningDate,
-        project: editProject,
+        projects: editProject.split(',').map(s=>s.trim()).filter(Boolean),
         tasks: editTasks,
         jobType: editJobType,
         designation: editDesignation
@@ -3064,7 +3064,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
                   <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Assigned Project</span>
-                  <span className="text-sm font-bold text-text-main">{selectedUser.project || "—"}</span>
+                  <span className="text-sm font-bold text-text-main">{(selectedUser.projects && selectedUser.projects.length > 0) ? selectedUser.projects.join(', ') : (selectedUser.project || "—")}</span>
                 </div>
                 <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
                   <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Date of Birth</span>
@@ -3274,13 +3274,13 @@ export default function AdminDashboard() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Assigned Project</label>
+                <label className="text-xs font-bold text-text-sec">Assigned Projects (comma separated)</label>
                 <input 
                   type="text" 
                   className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
                   value={newProject}
                   onChange={(e) => setNewProject(e.target.value)}
-                  placeholder="e.g. Website Redesign"
+                  placeholder="e.g. Website Redesign, Mobile App"
                 />
               </div>
 
@@ -3515,13 +3515,13 @@ export default function AdminDashboard() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Assigned Project</label>
+                <label className="text-xs font-bold text-text-sec">Assigned Projects (comma separated)</label>
                 <input 
                   type="text" 
                   className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
                   value={editProject}
                   onChange={(e) => setEditProject(e.target.value)}
-                  placeholder="e.g. Website Redesign"
+                  placeholder="e.g. Website Redesign, Mobile App"
                 />
               </div>
 

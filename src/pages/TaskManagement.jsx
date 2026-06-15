@@ -214,7 +214,7 @@ export default function TaskManagement() {
         <div>
           <h1 className="text-2xl font-black text-text-main tracking-tight">Task Management</h1>
           <p className="text-sm text-text-mut font-medium mt-1">
-            Your current project: <span className="font-bold text-brand-primary">{currentUser.project || "Unassigned"}</span>
+            Your current projects: <span className="font-bold text-brand-primary">{(currentUser.projects && currentUser.projects.length > 0) ? currentUser.projects.join(', ') : (currentUser.project || "Unassigned")}</span>
           </p>
         </div>
         <button 

@@ -162,6 +162,39 @@ export default function DashboardLayout({ children }) {
     setNewUpdatesCount(unseenCount);
   }, [leaveRequestsList, dismissedNotifs, currentUser]);
 
+  const [unreadMessagesData, setUnreadMessagesData] = useState({ count: 0, latestTime: 0 });
+  const [clearedItems, setClearedItems] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`cleared_items_${currentUser?.uid}`)) || {}; }
+    catch { return {}; }
+  });
+
+  const activeProjects = currentUser?.projects || (currentUser?.project ? [currentUser.project] : []);
+  const activeTasks = (currentUser?.tasks || []).filter(t => !t.completed);
+
+  // Clear badges when visiting the respective routes
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    let newCleared = null;
+
+    if (location.pathname === "/team-hub" && unreadMessagesData.latestTime > (clearedItems.teamHubTime || 0)) {
+      newCleared = { teamHubTime: unreadMessagesData.latestTime };
+    } else if (location.pathname === "/task-management") {
+      const taskIds = activeTasks.map(t => t.id).sort().join(",");
+      if (clearedItems.tasks !== taskIds) newCleared = { tasks: taskIds };
+    } else if (location.pathname === "/project-management") {
+      const projIds = activeProjects.sort().join(",");
+      if (clearedItems.projects !== projIds) newCleared = { projects: projIds };
+    }
+
+    if (newCleared) {
+      setClearedItems(prev => {
+        const updated = { ...prev, ...newCleared };
+        localStorage.setItem(`cleared_items_${currentUser.uid}`, JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [location.pathname, currentUser?.uid, unreadMessagesData.latestTime, activeTasks, activeProjects, clearedItems]);
+
   // Subscribe to all chat messages for notification counts
   useEffect(() => {
     if (!currentUser) return;
@@ -178,7 +211,8 @@ export default function DashboardLayout({ children }) {
         return new Date(m.timestamp) > new Date(threadReadTime);
       });
       
-      setUnreadMessagesCount(unread.length);
+      const latestTime = unread.length > 0 ? Math.max(...unread.map(m => new Date(m.timestamp).getTime())) : 0;
+      setUnreadMessagesData({ count: unread.length, latestTime });
     });
 
     return unsubscribe;
@@ -331,6 +365,11 @@ export default function DashboardLayout({ children }) {
   const isAdmin = currentUser?.role === "admin";
   const activeTabParam = searchParams.get("tab") || "live";
 
+  const activeTasksCount = currentUser?.tasks?.filter(t => !t.completed)?.length || 0;
+  const showTeamHubBadge = unreadMessagesData.count > 0 && unreadMessagesData.latestTime > (clearedItems.teamHubTime || 0);
+  const showTasksBadge = activeTasks.length > 0 && clearedItems.tasks !== activeTasks.map(t => t.id).sort().join(",");
+  const showProjectsBadge = activeProjects.length > 0 && clearedItems.projects !== activeProjects.sort().join(",");
+
   // Sidebar navigation items
   const menuItems = isAdmin ? [
     {
@@ -352,10 +391,12 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/admin?tab=users"); setIsMobileOpen(false); }
     },
     {
-      label: "Leave Requests",
-      icon: Calendar,
-      active: location.pathname === "/admin" && activeTabParam === "logs",
-      onClick: () => { navigate("/admin?tab=logs"); setIsMobileOpen(false); }
+      label: "Leave Approval",
+      icon: CalendarIcon,
+      active: location.pathname === "/leave-approval",
+      hidden: !isAdmin,
+      badge: newUpdatesCount > 0 ? newUpdatesCount : null,
+      onClick: () => { navigate("/leave-approval"); setIsMobileOpen(false); }
     },
     {
       label: "Notice Board",
@@ -367,7 +408,7 @@ export default function DashboardLayout({ children }) {
       label: "Team Hub",
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
-      badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
+      badge: location.pathname === "/team-hub" ? null : (showTeamHubBadge ? unreadMessagesData.count : null),
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
@@ -380,12 +421,14 @@ export default function DashboardLayout({ children }) {
       label: "Project Management",
       icon: Briefcase,
       active: location.pathname === "/project-management",
+      badge: location.pathname === "/project-management" ? null : (isAdmin ? null : (showProjectsBadge ? activeProjects.length : null)),
       onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
     },
     {
       label: "Task Management",
       icon: CheckSquare,
       active: location.pathname === "/task-management",
+      badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
       onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
     },
     {
@@ -411,7 +454,7 @@ export default function DashboardLayout({ children }) {
       label: "Team Hub",
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
-      badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
+      badge: location.pathname === "/team-hub" ? null : (showTeamHubBadge ? unreadMessagesData.count : null),
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
@@ -419,12 +462,14 @@ export default function DashboardLayout({ children }) {
       icon: Briefcase,
       active: location.pathname === "/project-management",
       hidden: !currentUser?.isProjectManager,
+      badge: location.pathname === "/project-management" ? null : (showProjectsBadge ? activeProjects.length : null),
       onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
     },
     {
       label: "Task Management",
       icon: CheckSquare,
       active: location.pathname === "/task-management",
+      badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
       onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
     },
     {

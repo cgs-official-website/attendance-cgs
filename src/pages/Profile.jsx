@@ -47,7 +47,7 @@ export default function Profile() {
         avatar,
         dob,
         currentUser.joiningDate,
-        currentUser.project,
+        currentUser.projects || (currentUser.project ? [currentUser.project] : []),
         currentUser.tasks,
         currentUser.jobType,
         currentUser.designation

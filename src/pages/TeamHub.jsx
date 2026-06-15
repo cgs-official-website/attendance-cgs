@@ -99,7 +99,7 @@ function FileCard({ file }) {
 
   return (
     <a
-      href={isDataUrl ? undefined : file.url}
+      href={isDataUrl ? undefined : (file.url?.startsWith("http") ? file.url : `https://${file.url}`)}
       target={isDataUrl ? undefined : "_blank"}
       rel={isDataUrl ? undefined : "noopener noreferrer"}
       onClick={handleOpenFile}
@@ -264,6 +264,24 @@ function MessageInput({ onSend, placeholder, disabled }) {
             }
           }}
           onKeyDown={handleKeyDown}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+              if (items[i].type.indexOf("image") !== -1 || items[i].type.indexOf("video") !== -1 || items[i].kind === "file") {
+                const file = items[i].getAsFile();
+                if (file) {
+                  if (file.size > 40 * 1024 * 1024) {
+                    showToast("File must be under 40MB", "error");
+                    return;
+                  }
+                  setPendingFile(file);
+                  e.preventDefault();
+                  break;
+                }
+              }
+            }
+          }}
           placeholder={placeholder}
           rows={1}
           disabled={disabled || uploading}

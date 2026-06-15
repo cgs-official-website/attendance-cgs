@@ -2009,7 +2009,8 @@ export const uploadFileToFirebase = async (file) => {
         maxWidthOrHeight: 1280,
         useWebWorker: true
       };
-      fileToUpload = await imageCompression(file, options);
+      const compressedBlob = await imageCompression(file, options);
+      fileToUpload = new File([compressedBlob], file.name, { type: compressedBlob.type || file.type });
     } catch (error) {
       console.warn("Image compression failed, uploading original file:", error);
     }

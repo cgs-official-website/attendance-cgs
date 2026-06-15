@@ -64,7 +64,8 @@ export const uploadFileToB2 = async (file) => {
     await s3Client.send(command);
 
     // B2 path-style public URL: https://s3.us-west-004.backblazeb2.com/bucketname/files/filename
-    const publicUrl = `${endpoint}/${bucketName}/${uniqueFileName}`;
+    const baseUrl = endpoint.startsWith("http") ? endpoint : `https://${endpoint}`;
+    const publicUrl = `${baseUrl}/${bucketName}/${uniqueFileName}`;
     
     return {
       id: uniqueFileName,

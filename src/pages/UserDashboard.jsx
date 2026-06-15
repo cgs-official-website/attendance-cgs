@@ -142,6 +142,26 @@ export default function UserDashboard() {
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
+  const isWithinShiftHours = () => {
+    if (!currentUser.shiftStart || !currentUser.shiftEnd) return true;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const getMinutes = (timeStr) => {
+      if (!timeStr) return 0;
+      const [hours, minutes] = timeStr.split(":").map(Number);
+      return hours * 60 + minutes;
+    };
+
+    const startMinutes = getMinutes(currentUser.shiftStart);
+    const endMinutes = getMinutes(currentUser.shiftEnd);
+
+    if (endMinutes < startMinutes) {
+      return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+    }
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+  };
+
   const isForgotToCheckIn = (() => {
     if (currentUser.role === "admin") return false;
     if (todayLog) return false;
@@ -157,7 +177,7 @@ export default function UserDashboard() {
     const shiftStartToday = new Date(currentTime);
     shiftStartToday.setHours(startH, startM, 0, 0);
     
-    return currentTime > shiftStartToday;
+    return currentTime > shiftStartToday && isWithinShiftHours();
   })();
 
   useEffect(() => {
@@ -178,26 +198,6 @@ export default function UserDashboard() {
     const formattedHours = hours % 12 === 0 ? 12 : hours % 12;
     const formattedMinutes = String(minutes).padStart(2, "0");
     return `${formattedHours}:${formattedMinutes} ${ampm}`;
-  };
-
-  const isWithinShiftHours = () => {
-    if (!currentUser.shiftStart || !currentUser.shiftEnd) return true;
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    const getMinutes = (timeStr) => {
-      if (!timeStr) return 0;
-      const [hours, minutes] = timeStr.split(":").map(Number);
-      return hours * 60 + minutes;
-    };
-
-    const startMinutes = getMinutes(currentUser.shiftStart);
-    const endMinutes = getMinutes(currentUser.shiftEnd);
-
-    if (endMinutes < startMinutes) {
-      return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
-    }
-    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
   };
 
   // Ticking time effect
@@ -1343,14 +1343,16 @@ export default function UserDashboard() {
 
           {/* Top check in Shortcut */}
           {!todayLog ? (
-            <button
-              onClick={handleCheckIn}
-              disabled={actionLoading || fetchingGps}
-              className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[10px] flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-            >
-              <Play size={12} fill="#fff" />
-              <span>check in</span>
-            </button>
+            isWithinShiftHours() ? (
+              <button
+                onClick={handleCheckIn}
+                disabled={actionLoading || fetchingGps}
+                className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[10px] flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Play size={12} fill="#fff" />
+                <span>check in</span>
+              </button>
+            ) : null
           ) : todayLog.status === "checked-in" ? (
             <div className="flex items-center gap-3">
               <span className="text-xs font-mono font-bold text-brand-primary bg-brand-primary/10 px-2.5 py-1.5 rounded-[8px] animate-pulse">

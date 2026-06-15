@@ -29,6 +29,7 @@ import {
 import { getDownloadURL, uploadBytesResumable, ref as storageRef, deleteObject } from "firebase/storage";
 import { getStorage } from "firebase/storage";
 import { uploadFileToB2, isB2Configured } from "./utils/b2Storage";
+import imageCompression from 'browser-image-compression';
 
 // Firebase Configuration
 // Replace these with your actual Firebase project settings
@@ -2000,8 +2001,22 @@ export const getAllDmThreadsAdmin = async () => {
  * @returns {Promise<{ id: string, name: string, url: string, mimeType: string, size: number }>}
  */
 export const uploadFileToFirebase = async (file) => {
+  let fileToUpload = file;
+  if (file.type && file.type.startsWith('image/')) {
+    try {
+      const options = {
+        maxSizeMB: 0.8,
+        maxWidthOrHeight: 1280,
+        useWebWorker: true
+      };
+      fileToUpload = await imageCompression(file, options);
+    } catch (error) {
+      console.warn("Image compression failed, uploading original file:", error);
+    }
+  }
+
   if (isB2Configured()) {
-    return await uploadFileToB2(file);
+    return await uploadFileToB2(fileToUpload);
   }
 
   if (dbType === "firebase") {
@@ -2011,12 +2026,12 @@ export const uploadFileToFirebase = async (file) => {
       }
       // Generate a unique path/filename
       const uniqueId = Math.random().toString(36).substring(2, 11) + "_" + Date.now();
-      const fileExtension = file.name.split(".").pop() || "bin";
+      const fileExtension = fileToUpload.name ? fileToUpload.name.split(".").pop() : "bin";
       const filePath = `chat_files/${uniqueId}.${fileExtension}`;
       const fileRef = storageRef(storage, filePath);
       
       // Upload bytes with resumable task so we can cancel it on timeout
-      const uploadTask = uploadBytesResumable(fileRef, file);
+      const uploadTask = uploadBytesResumable(fileRef, fileToUpload);
       
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => {
@@ -2037,15 +2052,15 @@ export const uploadFileToFirebase = async (file) => {
       
       return {
         id: uniqueId,
-        name: file.name,
+        name: fileToUpload.name || "image.jpg",
         url: downloadUrl,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size
+        mimeType: fileToUpload.type || "application/octet-stream",
+        size: fileToUpload.size
       };
     } catch (storageError) {
       console.warn("Firebase Storage upload failed, falling back to local Base64 upload:", storageError);
       // Fallback to base64 encoding if file is small enough to fit in Firestore (Firestore limit is 1MB)
-      if (file.size > 800 * 1024) {
+      if (fileToUpload.size > 800 * 1024) {
         throw new Error("File is too large to upload. Please select an image under 800KB.");
       }
       return new Promise((resolve, reject) => {
@@ -2053,17 +2068,17 @@ export const uploadFileToFirebase = async (file) => {
         reader.onloadend = () => {
           resolve({
             id: "fb-fallback-" + Date.now(),
-            name: file.name,
+            name: fileToUpload.name || "image.jpg",
             url: reader.result, // base64 data URL
-            mimeType: file.type || "application/octet-stream",
-            size: file.size,
+            mimeType: fileToUpload.type || "application/octet-stream",
+            size: fileToUpload.size,
             isFallback: true
           });
         };
         reader.onerror = (err) => {
           reject(new Error("Failed to read file locally: " + err.message));
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(fileToUpload);
       });
     }
   } else {
@@ -2073,17 +2088,17 @@ export const uploadFileToFirebase = async (file) => {
       reader.onloadend = () => {
         resolve({
           id: "local-" + Date.now(),
-          name: file.name,
+          name: fileToUpload.name || "image.jpg",
           url: reader.result, // base64 data URL
-          mimeType: file.type || "application/octet-stream",
-          size: file.size,
+          mimeType: fileToUpload.type || "application/octet-stream",
+          size: fileToUpload.size,
           isLocal: true
         });
       };
       reader.onerror = (err) => {
         reject(new Error("Failed to read file locally: " + err.message));
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(fileToUpload);
     });
   }
 };

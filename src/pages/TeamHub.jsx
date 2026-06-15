@@ -97,10 +97,32 @@ function FileCard({ file }) {
   };
 
   const isDataUrl = file.url && file.url.startsWith("data:");
+  let displayUrl = file.url;
+  if (!isDataUrl && displayUrl) {
+    if (!displayUrl.startsWith("http")) displayUrl = `https://${displayUrl}`;
+    
+    // Retroactively fix old S3 URLs in the database to B2 native URLs
+    if (displayUrl.includes("s3.") && displayUrl.includes(".backblazeb2.com") && !displayUrl.includes("/file/")) {
+      try {
+        const urlObj = new URL(displayUrl);
+        const parts = urlObj.hostname.split("s3.")[1].split(".")[0];
+        const regionNum = parts.split("-").pop();
+        urlObj.hostname = `f${regionNum}.backblazeb2.com`;
+        
+        // Ensure path starts with /file/
+        const pathSegments = urlObj.pathname.split("/").filter(Boolean);
+        urlObj.pathname = `/file/${pathSegments.join("/")}`;
+        
+        displayUrl = urlObj.toString();
+      } catch (err) {
+        // ignore parsing errors
+      }
+    }
+  }
 
   return (
     <a
-      href={isDataUrl ? undefined : (file.url?.startsWith("http") ? file.url : `https://${file.url}`)}
+      href={isDataUrl ? undefined : displayUrl}
       target={isDataUrl ? undefined : "_blank"}
       rel={isDataUrl ? undefined : "noopener noreferrer"}
       onClick={handleOpenFile}
@@ -155,7 +177,7 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
             {msg.text}
           </div>
         )}
-        {msg.fileData && <FileCard file={msg.fileData} />}
+        {/* {msg.fileData && <FileCard file={msg.fileData} />} */}
       </div>
 
       {/* Message actions */}
@@ -224,7 +246,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
 
   return (
     <div className="px-4 pt-3 pb-20 md:pb-6 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
-      {pendingFile && (
+      {/* pendingFile && (
         <div className={`mb-2 flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-[8px] text-xs font-semibold text-brand-primary ${uploading ? "animate-pulse" : ""}`}>
           {uploading ? (
             <RefreshCw size={14} className="animate-spin text-brand-primary" />
@@ -243,9 +265,9 @@ function MessageInput({ onSend, placeholder, disabled }) {
             </button>
           )}
         </div>
-      )}
+      ) */}
       <div className="flex items-end gap-2 bg-bg-base rounded-[12px] border border-border-card px-3 py-2 focus-within:border-brand-primary/50 transition-colors">
-        <button
+        {/* <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           className="flex-shrink-0 p-1 text-text-mut hover:text-brand-primary transition-colors cursor-pointer"
@@ -253,7 +275,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
         >
           <Paperclip size={16} />
         </button>
-        <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} /> */}
         <textarea
           ref={textRef}
           value={text}
@@ -265,7 +287,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
             }
           }}
           onKeyDown={handleKeyDown}
-          onPaste={(e) => {
+          /* onPaste={(e) => {
             const items = e.clipboardData?.items;
             if (!items) return;
             for (let i = 0; i < items.length; i++) {
@@ -282,7 +304,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
                 }
               }
             }
-          }}
+          }} */
           placeholder={placeholder}
           rows={1}
           disabled={disabled || uploading}

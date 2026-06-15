@@ -392,7 +392,7 @@ export default function DashboardLayout({ children }) {
     },
     {
       label: "Leave Approval",
-      icon: CalendarIcon,
+      icon: Calendar,
       active: location.pathname === "/leave-approval",
       hidden: !isAdmin,
       badge: newUpdatesCount > 0 ? newUpdatesCount : null,

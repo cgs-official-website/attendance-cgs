@@ -1886,6 +1886,27 @@ export const markThreadAsRead = async (userId, threadId) => {
 };
 
 /**
+ * Delete a message only for the current user
+ */
+export const deleteChatMessageForMe = async (messageId, userId) => {
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "messages", messageId), { deletedFor: arrayUnion(userId) });
+  } else {
+    const messages = getLocalMessages();
+    const idx = messages.findIndex(m => m.id === messageId);
+    if (idx !== -1) {
+      if (!messages[idx].deletedFor) messages[idx].deletedFor = [];
+      if (!messages[idx].deletedFor.includes(userId)) {
+        messages[idx].deletedFor.push(userId);
+      }
+      saveLocalMessages(messages);
+      Object.values(messageListeners).forEach(set => set.forEach(cb => cb()));
+      notifyAllMessagesListeners();
+    }
+  }
+};
+
+/**
  * Delete a message (admin moderation or sender)
  */
 export const deleteChatMessage = async (messageId) => {

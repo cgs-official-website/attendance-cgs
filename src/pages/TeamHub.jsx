@@ -19,6 +19,7 @@ import {
   getOrCreateDmThread,
   subscribeToDmThreads,
   deleteChatMessage,
+  deleteChatMessageForMe,
   getAllRegisteredUsers,
   subscribeToAllMessages,
   uploadFileToFirebase,
@@ -456,6 +457,7 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
 // ─── Messages Thread Panel ────────────────────────────────────
 function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
   const [messages, setMessages] = useState([]);
+  const [messageToDelete, setMessageToDelete] = useState(null);
   const bottomRef = useRef(null);
   const { showToast } = useToast();
   const prevThreadIdRef = useRef(null);
@@ -527,12 +529,25 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
     }
   };
 
-  const handleDelete = async (msgId) => {
+  const handleDeleteClick = (msgId) => {
+    setMessageToDelete(msgId);
+  };
+
+  const confirmDelete = async (type) => {
+    if (!messageToDelete) return;
+    const msgId = messageToDelete;
+    setMessageToDelete(null);
+
     try {
-      // Optimistic removal — hide immediately
+      // Optimistic removal
       setMessages(prev => prev.filter(m => m.id !== msgId));
-      await deleteChatMessage(msgId);
-      showToast("Message deleted", "success");
+      if (type === "everyone") {
+        await deleteChatMessage(msgId);
+        showToast("Message deleted for everyone", "success");
+      } else {
+        await deleteChatMessageForMe(msgId, currentUser.uid);
+        showToast("Message deleted for you", "success");
+      }
     } catch (err) {
       showToast("Failed to delete message", "error");
     }
@@ -552,9 +567,11 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
     );
   }
 
-  const grouped = messages.reduce((acc, msg) => {
-    const date = new Date(msg.timestamp).toDateString();
-    if (!acc[date]) acc[date] = [];
+  const grouped = messages
+    .filter(msg => !(msg.deletedFor && msg.deletedFor.includes(currentUser.uid)))
+    .reduce((acc, msg) => {
+      const date = new Date(msg.timestamp).toDateString();
+      if (!acc[date]) acc[date] = [];
     acc[date].push(msg);
     return acc;
   }, {});
@@ -576,7 +593,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
                 msg={msg}
                 currentUserId={currentUser.uid}
                 isAdmin={isAdmin}
-                onDelete={handleDelete}
+                onDelete={handleDeleteClick}
               />
             ))}
           </div>
@@ -596,11 +613,47 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
       </div>
 
       {/* Input */}
-      <MessageInput
-        onSend={handleSend}
-        placeholder={thread.type === "channel" ? `Message #${thread.displayName || thread.name}` : `Message ${thread.otherUserName}`}
-        disabled={false}
-      />
+      <div className="flex-shrink-0">
+        <MessageInput
+          onSend={handleSend}
+          placeholder={thread.type === "channel" ? `Message #${thread.displayName || thread.name}` : `Message ${thread.otherUserName}`}
+          disabled={false}
+        />
+      </div>
+
+      {/* Delete Message Modal */}
+      {messageToDelete && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-bg-card border border-border-card rounded-[16px] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-4 border-b border-border-card bg-bg-base/50">
+              <h3 className="text-sm font-bold text-text-main flex items-center gap-2">
+                <Trash2 size={16} className="text-red-500" />
+                Delete Message?
+              </h3>
+            </div>
+            <div className="p-4 flex flex-col gap-2">
+              <button
+                onClick={() => confirmDelete("me")}
+                className="w-full py-2.5 px-4 text-sm font-semibold bg-bg-base hover:bg-red-500/10 text-red-500 border border-border-card rounded-[10px] transition-colors cursor-pointer"
+              >
+                Delete for me
+              </button>
+              <button
+                onClick={() => confirmDelete("everyone")}
+                className="w-full py-2.5 px-4 text-sm font-semibold bg-red-500 hover:bg-red-600 text-white rounded-[10px] shadow-sm transition-colors cursor-pointer"
+              >
+                Delete for everyone
+              </button>
+              <button
+                onClick={() => setMessageToDelete(null)}
+                className="w-full py-2.5 px-4 text-sm font-semibold text-text-main hover:bg-bg-base rounded-[10px] transition-colors mt-1 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

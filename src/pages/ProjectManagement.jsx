@@ -25,6 +25,10 @@ export default function ProjectManagement() {
   const [adminProjectInput, setAdminProjectInput] = useState("");
   const [filterProject, setFilterProject] = useState("All");
   
+  const [selectedPmProjects, setSelectedPmProjects] = useState([]);
+  const [adminEditProjectsInput, setAdminEditProjectsInput] = useState("");
+  const [editProjects, setEditProjects] = useState([]);
+  
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskTargetUser, setTaskTargetUser] = useState(null);
   
@@ -40,6 +44,8 @@ export default function ProjectManagement() {
   const [showMemberReportsModal, setShowMemberReportsModal] = useState(false);
   const [selectedMemberForReports, setSelectedMemberForReports] = useState(null);
   const [allTaskReports, setAllTaskReports] = useState({});
+
+  const pmProjects = currentUser?.projects?.length ? currentUser.projects : (currentUser?.project ? [currentUser.project] : []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -195,7 +201,7 @@ export default function ProjectManagement() {
     
     const targetProjects = currentUser.role === "admin" 
       ? adminProjectInput.split(',').map(s=>s.trim()).filter(Boolean)
-      : (currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []));
+      : selectedPmProjects;
       
     if (!targetProjects.length) return showToast("Please specify a project", "warning");
 
@@ -226,6 +232,7 @@ export default function ProjectManagement() {
       setShowAddTeamModal(false);
       setSelectedUserForTeam("");
       setAdminProjectInput("");
+      setSelectedPmProjects([]);
     } catch (err) {
       showToast("Failed to add member", "error");
     }
@@ -257,19 +264,42 @@ export default function ProjectManagement() {
   const openEditMemberModal = (member) => {
     setMemberToEdit(member);
     setEditDesignation(member.designation || member.jobType || "");
+    const currentMemberProjects = member.projects?.length ? member.projects : (member.project ? [member.project] : []);
+    if (currentUser?.role === "admin") {
+      setAdminEditProjectsInput(currentMemberProjects.join(", "));
+    } else {
+      const sharedProjects = currentMemberProjects.filter(p => pmProjects.includes(p));
+      setEditProjects(sharedProjects);
+    }
     setShowEditMemberModal(true);
   };
 
   const handleSaveMemberEdit = async (e) => {
     e.preventDefault();
     try {
+      let updatedProjects = [];
+      const currentProjects = memberToEdit.projects?.length ? memberToEdit.projects : (memberToEdit.project ? [memberToEdit.project] : []);
+      
+      if (currentUser.role === "admin") {
+        updatedProjects = adminEditProjectsInput.split(',').map(s=>s.trim()).filter(Boolean);
+      } else {
+        const nonPmProjects = currentProjects.filter(p => !pmProjects.includes(p));
+        updatedProjects = [...new Set([...nonPmProjects, ...editProjects])];
+      }
+
       if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", memberToEdit.uid), { designation: editDesignation });
+        await updateDoc(doc(db, "users", memberToEdit.uid), { 
+          designation: editDesignation,
+          projects: updatedProjects,
+          project: updatedProjects[0] || ""
+        });
       } else {
         const users = JSON.parse(localStorage.getItem("att_users"));
         const idx = users.findIndex(u => u.uid === memberToEdit.uid);
         if (idx !== -1) {
           users[idx].designation = editDesignation;
+          users[idx].projects = updatedProjects;
+          users[idx].project = updatedProjects[0] || "";
           localStorage.setItem("att_users", JSON.stringify(users));
           window.dispatchEvent(new Event("local-auth-updated"));
         }
@@ -418,7 +448,10 @@ export default function ProjectManagement() {
             <span>Project Reports</span>
           </button>
           <button 
-            onClick={() => setShowAddTeamModal(true)}
+            onClick={() => {
+              setSelectedPmProjects(pmProjects.length > 0 ? [pmProjects[0]] : []);
+              setShowAddTeamModal(true);
+            }}
             className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2.5 px-5 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-primary/20 hover:shadow-brand-primary/40 cursor-pointer"
           >
             <UserPlus size={16} />
@@ -592,7 +625,7 @@ export default function ProjectManagement() {
             <form onSubmit={handleAddTeamMember} className="space-y-4">
               {currentUser?.role === "admin" && (
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Project Name</label>
+                  <label className="text-xs font-bold text-text-sec">Project Name (comma-separated for multiple)</label>
                   <input 
                     type="text" 
                     placeholder="Enter project name..."
@@ -601,6 +634,33 @@ export default function ProjectManagement() {
                     onChange={(e) => setAdminProjectInput(e.target.value)}
                     required
                   />
+                </div>
+              )}
+              {currentUser?.role !== "admin" && pmProjects.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Assign to Projects</label>
+                  <div className="flex flex-wrap gap-3 mt-1 p-2 bg-bg-base/30 border border-border-card rounded-[12px]">
+                    {pmProjects.map(p => (
+                      <label key={p} className="flex items-center gap-1.5 text-xs text-text-main cursor-pointer hover:text-brand-primary transition-colors">
+                        <input 
+                          type="checkbox"
+                          checked={selectedPmProjects.includes(p)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPmProjects([...selectedPmProjects, p]);
+                            } else {
+                              setSelectedPmProjects(selectedPmProjects.filter(proj => proj !== p));
+                            }
+                          }}
+                          className="accent-brand-primary w-3.5 h-3.5 cursor-pointer"
+                        />
+                        {p}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedPmProjects.length === 0 && (
+                    <p className="text-[10px] text-brand-warning mt-1">Please select at least one project.</p>
+                  )}
                 </div>
               )}
               <div className="flex flex-col gap-1">
@@ -622,7 +682,7 @@ export default function ProjectManagement() {
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-border-card mt-4">
                 <button type="button" onClick={() => setShowAddTeamModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
-                <button type="submit" disabled={!selectedUserForTeam || (currentUser?.role === "admin" && !adminProjectInput)} className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
+                <button type="submit" disabled={!selectedUserForTeam || (currentUser?.role === "admin" && !adminProjectInput) || (currentUser?.role !== "admin" && selectedPmProjects.length === 0)} className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
                   {currentUser?.role === "admin" ? "Assign Project" : "Add Member"}
                 </button>
               </div>
@@ -793,6 +853,42 @@ export default function ProjectManagement() {
                   required
                 />
               </div>
+              
+              {currentUser?.role === "admin" ? (
+                <div className="flex flex-col gap-1 mt-3">
+                  <label className="text-xs font-bold text-text-sec">Assigned Projects (comma-separated)</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={adminEditProjectsInput}
+                    onChange={(e) => setAdminEditProjectsInput(e.target.value)}
+                  />
+                </div>
+              ) : pmProjects.length > 0 ? (
+                <div className="flex flex-col gap-1 mt-3">
+                  <label className="text-xs font-bold text-text-sec">Manage Assigned Projects</label>
+                  <div className="flex flex-wrap gap-3 mt-1 p-2 bg-bg-base/30 border border-border-card rounded-[12px]">
+                    {pmProjects.map(p => (
+                      <label key={p} className="flex items-center gap-1.5 text-xs text-text-main cursor-pointer hover:text-brand-primary transition-colors">
+                        <input 
+                          type="checkbox"
+                          checked={editProjects.includes(p)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditProjects([...editProjects, p]);
+                            } else {
+                              setEditProjects(editProjects.filter(proj => proj !== p));
+                            }
+                          }}
+                          className="accent-brand-primary w-3.5 h-3.5 cursor-pointer"
+                        />
+                        {p}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="flex justify-end gap-3 pt-4 border-t border-border-card mt-4">
                 <button type="button" onClick={() => setShowEditMemberModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
                 <button type="submit" className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer">

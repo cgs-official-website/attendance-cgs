@@ -37,6 +37,8 @@ export default function ProjectManagement() {
   const [editDesignation, setEditDesignation] = useState("");
 
   const [showReportsModal, setShowReportsModal] = useState(false);
+  const [showMemberReportsModal, setShowMemberReportsModal] = useState(false);
+  const [selectedMemberForReports, setSelectedMemberForReports] = useState(null);
   const [allTaskReports, setAllTaskReports] = useState({});
 
   useEffect(() => {
@@ -97,7 +99,7 @@ export default function ProjectManagement() {
   }, [currentUser, taskTargetUser?.uid]);
 
   useEffect(() => {
-    if (showReportsModal && teamMembers.length > 0) {
+    if ((showReportsModal || showMemberReportsModal) && teamMembers.length > 0) {
       const allTaskIds = teamMembers.flatMap(m => (m.tasks || []).map(t => t.id));
       const unsubs = [];
       const newReports = {};
@@ -497,7 +499,13 @@ export default function ProjectManagement() {
                             ) : member.name ? member.name.substring(0,2) : "?"}
                           </div>
                           <div>
-                            <div className="font-bold text-sm text-text-main">{member.name}</div>
+                            <div 
+                              className="font-bold text-sm text-text-main cursor-pointer hover:text-brand-primary hover:underline transition-colors"
+                              onClick={() => { setSelectedMemberForReports(member); setShowMemberReportsModal(true); }}
+                              title="View Member Reports"
+                            >
+                              {member.name}
+                            </div>
                             <div className="text-[10px] text-text-sec">{member.email}</div>
                           </div>
                         </div>
@@ -865,6 +873,79 @@ export default function ProjectManagement() {
                         {allTaskReports[task.id] && allTaskReports[task.id].length > 0 && (
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30">
+                              <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
+                                {allTaskReports[task.id].map(r => (
+                                  <div key={r.id} className="text-[10px]">
+                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
+                                    <span className="text-text-main ml-2">{r.reportText}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
+      {/* Specific Member Reports Modal */}
+      {showMemberReportsModal && selectedMemberForReports && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-[700px] bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            <button 
+              onClick={() => { setShowMemberReportsModal(false); setSelectedMemberForReports(null); }} 
+              className="absolute top-4 right-4 p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base hover:bg-bg-card rounded-[8px] transition-colors z-10"
+            >
+              <X size={16} />
+            </button>
+            
+            <div className="flex flex-col items-center justify-center mb-5 border-b border-border-card pb-5 gap-3 flex-shrink-0 relative mt-2">
+              <h3 className="font-bold text-xl text-text-main flex items-center justify-center gap-2 text-center w-full">
+                <FileText size={20} className="text-brand-primary" />
+                Reports: {selectedMemberForReports.name}
+              </h3>
+            </div>
+            
+            <div className="overflow-auto pr-2 custom-scrollbar flex-grow">
+              <div className="min-w-[500px]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                      <th className="p-3 font-bold w-1/2">Task Title</th>
+                      <th className="p-3 font-bold text-center w-auto">Status</th>
+                      <th className="p-3 font-bold text-right whitespace-nowrap">Est. Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  {(!selectedMemberForReports.tasks || selectedMemberForReports.tasks.length === 0) ? (
+                    <tr>
+                      <td colSpan="3" className="p-6 text-center text-xs text-text-mut">No tasks assigned.</td>
+                    </tr>
+                  ) : (
+                    selectedMemberForReports.tasks.map((task, idx) => (
+                      <React.Fragment key={task.id || idx}>
+                        <tr className="border-b border-border-card/50">
+                          <td className="p-3 text-xs font-bold text-text-main">{task.title}</td>
+                          <td className="p-3 text-xs text-center">
+                            {task.completed ? (
+                              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
+                            ) : (
+                              <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-xs font-bold text-text-main text-right">{task.duration || 0}h</td>
+                        </tr>
+                        {allTaskReports[task.id] && allTaskReports[task.id].length > 0 && (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="3" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
                                 {allTaskReports[task.id].map(r => (
                                   <div key={r.id} className="text-[10px]">

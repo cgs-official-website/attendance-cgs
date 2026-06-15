@@ -208,6 +208,35 @@ export default function TaskManagement() {
     XLSX.writeFile(wb, `My_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleDownloadSingleTaskPDF = (task) => {
+    const doc = new jsPDF();
+    doc.text(`Task Report: ${task.title}`, 14, 15);
+    
+    const tableData = [];
+    const status = task.completed ? "Done" : "Active";
+    tableData.push([task.title, status, `${task.duration || 0}h`]);
+    
+    const reports = taskReports[task.id] || [];
+    reports.forEach(r => {
+      tableData.push(["", `Report: ${r.reportText}`, new Date(r.timestamp).toLocaleDateString()]);
+    });
+
+    if (reports.length === 0) {
+      showToast("No reports to export for this task", "warning");
+      return;
+    }
+
+    doc.autoTable({
+      head: [["Task Details", "Status", "Duration/Date"]],
+      body: tableData,
+      startY: 20,
+      styles: { fontSize: 9 },
+      columnStyles: { 0: { cellWidth: 100 } }
+    });
+    
+    doc.save(`Task_Report_${task.title.replace(/\s+/g, '_').substring(0,10)}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="animate-fade-in pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -376,7 +405,17 @@ export default function TaskManagement() {
                 <Play size={18} className="text-brand-primary" fill="currentColor" />
                 Hourly Update
               </h3>
-              <button onClick={() => setShowReportModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleDownloadSingleTaskPDF(selectedTask)}
+                  className="py-1.5 px-3 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Download Task Report"
+                >
+                  <Download size={13} />
+                  <span>Download</span>
+                </button>
+                <button onClick={() => setShowReportModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+              </div>
             </div>
             
             <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar space-y-4 pb-4">

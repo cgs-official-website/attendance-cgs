@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import {
   checkIn,
   checkOut,
@@ -721,7 +722,6 @@ export default function UserDashboard() {
   const longBreakPercent = (longBreakBalance / 1800) * 100;
 
   const weeklyHoursData = getWeeklyHours();
-  const maxWeeklyHours = Math.max(8, ...weeklyHoursData.map(d => d.hours));
   const recentActivities = getRecentActivitiesList();
 
   if (loading) {
@@ -1656,45 +1656,38 @@ export default function UserDashboard() {
             </div>
 
             {/* Bars chart */}
-            <div className="flex items-end justify-around h-[160px] border-b border-border-card pb-2 pt-4 px-2">
-              {weeklyHoursData.map((d, idx) => {
-                const barPercent = Math.max(4, Math.min(100, Math.round((d.hours / maxWeeklyHours) * 100)));
-                return (
-                  <div key={idx} className="flex flex-col items-center gap-1.5 w-8 relative group">
-                    {/* Tooltip */}
-                    <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-2 bg-slate-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow pointer-events-none transition-opacity duration-150 whitespace-nowrap z-10">
-                      {d.hours} hrs
-                    </div>
-
-                    {/* Bar Container with fixed height */}
-                    <div className="w-4 h-28 flex items-end bg-slate-100 dark:bg-slate-800/40 rounded-t-sm overflow-hidden">
-                      <div
-                        className={`w-full rounded-t-sm transition-all duration-500 relative overflow-hidden ${d.active
-                          ? "bg-brand-primary"
-                          : d.hours > 0 ? "bg-brand-primary/60" : "bg-slate-200/50 dark:bg-slate-700/30"
-                          }`}
-                        style={{ height: `${barPercent}%` }}
-                      >
-                        {/* Shimmer for active bar */}
-                        {d.active && (
-                          <span
-                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent"
-                            style={{ animation: "shimmer 2s infinite" }}
-                          />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Label */}
-                    <span className={`text-[10px] font-extrabold tracking-tight ${d.active ? "text-brand-primary" : "text-text-sec"}`}>
-                      {d.label}
-                    </span>
-                  </div>
-                );
-              })}
+            <div className="h-[200px] w-full pt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyHoursData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                  <XAxis 
+                    dataKey="label" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} 
+                    dy={10} 
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} 
+                  />
+                  <Tooltip 
+                    cursor={{ fill: '#f1f5f9', opacity: 0.1 }}
+                    contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value) => [`${value} hrs`, 'Worked']}
+                    labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+                  />
+                  <Bar dataKey="hours" radius={[4, 4, 0, 0]} maxBarSize={30}>
+                    {weeklyHoursData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.active ? '#4f46e5' : (entry.hours > 0 ? '#818cf8' : '#e2e8f0')} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
-
 
 
           {/* Leave Card Balances Row */}

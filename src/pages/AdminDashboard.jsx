@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
 const getBase64ImageFromUrl = async (imageUrl) => {
   const res = await fetch(imageUrl);
   const blob = await res.blob();
@@ -2645,24 +2646,37 @@ export default function AdminDashboard() {
                 <p className="text-[10px] text-text-mut font-semibold mb-6">Total number of unique employees checked-in per day</p>
                 
                 {/* Chart body */}
-                <div className="flex items-end justify-around h-[200px] border-b border-border-card pb-2 pt-6">
-                  {dailyStats.map((d, idx) => {
-                    const barPercent = Math.max(6, Math.round((d.count / maxDailyCount) * 100));
-                    return (
-                      <div key={idx} className="flex flex-col items-center gap-2 group w-12">
-                        <div className="opacity-0 group-hover:opacity-100 absolute transform -translate-y-12 bg-slate-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow pointer-events-none transition-opacity duration-150">
-                          {d.count} present
-                        </div>
-                        
-                        <div 
-                          className="w-5 rounded-t-sm bg-brand-primary hover:bg-brand-hover transition-all duration-300 relative overflow-hidden"
-                          style={{ height: `${barPercent}%` }}
-                        />
-                        
-                        <span className="text-[10px] font-bold text-text-sec tracking-tight">{d.dateLabel}</span>
-                      </div>
-                    );
-                  })}
+                <div className="h-[200px] w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dailyStats} margin={{ top: 15, right: 0, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.2} />
+                      <XAxis 
+                        dataKey="dateLabel" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} 
+                        dy={10} 
+                      />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} 
+                        allowDecimals={false}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: '#f1f5f9', opacity: 0.1 }}
+                        contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
+                        itemStyle={{ color: '#fff' }}
+                        formatter={(value) => [`${value} present`, 'Attendance']}
+                        labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+                      />
+                      <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        {dailyStats.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#4f46e5' : '#e2e8f0'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 
@@ -2674,35 +2688,45 @@ export default function AdminDashboard() {
                 </h4>
                 <p className="text-[10px] text-text-mut font-semibold mb-6">Percentage of checked-in staff out of registered domain members today</p>
                 
-                <div className="space-y-4">
-                  {deptStats.map((d, idx) => {
-                    let rateColor = "bg-brand-success";
-                    let badgeColor = "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
-                    if (d.rate < 40) {
-                      rateColor = "bg-brand-danger";
-                      badgeColor = "bg-red-500/10 text-red-500 border-red-500/20";
-                    } else if (d.rate < 80) {
-                      rateColor = "bg-brand-warning";
-                      badgeColor = "bg-amber-500/10 text-amber-500 border-amber-500/20";
-                    }
-
-                    return (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex justify-between items-center text-xs font-bold">
-                          <span className="text-text-main">{d.department}</span>
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full border ${badgeColor}`}>
-                            {d.rate}% ({d.present}/{d.total})
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className={`${rateColor} h-full rounded-full transition-all duration-500`}
-                            style={{ width: `${d.rate}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={deptStats} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#334155" opacity={0.1} />
+                      <XAxis type="number" domain={[0, 100]} hide />
+                      <YAxis 
+                        dataKey="department" 
+                        type="category" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 11, fill: '#475569', fontWeight: 'bold' }} 
+                        width={80}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: '#f1f5f9', opacity: 0.1 }}
+                        contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
+                        itemStyle={{ color: '#fff' }}
+                        labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+                        formatter={(value, name, props) => {
+                          const d = props.payload;
+                          return [`${value}% (${d.present}/${d.total})`, 'Attendance Rate'];
+                        }}
+                      />
+                      <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={24} background={{ fill: '#f1f5f9' }}>
+                        {deptStats.map((entry, index) => {
+                          let fill = '#10b981'; // success
+                          if (entry.rate < 40) fill = '#ef4444'; // danger
+                          else if (entry.rate < 80) fill = '#f59e0b'; // warning
+                          return <Cell key={`cell-${index}`} fill={fill} />;
+                        })}
+                        <LabelList 
+                          dataKey="rate" 
+                          position="right" 
+                          formatter={(value) => `${value}%`} 
+                          style={{ fontSize: '10px', fontWeight: 'bold', fill: '#64748b' }} 
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 

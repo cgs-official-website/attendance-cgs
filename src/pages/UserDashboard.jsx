@@ -11,7 +11,8 @@ import {
   requestLeave,
   subscribeToPaidLeaves,
   subscribeToLeaveRequests,
-  getAllRegisteredUsers
+  getAllRegisteredUsers,
+  stopTaskTimer
 } from "../firebase";
 import {
   Play,
@@ -39,7 +40,8 @@ import {
   MessageSquare,
   Cake,
   Newspaper,
-  Check
+  Check,
+  Activity
 } from "lucide-react";
 
 export default function UserDashboard() {
@@ -1187,6 +1189,22 @@ export default function UserDashboard() {
               </div>
             </div>
 
+            {/* Task Management Shortcut */}
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-left cursor-pointer hover:border-brand-primary/50 hover:shadow-md transition-all group" onClick={() => navigate("/task-management")}>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-extrabold text-base text-text-main tracking-tight flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-[10px] bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                    <Target size={16} />
+                  </div>
+                  <span>Task Management</span>
+                </h3>
+                <ChevronRight size={16} className="text-text-mut group-hover:text-brand-primary transition-colors" />
+              </div>
+              <p className="text-xs text-text-sec font-semibold leading-relaxed mt-1">
+                View your pending tasks, update progress, and collaborate on projects.
+              </p>
+            </div>
+
             {/* Policy Reminders Card */}
             <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-left">
               <h3 className="font-extrabold text-base text-text-main tracking-tight mb-3 flex items-center gap-2">
@@ -1706,6 +1724,44 @@ export default function UserDashboard() {
 
         {/* Right pane: GPS tracking details & Activity Log */}
         <div className="space-y-8">
+
+          {/* Card: Active Tasks */}
+          {currentUser.tasks && currentUser.tasks.some(t => t.timerStartedAt && !t.completed) && (
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
+              <h3 className="font-extrabold text-base text-text-main tracking-tight mb-4 flex items-center gap-2">
+                <Activity size={18} className="text-brand-primary" />
+                Active Tasks
+              </h3>
+              <div className="space-y-3">
+                {currentUser.tasks.filter(t => t.timerStartedAt && !t.completed).map(task => {
+                  return (
+                    <div key={task.id} className="p-3 bg-bg-base/30 border border-border-card rounded-[16px]">
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-bold text-sm text-text-main pr-2">{task.title}</h4>
+                        <button
+                          onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
+                          className="flex-shrink-0 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-1.5 rounded-[8px] transition-colors"
+                          title="Stop Timer"
+                        >
+                          <Square size={14} fill="currentColor" />
+                        </button>
+                      </div>
+                      <div className="text-xs font-bold text-brand-primary flex items-center gap-1 animate-pulse">
+                        <Clock size={12} />
+                        {(() => {
+                           const elapsed = Math.floor((currentTime.getTime() - new Date(task.timerStartedAt).getTime()) / 1000);
+                           const h = Math.floor(elapsed / 3600);
+                           const m = Math.floor((elapsed % 3600) / 60);
+                           const s = elapsed % 60;
+                           return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Card 1: GPS Coordinates Card */}
           <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">

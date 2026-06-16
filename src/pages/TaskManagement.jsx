@@ -5,8 +5,9 @@ import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestor
 import { db, getDbType, createNotification, addTaskReport, subscribeToTaskReports, startTaskTimer, stopTaskTimer } from "../firebase";
 import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity } from "lucide-react";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import logoImg from '../assets/zuna-logo.png';
 
 export default function TaskManagement() {
   const { currentUser } = useAuth();
@@ -142,19 +143,79 @@ export default function TaskManagement() {
   const activeTasks = tasks.filter(t => !t.completed);
   const completedTasks = tasks.filter(t => t.completed);
 
-  const handleDownloadPDF = () => {
+  const calculateTimeSpent = (reports) => {
+    if (!reports || reports.length === 0) return 0;
+    let totalMinutes = 0;
+    reports.forEach(r => {
+      const matchH = r.reportText.match(/(\d+)\s*h/i);
+      const matchM = r.reportText.match(/(\d+)\s*m/i);
+      if (matchH) totalMinutes += parseInt(matchH[1], 10) * 60;
+      if (matchM) totalMinutes += parseInt(matchM[1], 10);
+    });
+    return totalMinutes / 60; // returns hours
+  };
+
+  const handleDownloadPDF = async () => {
     const doc = new jsPDF();
-    doc.text("My Task Reports", 14, 15);
+    
+    const img = new Image();
+    img.src = logoImg;
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve; 
+    });
+
+    let startY = 20;
+    if (img.complete && img.naturalWidth > 0) {
+      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
+      startY = 40;
+    }
+    
+    // Main Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(79, 70, 229);
+    doc.text("My Task Reports", img.complete ? 45 : 14, 20);
+    
+    // Header Info
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Employee:", img.complete ? 45 : 14, 27);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${currentUser.name}`, img.complete ? 65 : 34, 27);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
+
+    // Divider Line
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, 36, 196, 36);
+
+    startY = img.complete ? 42 : 42;
     
     const tableData = [];
     tasks.forEach(t => {
       const status = t.completed ? "Done" : "Active";
-      tableData.push([t.title, status, `${t.duration || 0}h`]);
+      tableData.push([{ content: t.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
       
       const reports = taskReports[t.id] || [];
-      reports.forEach(r => {
-        tableData.push(["", `Report: ${r.reportText}`, new Date(r.timestamp).toLocaleDateString()]);
-      });
+      if (reports.length > 0) {
+        reports.forEach(r => {
+          tableData.push([
+            { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
+            { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 } } }
+          ]);
+        });
+      } else {
+        tableData.push([
+          { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+        ]);
+      }
     });
 
     if (tableData.length === 0) {
@@ -162,12 +223,15 @@ export default function TaskManagement() {
       return;
     }
 
-    doc.autoTable({
-      head: [["Task Details", "Status", "Duration/Date"]],
+    autoTable(doc, {
+      head: [["Task Details", "Status", "Duration"]],
       body: tableData,
-      startY: 20,
-      styles: { fontSize: 9 },
-      columnStyles: { 0: { cellWidth: 100 } }
+      startY: startY,
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      columnStyles: { 0: { cellWidth: 110 }, 1: { halign: 'center' }, 2: { halign: 'right' } },
+      theme: 'grid',
+      alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
     doc.save(`My_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -178,23 +242,36 @@ export default function TaskManagement() {
     tasks.forEach(t => {
       const status = t.completed ? "Done" : "Active";
       tableData.push({
+        "Employee": currentUser.name,
         "Task Title": t.title,
         "Status": status,
         "Est. Hours": t.duration || 0,
-        "Report Detail": "",
-        "Report Date": ""
+        "Update Detail": "--- Task Summary ---",
+        "Update Timestamp": ""
       });
       
       const reports = taskReports[t.id] || [];
-      reports.forEach(r => {
+      if (reports.length > 0) {
+        reports.forEach(r => {
+          tableData.push({
+            "Employee": "",
+            "Task Title": "",
+            "Status": "",
+            "Est. Hours": "",
+            "Update Detail": r.reportText,
+            "Update Timestamp": new Date(r.timestamp).toLocaleString()
+          });
+        });
+      } else {
         tableData.push({
+          "Employee": "",
           "Task Title": "",
           "Status": "",
           "Est. Hours": "",
-          "Report Detail": r.reportText,
-          "Report Date": new Date(r.timestamp).toLocaleString()
+          "Update Detail": "No updates reported yet",
+          "Update Timestamp": ""
         });
-      });
+      }
     });
 
     if (tableData.length === 0) {
@@ -208,30 +285,76 @@ export default function TaskManagement() {
     XLSX.writeFile(wb, `My_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const handleDownloadSingleTaskPDF = (task) => {
+  const handleDownloadSingleTaskPDF = async (task) => {
     const doc = new jsPDF();
-    doc.text(`Task Report: ${task.title}`, 14, 15);
+    
+    const img = new Image();
+    img.src = logoImg;
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve; 
+    });
+
+    let startY = 20;
+    if (img.complete && img.naturalWidth > 0) {
+      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
+      startY = 40;
+    }
+    
+    // Main Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(79, 70, 229);
+    doc.text(`Task Report: ${task.title}`, img.complete ? 45 : 14, 20);
+    
+    // Header Info
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Employee:", img.complete ? 45 : 14, 27);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${currentUser.name}`, img.complete ? 65 : 34, 27);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
+
+    // Divider Line
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, 36, 196, 36);
+
+    startY = img.complete ? 42 : 42;
     
     const tableData = [];
     const status = task.completed ? "Done" : "Active";
-    tableData.push([task.title, status, `${task.duration || 0}h`]);
+    tableData.push([{ content: task.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${task.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
     
     const reports = taskReports[task.id] || [];
-    reports.forEach(r => {
-      tableData.push(["", `Report: ${r.reportText}`, new Date(r.timestamp).toLocaleDateString()]);
-    });
-
-    if (reports.length === 0) {
-      showToast("No reports to export for this task", "warning");
-      return;
+    if (reports.length > 0) {
+      reports.forEach(r => {
+        tableData.push([
+          { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
+          { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 } } }
+        ]);
+      });
+    } else {
+      tableData.push([
+        { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+      ]);
     }
 
-    doc.autoTable({
-      head: [["Task Details", "Status", "Duration/Date"]],
+    autoTable(doc, {
+      head: [["Task Details", "Status", "Duration"]],
       body: tableData,
-      startY: 20,
-      styles: { fontSize: 9 },
-      columnStyles: { 0: { cellWidth: 100 } }
+      startY: startY,
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      columnStyles: { 0: { cellWidth: 110 }, 1: { halign: 'center' }, 2: { halign: 'right' } },
+      theme: 'grid',
+      alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
     doc.save(`Task_Report_${task.title.replace(/\s+/g, '_').substring(0,10)}_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -246,13 +369,6 @@ export default function TaskManagement() {
             Your current projects: <span className="font-bold text-brand-primary">{(currentUser.projects && currentUser.projects.length > 0) ? currentUser.projects.join(', ') : (currentUser.project || "Unassigned")}</span>
           </p>
         </div>
-        <button 
-          onClick={() => setShowAllReportsModal(true)}
-          className="bg-bg-base hover:bg-bg-card border border-border-card text-text-main text-xs font-bold py-2.5 px-4 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
-        >
-          <FileText size={16} className="text-brand-primary" />
-          <span>My Reports</span>
-        </button>
       </div>
 
       {loading ? (
@@ -301,7 +417,7 @@ export default function TaskManagement() {
                     <div className="flex items-center gap-4 text-[10px] font-semibold text-text-sec mb-4">
                       <div className="flex items-center gap-1 bg-bg-base px-2 py-1 rounded-[6px]">
                         <Clock size={12} className="text-brand-primary" />
-                        <span>Est: {task.duration || 0}h</span>
+                        <span>Est: {task.duration || 0}h | Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <MessageSquare size={12} />
@@ -378,7 +494,9 @@ export default function TaskManagement() {
                         <CheckCircle size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
                         <div>
                           <h3 className="font-bold text-text-sec line-through">{task.title}</h3>
-                          <p className="text-[10px] text-text-mut mt-1">Est: {task.duration || 0}h</p>
+                          <p className="text-[10px] text-text-mut mt-1">
+                            Est: {task.duration || 0}h | <span className="text-brand-primary font-bold">Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
+                          </p>
                         </div>
                       </div>
                       <button 
@@ -465,65 +583,76 @@ export default function TaskManagement() {
         </div>
       )}
 
-      {/* All Reports Modal */}
-      {showAllReportsModal && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
-          <div className="w-full max-w-[800px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b border-border-card pb-4 gap-4 flex-shrink-0">
-              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
-                <FileText size={18} className="text-brand-primary" />
-                My Reports
+      {/* Tabular History directly on page */}
+      <div className="mt-12 bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl relative overflow-hidden flex flex-col">
+            
+            <div className="flex flex-col sm:flex-row items-center justify-between mb-5 border-b border-border-card pb-5 gap-3 flex-shrink-0 relative mt-2">
+              <h3 className="font-bold text-xl text-text-main flex items-center gap-2">
+                <FileText size={20} className="text-brand-primary" />
+                My Task History
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-3 w-full flex-wrap">
                 <button 
                   onClick={handleDownloadPDF}
-                  className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
                 >
-                  <Download size={13} />
-                  <span>PDF</span>
+                  <Download size={14} />
+                  <span>Download PDF</span>
                 </button>
                 <button 
                   onClick={handleDownloadExcel}
-                  className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[8px] text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="py-2 px-4 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
                 >
-                  <Download size={13} />
-                  <span>Excel</span>
+                  <Download size={14} />
+                  <span>Download Excel</span>
                 </button>
-                <button onClick={() => setShowAllReportsModal(false)} className="p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base rounded-[8px]"><X size={16} /></button>
               </div>
             </div>
             
-            <div className="overflow-y-auto pr-2 custom-scrollbar flex-grow">
+            <div className="overflow-x-auto w-full custom-scrollbar">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
-                    <th className="p-3 font-bold">Task Title</th>
-                    <th className="p-3 font-bold">Status</th>
-                    <th className="p-3 font-bold text-right">Est. Hours</th>
+                    <th className="p-3 font-bold w-1/4">Employee</th>
+                    <th className="p-3 font-bold w-1/2">Task Title</th>
+                    <th className="p-3 font-bold text-center w-auto">Status</th>
+                    <th className="p-3 font-bold text-right whitespace-nowrap">Est. / Rem.</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tasks.length === 0 ? (
                     <tr>
-                      <td colSpan="3" className="p-6 text-center text-xs text-text-mut">No tasks found.</td>
+                      <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found.</td>
                     </tr>
                   ) : (
                     tasks.map((task, idx) => (
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
-                          <td className="p-3 text-xs font-bold text-text-main">{task.title}</td>
-                          <td className="p-3 text-xs">
+                          <td className="p-3 text-xs font-bold text-text-main">{currentUser.name}</td>
+                          <td className="p-3 text-xs text-text-main text-center">{task.title}</td>
+                          <td className="p-3 text-xs text-center">
                             {task.completed ? (
                               <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
                             ) : (
                               <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
                             )}
                           </td>
-                          <td className="p-3 text-xs text-right font-medium text-text-sec">{task.duration}h</td>
+                          <td className="p-3 text-xs text-right">
+                            <div className="font-bold text-text-main">{task.duration || 0}h</div>
+                            <div className="text-[10px] text-brand-primary font-bold">
+                              {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h rem
+                            </div>
+                          </td>
                         </tr>
-                        {taskReports[task.id] && taskReports[task.id].length > 0 && (
+                        {(!taskReports[task.id] || taskReports[task.id].length === 0) ? (
                           <tr className="border-b border-border-card">
-                            <td colSpan="3" className="p-3 bg-bg-base/30">
+                            <td colSpan="4" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
+                              No updates reported yet
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="4" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
                                 {taskReports[task.id].map(r => (
                                   <div key={r.id} className="text-[10px]">
@@ -535,16 +664,13 @@ export default function TaskManagement() {
                             </td>
                           </tr>
                         )}
-                      </React.Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
-
+      </div>
     </div>
   );
 }

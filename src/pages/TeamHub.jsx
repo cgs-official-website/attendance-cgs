@@ -145,6 +145,7 @@ function FileCard({ file }) {
 function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
   const isOwn = msg.senderId === currentUserId;
   const [showActions, setShowActions] = useState(false);
+  const pressTimer = React.useRef(null);
 
   if (msg.isDeleted) {
     return (
@@ -154,13 +155,32 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
     );
   }
 
+  const handlePressStart = () => {
+    if (isAdmin || isOwn) {
+      pressTimer.current = setTimeout(() => {
+        onDelete(msg.id);
+      }, 500);
+    }
+  };
+
+  const handlePressEnd = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={`flex gap-3 px-4 py-1.5 hover:bg-bg-base/40 group relative rounded-[10px] transition-colors ${isOwn ? "flex-row-reverse" : ""}`}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseLeave={() => { setShowActions(false); handlePressEnd(); }}
+      onTouchStart={handlePressStart}
+      onTouchEnd={handlePressEnd}
+      onTouchMove={handlePressEnd}
+      onMouseDown={handlePressStart}
+      onMouseUp={handlePressEnd}
     >
       <Avatar src={msg.senderAvatar} name={msg.senderName} />
       <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>

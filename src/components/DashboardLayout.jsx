@@ -547,7 +547,7 @@ export default function DashboardLayout({ children }) {
         {currentUser && currentUser.role !== "admin" && (
           <div className="p-4 border-t border-border-card">
             <button
-              onClick={() => { window.location.href = "mailto:developers@teamcarrezza.com"; }}
+              onClick={() => { window.location.href = "mailto:hr@teamcarrezza.com"; }}
               className="w-full py-3 px-4 bg-brand-primary hover:bg-brand-hover text-white font-bold text-sm rounded-[12px] flex items-center justify-center gap-2 shadow-lg shadow-brand-primary/15 hover:shadow-brand-primary/25 hover:translate-y-[-1px] transition-all cursor-pointer"
             >
               <Mail size={16} />

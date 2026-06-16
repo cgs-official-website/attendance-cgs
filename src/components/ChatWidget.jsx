@@ -70,7 +70,12 @@ export default function ChatWidget() {
   return (
     <>
       {/* Floating Chat Button */}
-      <div className="fixed bottom-5 right-5 z-[9999]">
+      <motion.div 
+        drag 
+        dragMomentum={false} 
+        className="fixed bottom-5 right-5 z-[9999]" 
+        style={{ touchAction: "none" }}
+      >
         <AnimatePresence mode="wait">
           {!isOpen && (
             <motion.button
@@ -227,7 +232,7 @@ export default function ChatWidget() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
     </>
   );
 }

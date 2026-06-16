@@ -9,6 +9,7 @@ import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, Che
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import logoImg from '../assets/zuna-logo.png';
 
 export default function ProjectManagement() {
   const { currentUser } = useAuth();
@@ -121,22 +122,89 @@ export default function ProjectManagement() {
         unsubs.forEach(fn => fn());
       };
     }
-  }, [showReportsModal, teamMembers]);
+  }, [showReportsModal, showMemberReportsModal, teamMembers]);
 
-  const handleDownloadPDF = () => {
+  const calculateTimeSpent = (reports) => {
+    if (!reports || reports.length === 0) return 0;
+    let totalMinutes = 0;
+    reports.forEach(r => {
+      const matchH = r.reportText.match(/(\d+)\s*h/i);
+      const matchM = r.reportText.match(/(\d+)\s*m/i);
+      if (matchH) totalMinutes += parseInt(matchH[1], 10) * 60;
+      if (matchM) totalMinutes += parseInt(matchM[1], 10);
+    });
+    return totalMinutes / 60; // returns hours
+  };
+
+  const handleDownloadPDF = async () => {
     const doc = new jsPDF();
-    doc.text("Project Task Reports", 14, 15);
+    
+    const img = new Image();
+    img.src = logoImg;
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve; 
+    });
+
+    let startY = 20;
+    if (img.complete && img.naturalWidth > 0) {
+      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
+      startY = 40;
+    }
+    
+    // Main Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(79, 70, 229);
+    doc.text("Project Task Reports", img.complete ? 45 : 14, 20);
+    
+    // Header Info
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Project Manager:", img.complete ? 45 : 14, 27);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${currentUser.name}`, img.complete ? 75 : 44, 27);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
+
+    // Divider Line
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, 36, 196, 36);
+
+    startY = img.complete ? 42 : 42;
     
     const tableData = [];
     teamMembers.forEach(m => {
       (m.tasks || []).forEach(t => {
         const status = t.completed ? "Done" : "Active";
-        tableData.push([m.name, t.title, status, `${t.duration || 0}h`]);
+        tableData.push([
+          { content: m.name, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } },
+          { content: t.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } },
+          { content: status, styles: { fillColor: [243, 244, 246] } },
+          { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }
+        ]);
         
         const reports = allTaskReports[t.id] || [];
-        reports.forEach(r => {
-          tableData.push(["", `Report: ${r.reportText}`, "", new Date(r.timestamp).toLocaleDateString()]);
-        });
+        if (reports.length > 0) {
+          reports.forEach(r => {
+            tableData.push([
+              "",
+              { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
+              { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 } } }
+            ]);
+          });
+        } else {
+          tableData.push([
+            "",
+            { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+          ]);
+        }
       });
     });
 
@@ -146,11 +214,14 @@ export default function ProjectManagement() {
     }
 
     autoTable(doc, {
-      head: [["Employee", "Task Details", "Status", "Duration/Date"]],
+      head: [["Employee", "Task Details", "Status", "Duration"]],
       body: tableData,
-      startY: 20,
-      styles: { fontSize: 9 },
-      columnStyles: { 1: { cellWidth: 90 } }
+      startY: startY,
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 80 }, 2: { halign: 'center' }, 3: { halign: 'right' } },
+      theme: 'grid',
+      alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
     doc.save(`Project_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -166,21 +237,32 @@ export default function ProjectManagement() {
           "Task Title": t.title,
           "Status": status,
           "Est. Hours": t.duration || 0,
-          "Report Detail": "",
-          "Report Date": ""
+          "Update Detail": "--- Task Summary ---",
+          "Update Timestamp": ""
         });
         
         const reports = allTaskReports[t.id] || [];
-        reports.forEach(r => {
+        if (reports.length > 0) {
+          reports.forEach(r => {
+            tableData.push({
+              "Employee": "",
+              "Task Title": "",
+              "Status": "",
+              "Est. Hours": "",
+              "Update Detail": r.reportText,
+              "Update Timestamp": new Date(r.timestamp).toLocaleString()
+            });
+          });
+        } else {
           tableData.push({
             "Employee": "",
             "Task Title": "",
             "Status": "",
             "Est. Hours": "",
-            "Report Detail": r.reportText,
-            "Report Date": new Date(r.timestamp).toLocaleString()
+            "Update Detail": "No updates reported yet",
+            "Update Timestamp": ""
           });
-        });
+        }
       });
     });
 
@@ -518,9 +600,16 @@ export default function ProjectManagement() {
               ) : (
                 filteredTeam.map((member) => {
                   const tasks = member.tasks || [];
-                  const completed = tasks.filter(t => t.completed).length;
-                  const total = tasks.length;
-                  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  const totalEstimatedHours = tasks.reduce((sum, t) => sum + (Number(t.duration) || 0), 0);
+                  const totalTrackedHours = tasks.reduce((sum, t) => sum + calculateTimeSpent(allTaskReports[t.id] || []), 0);
+                  
+                  let progress = 0;
+                  if (totalEstimatedHours > 0) {
+                    progress = Math.min(100, Math.round((totalTrackedHours / totalEstimatedHours) * 100));
+                  } else {
+                    const completed = tasks.filter(t => t.completed).length;
+                    progress = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+                  }
 
                   return (
                     <tr key={member.uid} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors group">
@@ -561,7 +650,7 @@ export default function ProjectManagement() {
                       </td>
                       <td className="p-4 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] font-bold">
-                          {total}
+                          {tasks.length}
                         </span>
                       </td>
                       <td className="p-4">
@@ -943,7 +1032,7 @@ export default function ProjectManagement() {
                       <th className="p-3 font-bold w-1/4">Employee</th>
                       <th className="p-3 font-bold w-1/2">Task Title</th>
                       <th className="p-3 font-bold text-center w-auto">Status</th>
-                      <th className="p-3 font-bold text-right whitespace-nowrap">Est. Hours</th>
+                      <th className="p-3 font-bold text-right whitespace-nowrap">Est. / Rem.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -964,9 +1053,20 @@ export default function ProjectManagement() {
                               <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
                             )}
                           </td>
-                          <td className="p-3 text-xs font-bold text-text-main text-right">{task.duration || 0}h</td>
+                          <td className="p-3 text-xs text-right">
+                            <div className="font-bold text-text-main">{task.duration || 0}h</div>
+                            <div className="text-[10px] text-brand-primary font-bold">
+                              {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(allTaskReports[task.id] || [])).toFixed(1))}h rem
+                            </div>
+                          </td>
                         </tr>
-                        {allTaskReports[task.id] && allTaskReports[task.id].length > 0 && (
+                        {(!allTaskReports[task.id] || allTaskReports[task.id].length === 0) ? (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="4" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
+                              No updates reported yet
+                            </td>
+                          </tr>
+                        ) : (
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
@@ -1017,7 +1117,7 @@ export default function ProjectManagement() {
                     <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
                       <th className="p-3 font-bold w-1/2">Task Title</th>
                       <th className="p-3 font-bold text-center w-auto">Status</th>
-                      <th className="p-3 font-bold text-right whitespace-nowrap">Est. Hours</th>
+                      <th className="p-3 font-bold text-right whitespace-nowrap">Est. / Rem.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1037,9 +1137,20 @@ export default function ProjectManagement() {
                               <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
                             )}
                           </td>
-                          <td className="p-3 text-xs font-bold text-text-main text-right">{task.duration || 0}h</td>
+                          <td className="p-3 text-xs text-right">
+                            <div className="font-bold text-text-main">{task.duration || 0}h</div>
+                            <div className="text-[10px] text-brand-primary font-bold">
+                              {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(allTaskReports[task.id] || [])).toFixed(1))}h rem
+                            </div>
+                          </td>
                         </tr>
-                        {allTaskReports[task.id] && allTaskReports[task.id].length > 0 && (
+                        {(!allTaskReports[task.id] || allTaskReports[task.id].length === 0) ? (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="3" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
+                              No updates reported yet
+                            </td>
+                          </tr>
+                        ) : (
                           <tr className="border-b border-border-card">
                             <td colSpan="3" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">

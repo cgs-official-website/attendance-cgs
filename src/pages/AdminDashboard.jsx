@@ -3838,10 +3838,10 @@ export default function AdminDashboard() {
             {/* Stats Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: "<MessageSquare size={18} className='inline-block mr-1' />", color: "text-brand-primary" },
+                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary" },
                 { label: "Channels", val: chatChannels.length, icon: "#", color: "text-indigo-500" },
-                { label: "DM Threads", val: chatDmThreads.length, icon: "<Mail size={18} className='inline-block mr-1' />", color: "text-amber-500" },
-                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: "<Paperclip size={18} className='inline-block mr-1' />", color: "text-emerald-500" }
+                { label: "DM Threads", val: chatDmThreads.length, icon: <Mail size={18} className='inline-block mr-1' />, color: "text-amber-500" },
+                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: <Paperclip size={18} className='inline-block mr-1' />, color: "text-emerald-500" }
               ].map((s, i) => (
                 <div key={i} className="bg-bg-card border border-border-card rounded-[16px] p-4 flex items-center gap-3">
                   <span className={`text-2xl font-black ${s.color}`}>{s.icon}</span>

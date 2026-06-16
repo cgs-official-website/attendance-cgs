@@ -207,13 +207,13 @@ export default function TaskManagement() {
       if (reports.length > 0) {
         reports.forEach(r => {
           tableData.push([
-            { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
-            { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 } } }
+            { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } },
+            { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 } } }
           ]);
         });
       } else {
         tableData.push([
-          { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+          { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } }
         ]);
       }
     });
@@ -227,8 +227,8 @@ export default function TaskManagement() {
       head: [["Task Details", "Status", "Duration"]],
       body: tableData,
       startY: startY,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 8, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left", cellPadding: 10 },
       columnStyles: { 0: { cellWidth: 110 }, 1: { halign: 'center' }, 2: { halign: 'right' } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
@@ -336,13 +336,13 @@ export default function TaskManagement() {
     if (reports.length > 0) {
       reports.forEach(r => {
         tableData.push([
-          { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
-          { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 } } }
+          { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } },
+          { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 } } }
         ]);
       });
     } else {
       tableData.push([
-        { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+        { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } }
       ]);
     }
 
@@ -350,8 +350,8 @@ export default function TaskManagement() {
       head: [["Task Details", "Status", "Duration"]],
       body: tableData,
       startY: startY,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 8, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left", cellPadding: 10 },
       columnStyles: { 0: { cellWidth: 110 }, 1: { halign: 'center' }, 2: { halign: 'right' } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }

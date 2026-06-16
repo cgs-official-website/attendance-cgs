@@ -10,6 +10,32 @@ export default function ChatMessage({ message, compact = false }) {
   const isUser = message.role === 'user';
   const isError = message.role === 'error';
 
+  const renderMessageText = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(https?:\/\/[^\s]+|@[\w.-]+)/g);
+    return parts.map((part, i) => {
+      if (part.match(/^https?:\/\/[^\s]+$/)) {
+        return (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 opacity-90 hover:opacity-100 break-all transition-opacity">
+            {part}
+          </a>
+        );
+      }
+      if (part.match(/^@[\w.-]+$/)) {
+        return (
+          <strong key={i} className={`px-1 py-0.5 rounded-[4px] mx-0.5 font-bold ${isUser ? 'bg-white/20 text-white' : 'bg-brand-primary/10 text-brand-primary'}`}>
+            {part}
+          </strong>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
+  const processedContent = (!isUser && !isError) 
+    ? message.content.replace(/(@[\w.-]+)/g, '**$1**') 
+    : message.content;
+
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-end mb-4`}>
       {/* Bot Avatar */}
@@ -33,7 +59,7 @@ export default function ChatMessage({ message, compact = false }) {
           `}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <div className="whitespace-pre-wrap">{renderMessageText(message.content)}</div>
           ) : isError ? (
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
@@ -55,7 +81,7 @@ export default function ChatMessage({ message, compact = false }) {
                   )
                 }}
               >
-                {message.content}
+                {processedContent}
               </ReactMarkdown>
             </div>
           )}

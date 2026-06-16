@@ -1358,6 +1358,7 @@ export default function AdminDashboard() {
                         <th className="pb-3 px-4">Department</th>
                         <th className="pb-3 px-4">Check-In</th>
                         <th className="pb-3 px-4">Check-Out</th>
+                        <th className="pb-3 px-4 text-center">Breaks</th>
                         <th className="pb-3 px-4 text-center">Total Hours</th>
                         <th className="pb-3 pl-4 text-right">Status</th>
                       </tr>
@@ -1372,7 +1373,9 @@ export default function AdminDashboard() {
                           : "—";
 
                         let totalHrsStr = "—";
+                        let breaksCount = 0;
                         if (log) {
+                          breaksCount = log.breaks ? log.breaks.length : 0;
                           if (log.totalWorkingMinutes !== undefined) {
                             totalHrsStr = (log.totalWorkingMinutes / 60).toFixed(2) + "h";
                           } else if (log.checkInTime) {
@@ -1402,6 +1405,7 @@ export default function AdminDashboard() {
                             <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold">{inTime}</td>
                             <td className="py-3.5 px-4 text-text-sec">{outTime}</td>
+                            <td className="py-3.5 px-4 text-text-sec font-bold text-center">{breaksCount}</td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold text-center">{totalHrsStr}</td>
                             <td className="py-3.5 pl-4 text-right">{getStatusBadge(status)}</td>
                           </tr>

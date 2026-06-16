@@ -569,9 +569,14 @@ export const startBreak = async (userId, breakType, location) => {
       throw new Error("Must be checked in to start a break.");
     }
 
-    const balance = breakType === "short"
-      ? (currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800)
-      : (currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800);
+    let balance;
+    if (breakType === "short") {
+      balance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
+    } else if (breakType === "bio") {
+      balance = 900; // 15 mins for bio break
+    } else {
+      balance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
+    }
 
     if (balance <= 0) {
       throw new Error(`You have no remaining balance for today's ${breakType} break.`);
@@ -610,9 +615,14 @@ export const startBreak = async (userId, breakType, location) => {
       throw new Error("Must be checked in to start a break.");
     }
 
-    const balance = breakType === "short"
-      ? (currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800)
-      : (currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800);
+    let balance;
+    if (breakType === "short") {
+      balance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
+    } else if (breakType === "bio") {
+      balance = 900; // 15 mins for bio break
+    } else {
+      balance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
+    }
 
     if (balance <= 0) {
       throw new Error(`You have no remaining balance for today's ${breakType} break.`);
@@ -684,9 +694,10 @@ export const resumeWork = async (userId, location) => {
 
     if (activeBreak.type === "short") {
       newShortBalance = Math.max(0, newShortBalance - durationSeconds);
-    } else {
+    } else if (activeBreak.type === "long") {
       newLongBalance = Math.max(0, newLongBalance - durationSeconds);
     }
+    // bio break doesn't deduct from standard balances
     
     const updates = {
       status: "checked-in",
@@ -731,9 +742,10 @@ export const resumeWork = async (userId, location) => {
 
     if (activeBreak.type === "short") {
       newShortBalance = Math.max(0, newShortBalance - durationSeconds);
-    } else {
+    } else if (activeBreak.type === "long") {
       newLongBalance = Math.max(0, newLongBalance - durationSeconds);
     }
+    // bio break doesn't deduct from standard balances
     
     logs[logIndex] = {
       ...currentData,

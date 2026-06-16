@@ -662,7 +662,7 @@ export default function UserDashboard() {
         }
         list.push({
           type: "break",
-          title: brk.type === "short" ? "Break 1 Started" : "Break 2 Started",
+          title: brk.type === "short" ? "Break 1 Started" : (brk.type === "bio" ? "Bio Break Started" : "Break 2 Started"),
           time: new Date(brk.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: "Today",
           desc: brk.duration ? `${brk.duration} mins` : "In progress"
@@ -1536,7 +1536,7 @@ export default function UserDashboard() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[480px] mx-auto mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-[600px] mx-auto mb-6">
                     <button
                       onClick={() => handleStartBreak("short")}
                       disabled={actionLoading || shortBreakBalance <= 0}
@@ -1552,6 +1552,14 @@ export default function UserDashboard() {
                     >
                       <Coffee size={15} />
                       <span>Break 2 ({longBalMin}m left)</span>
+                    </button>
+                    <button
+                      onClick={() => handleStartBreak("bio")}
+                      disabled={actionLoading}
+                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                    >
+                      <Coffee size={15} />
+                      <span>Aux / Bio</span>
                     </button>
                   </div>
 

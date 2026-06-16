@@ -169,6 +169,28 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
     }
   };
 
+  const renderMessageText = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(https?:\/\/[^\s]+|@[\w.-]+)/g);
+    return parts.map((part, i) => {
+      if (part.match(/^https?:\/\/[^\s]+$/)) {
+        return (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 opacity-90 hover:opacity-100 break-all transition-opacity">
+            {part}
+          </a>
+        );
+      }
+      if (part.match(/^@[\w.-]+$/)) {
+        return (
+          <strong key={i} className={`px-1 py-0.5 rounded-[4px] mx-0.5 font-bold ${isOwn ? 'bg-white/20 text-white' : 'bg-brand-primary/10 text-brand-primary'}`}>
+            {part}
+          </strong>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -189,12 +211,12 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
           <span className="text-[10px] text-text-mut">{formatTime(msg.timestamp)}</span>
         </div>
         {msg.text && (
-          <div className={`px-3 py-2 rounded-[14px] text-sm leading-relaxed ${
+          <div className={`px-3 py-2 rounded-[14px] text-sm leading-relaxed whitespace-pre-wrap ${
             isOwn
               ? "bg-brand-primary text-white rounded-br-sm"
               : "bg-bg-card border border-border-card text-text-main rounded-bl-sm"
           }`}>
-            {msg.text}
+            {renderMessageText(msg.text)}
           </div>
         )}
         {/* {msg.fileData && <FileCard file={msg.fileData} />} */}

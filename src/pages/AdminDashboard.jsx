@@ -1358,6 +1358,7 @@ export default function AdminDashboard() {
                         <th className="pb-3 px-4">Department</th>
                         <th className="pb-3 px-4">Check-In</th>
                         <th className="pb-3 px-4">Check-Out</th>
+                        <th className="pb-3 px-4 text-center">Total Hours</th>
                         <th className="pb-3 pl-4 text-right">Status</th>
                       </tr>
                     </thead>
@@ -1370,6 +1371,26 @@ export default function AdminDashboard() {
                           ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                           : "—";
 
+                        let totalHrsStr = "—";
+                        if (log) {
+                          if (log.totalWorkingMinutes !== undefined) {
+                            totalHrsStr = (log.totalWorkingMinutes / 60).toFixed(2) + "h";
+                          } else if (log.checkInTime) {
+                            const start = new Date(log.checkInTime).getTime();
+                            const now = new Date().getTime();
+                            const end = log.checkOutTime ? new Date(log.checkOutTime).getTime() : now;
+                            
+                            const breakMinutes = log.breaks?.reduce((acc, b) => {
+                              const bStart = new Date(b.startTime).getTime();
+                              const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
+                              return acc + ((bEnd - bStart) / 60000);
+                            }, 0) || 0;
+                            
+                            const elapsedMins = Math.max(0, ((end - start) / 60000) - breakMinutes);
+                            totalHrsStr = (elapsedMins / 60).toFixed(2) + "h";
+                          }
+                        }
+
                         return (
                           <tr key={user.uid} className="hover:bg-bg-base/30">
                             <td className="py-3.5 pr-4 flex items-center gap-3">
@@ -1381,6 +1402,7 @@ export default function AdminDashboard() {
                             <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold">{inTime}</td>
                             <td className="py-3.5 px-4 text-text-sec">{outTime}</td>
+                            <td className="py-3.5 px-4 text-brand-primary font-bold text-center">{totalHrsStr}</td>
                             <td className="py-3.5 pl-4 text-right">{getStatusBadge(status)}</td>
                           </tr>
                         );

@@ -1460,7 +1460,7 @@ export default function UserDashboard() {
 
         {/* Tick markers for 25%, 50%, 75% */}
         <div className="flex justify-between mt-1.5 px-0.5">
-          {["25%", "50%", "75%", "100%"].map((label) => (
+          {["0%", "25%", "50%", "75%", "100%"].map((label) => (
             <span key={label} className="text-[9px] font-bold text-text-mut">{label}</span>
           ))}
         </div>

@@ -35,6 +35,7 @@ export default function ProjectManagement() {
   
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDuration, setNewTaskDuration] = useState(1);
+  const [newTaskProject, setNewTaskProject] = useState("");
   const [editingTaskIndex, setEditingTaskIndex] = useState(null);
 
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
@@ -61,7 +62,6 @@ export default function ProjectManagement() {
         } else {
           const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
           setTeamMembers(users.filter(u => {
-            if (u.uid === currentUser.uid) return false;
             const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
             return uProjects.some(p => currentUserProjects.includes(p));
           }));
@@ -86,7 +86,6 @@ export default function ProjectManagement() {
         } else {
           const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
           setTeamMembers(users.filter(u => {
-            if (u.uid === currentUser.uid) return false;
             const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
             return uProjects.some(p => currentUserProjects.includes(p));
           }));
@@ -397,6 +396,8 @@ export default function ProjectManagement() {
     setTaskTargetUser(user);
     setNewTaskTitle("");
     setNewTaskDuration(1);
+    const uProjects = user.projects?.length ? user.projects : (user.project ? [user.project] : []);
+    setNewTaskProject(uProjects.length > 0 ? uProjects[0] : "");
     setEditingTaskIndex(null);
     setShowTaskModal(true);
   };
@@ -411,13 +412,15 @@ export default function ProjectManagement() {
       currentTasks[editingTaskIndex] = {
         ...currentTasks[editingTaskIndex],
         title: newTaskTitle,
-        duration: newTaskDuration
+        duration: newTaskDuration,
+        project: newTaskProject
       };
     } else {
       currentTasks.push({
         id: "task_" + Date.now(),
         title: newTaskTitle,
         duration: newTaskDuration,
+        project: newTaskProject,
         completed: false,
         assignedBy: currentUser.uid,
         assignedAt: new Date().toISOString()
@@ -452,6 +455,7 @@ export default function ProjectManagement() {
 
       setNewTaskTitle("");
       setNewTaskDuration(1);
+      setNewTaskProject("");
       setEditingTaskIndex(null);
     } catch (err) {
       showToast("Failed to save task", "error");
@@ -799,7 +803,7 @@ export default function ProjectManagement() {
                   {editingTaskIndex !== null ? "Edit Task" : "Assign New Task"}
                 </h4>
                 <form onSubmit={handleSaveTask} className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                     <div className="md:col-span-3 flex flex-col gap-1">
                       <label className="text-[10px] font-bold text-text-sec">Task Title</label>
                       <input 
@@ -811,8 +815,21 @@ export default function ProjectManagement() {
                         required
                       />
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-text-sec">Duration (Hours)</label>
+                    <div className="md:col-span-2 flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-text-sec">Project</label>
+                      <select 
+                        className="w-full px-3 py-2 border border-border-card rounded-[10px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all"
+                        value={newTaskProject}
+                        onChange={(e) => setNewTaskProject(e.target.value)}
+                        required
+                      >
+                        {(taskTargetUser?.projects?.length ? taskTargetUser.projects : (taskTargetUser?.project ? [taskTargetUser.project] : [])).map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-1 flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-text-sec">Hours</label>
                       <input 
                         type="number" 
                         min="0.5" step="0.5"
@@ -827,7 +844,7 @@ export default function ProjectManagement() {
                     {editingTaskIndex !== null && (
                       <button 
                         type="button" 
-                        onClick={() => { setEditingTaskIndex(null); setNewTaskTitle(""); setNewTaskDuration(1); }}
+                        onClick={() => { setEditingTaskIndex(null); setNewTaskTitle(""); setNewTaskDuration(1); setNewTaskProject(""); }}
                         className="py-1.5 px-3 border border-border-card rounded-[8px] text-[10px] font-bold text-text-sec hover:bg-bg-card cursor-pointer"
                       >
                         Cancel Edit
@@ -872,6 +889,9 @@ export default function ProjectManagement() {
                             <p className={`text-xs font-bold ${task.completed ? 'text-text-sec line-through' : 'text-text-main'}`}>
                               {task.title}
                             </p>
+                            {task.project && (
+                              <p className="text-[9px] font-bold text-brand-primary mt-0.5 uppercase tracking-wider">{task.project}</p>
+                            )}
                             <p className="text-[10px] text-text-mut mt-0.5">
                               Est. Duration: {task.duration || 0} hours
                             </p>
@@ -883,6 +903,7 @@ export default function ProjectManagement() {
                               setEditingTaskIndex(idx);
                               setNewTaskTitle(task.title);
                               setNewTaskDuration(task.duration || 1);
+                              setNewTaskProject(task.project || "");
                             }}
                             className="p-1.5 text-text-sec hover:text-brand-primary hover:bg-brand-primary/10 rounded-[6px] transition-colors cursor-pointer"
                             title="Edit Task"
@@ -1045,7 +1066,10 @@ export default function ProjectManagement() {
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
                           <td className="p-3 text-xs font-bold text-text-main">{task.employeeName}</td>
-                          <td className="p-3 text-xs text-text-main text-center">{task.title}</td>
+                          <td className="p-3 text-xs text-text-main text-center">
+                            <div>{task.title}</div>
+                            {task.project && <div className="text-[9px] text-brand-primary font-bold mt-0.5">{task.project}</div>}
+                          </td>
                           <td className="p-3 text-xs text-center">
                             {task.completed ? (
                               <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
@@ -1129,7 +1153,10 @@ export default function ProjectManagement() {
                     selectedMemberForReports.tasks.map((task, idx) => (
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
-                          <td className="p-3 text-xs font-bold text-text-main">{task.title}</td>
+                          <td className="p-3 text-xs text-text-main">
+                            <div className="font-bold">{task.title}</div>
+                            {task.project && <div className="text-[9px] text-brand-primary font-bold mt-0.5">{task.project}</div>}
+                          </td>
                           <td className="p-3 text-xs text-center">
                             {task.completed ? (
                               <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>

@@ -604,7 +604,7 @@ export default function UserDashboard() {
   };
 
   const getWeeklyHours = () => {
-    const days = ["M", "T", "W", "T", "F", "S", "S"];
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     const now = new Date();
     const currentDay = now.getDay();
     const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;

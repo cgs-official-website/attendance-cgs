@@ -403,7 +403,7 @@ export default function TaskManagement() {
                   <div key={task.id} className="bg-bg-card border border-border-card rounded-[16px] p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-primary/60 group-hover:bg-brand-primary transition-colors"></div>
                     
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex justify-between items-start mb-1">
                       <h3 className="font-bold text-text-main pr-4">{task.title}</h3>
                       <button 
                         onClick={() => handleMarkComplete(taskIdx, true)}
@@ -413,6 +413,11 @@ export default function TaskManagement() {
                         <CheckCircle size={14} />
                       </button>
                     </div>
+                    {task.project && (
+                      <div className="mb-3">
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-[4px] bg-brand-primary/10 text-brand-primary uppercase tracking-wider">{task.project}</span>
+                      </div>
+                    )}
                     
                     <div className="flex items-center gap-4 text-[10px] font-semibold text-text-sec mb-4">
                       <div className="flex items-center gap-1 bg-bg-base px-2 py-1 rounded-[6px]">
@@ -494,6 +499,7 @@ export default function TaskManagement() {
                         <CheckCircle size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
                         <div>
                           <h3 className="font-bold text-text-sec line-through">{task.title}</h3>
+                          {task.project && <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-[4px] bg-bg-card border border-border-card text-text-mut uppercase">{task.project}</span>}
                           <p className="text-[10px] text-text-mut mt-1">
                             Est: {task.duration || 0}h | <span className="text-brand-primary font-bold">Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
                           </p>
@@ -629,7 +635,10 @@ export default function TaskManagement() {
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
                           <td className="p-3 text-xs font-bold text-text-main">{currentUser.name}</td>
-                          <td className="p-3 text-xs text-text-main text-center">{task.title}</td>
+                          <td className="p-3 text-xs text-text-main text-center">
+                            <div>{task.title}</div>
+                            {task.project && <div className="text-[9px] text-brand-primary font-bold mt-0.5">{task.project}</div>}
+                          </td>
                           <td className="p-3 text-xs text-center">
                             {task.completed ? (
                               <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>

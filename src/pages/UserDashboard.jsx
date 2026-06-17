@@ -167,6 +167,7 @@ export default function UserDashboard() {
   };
 
   const isForgotToCheckIn = (() => {
+    if (loading) return false;
     if (currentUser.role === "admin") return false;
     if (todayLog) return false;
     

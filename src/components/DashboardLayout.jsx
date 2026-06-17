@@ -30,6 +30,7 @@ import { Mailbox, AlertTriangle, Check,
   RefreshCw
 } from "lucide-react";
 import Logo from "./Logo";
+import logoImg from "../assets/zuna-logo.png";
 import { 
   checkIn, 
   checkOut, 
@@ -44,32 +45,63 @@ import {
 } from "../firebase";
 
 const DashboardSkeleton = () => (
-  <div className="w-full space-y-6 animate-pulse">
-    {/* Top Header Row Skeleton */}
-    <div className="flex flex-col sm:flex-row justify-between gap-4">
-      <div className="space-y-3">
-        <div className="h-8 w-48 bg-border-card/40 rounded-[12px]"></div>
-        <div className="h-4 w-32 bg-border-card/40 rounded-[12px]"></div>
+  <div className="w-full h-[60vh] flex flex-col items-center justify-center animate-fade-in" style={{ perspective: '800px' }}>
+    <style>{`
+      @keyframes gimbal-1 {
+        0% { transform: rotateZ(0deg) rotateX(20deg) rotateY(0deg); }
+        100% { transform: rotateZ(360deg) rotateX(20deg) rotateY(0deg); }
+      }
+      @keyframes gimbal-2 {
+        0% { transform: rotateX(0deg) rotateY(0deg); }
+        100% { transform: rotateX(360deg) rotateY(180deg); }
+      }
+      @keyframes gimbal-3 {
+        0% { transform: rotateX(0deg) rotateY(0deg); }
+        100% { transform: rotateX(-360deg) rotateY(-180deg); }
+      }
+      @keyframes logo-float {
+        0%, 100% { transform: translateY(0px) scale(1); filter: drop-shadow(0 0 10px rgba(168,85,247,0.4)); }
+        50% { transform: translateY(-5px) scale(1.05); filter: drop-shadow(0 0 20px rgba(168,85,247,0.8)); }
+      }
+    `}</style>
+    <div className="relative flex items-center justify-center w-40 h-40" style={{ transformStyle: 'preserve-3d' }}>
+      
+      {/* Outer Glow Ring - rotates flat like a radar */}
+      <div 
+        className="absolute inset-0 rounded-full border border-purple-500/20 shadow-[0_0_20px_rgba(168,85,247,0.2)_inset]"
+        style={{ animation: 'gimbal-1 6s linear infinite' }}
+      >
+        <div className="absolute top-0 left-1/2 w-2 h-2 bg-purple-500 rounded-full shadow-[0_0_10px_#a855f7] -translate-x-1/2 -translate-y-1/2"></div>
+        <div className="absolute bottom-0 left-1/2 w-2 h-2 bg-purple-500 rounded-full shadow-[0_0_10px_#a855f7] -translate-x-1/2 translate-y-1/2"></div>
       </div>
-      <div className="h-16 w-full sm:w-64 bg-border-card/40 rounded-[16px]"></div>
+      
+      {/* Middle Flipping Ring */}
+      <div 
+        className="absolute inset-4 rounded-full border-2 border-purple-400/50 border-t-purple-600 shadow-[0_0_15px_rgba(192,132,252,0.4)]"
+        style={{ animation: 'gimbal-2 3s cubic-bezier(0.4, 0, 0.2, 1) infinite', transformStyle: 'preserve-3d' }}
+      ></div>
+
+      {/* Inner Flipping Ring */}
+      <div 
+        className="absolute inset-8 rounded-full border-2 border-purple-300/40 border-b-purple-500 shadow-[0_0_15px_rgba(216,180,254,0.4)]"
+        style={{ animation: 'gimbal-3 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite', transformStyle: 'preserve-3d' }}
+      ></div>
+      
+      {/* Center Logo */}
+      <img 
+        src={logoImg} 
+        alt="Loading..." 
+        className="w-14 h-auto relative z-10" 
+        style={{ animation: 'logo-float 2s ease-in-out infinite' }}
+      />
     </div>
     
-    {/* Cards Row Skeleton */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-32 bg-border-card/30 rounded-[20px]"></div>
-      ))}
-    </div>
-
-    {/* Main Content Area Skeleton */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2 space-y-6">
-        <div className="h-64 bg-border-card/30 rounded-[24px]"></div>
-        <div className="h-48 bg-border-card/30 rounded-[24px]"></div>
-      </div>
-      <div className="space-y-6">
-        <div className="h-48 bg-border-card/30 rounded-[24px]"></div>
-        <div className="h-64 bg-border-card/30 rounded-[24px]"></div>
+    <div className="mt-12 flex flex-col items-center gap-2">
+      <h3 className="text-text-main font-extrabold text-sm tracking-widest uppercase text-purple-600 dark:text-purple-400 drop-shadow-sm">Loading Workspace</h3>
+      <div className="flex gap-1.5 mt-1">
+        <span className="w-2 h-2 rounded-full bg-purple-600 animate-bounce shadow-[0_0_8px_rgba(147,51,234,0.8)]" style={{ animationDelay: '0s' }}></span>
+        <span className="w-2 h-2 rounded-full bg-purple-500 animate-bounce shadow-[0_0_8px_rgba(168,85,247,0.8)]" style={{ animationDelay: '0.2s' }}></span>
+        <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce shadow-[0_0_8px_rgba(192,132,252,0.8)]" style={{ animationDelay: '0.4s' }}></span>
       </div>
     </div>
   </div>

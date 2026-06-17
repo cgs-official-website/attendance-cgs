@@ -26,7 +26,8 @@ import { Mailbox, AlertTriangle, Check,
   MessageSquare,
   Monitor,
   Briefcase,
-  CheckSquare
+  CheckSquare,
+  RefreshCw
 } from "lucide-react";
 import Logo from "./Logo";
 import { 
@@ -42,6 +43,38 @@ import {
   updateTaskWarningSent
 } from "../firebase";
 
+const DashboardSkeleton = () => (
+  <div className="w-full space-y-6 animate-pulse">
+    {/* Top Header Row Skeleton */}
+    <div className="flex flex-col sm:flex-row justify-between gap-4">
+      <div className="space-y-3">
+        <div className="h-8 w-48 bg-border-card/40 rounded-[12px]"></div>
+        <div className="h-4 w-32 bg-border-card/40 rounded-[12px]"></div>
+      </div>
+      <div className="h-16 w-full sm:w-64 bg-border-card/40 rounded-[16px]"></div>
+    </div>
+    
+    {/* Cards Row Skeleton */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="h-32 bg-border-card/30 rounded-[20px]"></div>
+      ))}
+    </div>
+
+    {/* Main Content Area Skeleton */}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="lg:col-span-2 space-y-6">
+        <div className="h-64 bg-border-card/30 rounded-[24px]"></div>
+        <div className="h-48 bg-border-card/30 rounded-[24px]"></div>
+      </div>
+      <div className="space-y-6">
+        <div className="h-48 bg-border-card/30 rounded-[24px]"></div>
+        <div className="h-64 bg-border-card/30 rounded-[24px]"></div>
+      </div>
+    </div>
+  </div>
+);
+
 export default function DashboardLayout({ children }) {
   const { currentUser, logout, dbMode } = useAuth();
   const { showToast } = useToast();
@@ -54,6 +87,9 @@ export default function DashboardLayout({ children }) {
   const [showQuickCheckModal, setShowQuickCheckModal] = useState(false);
   const [todayLog, setTodayLog] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
+  
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Notice board, rules & notification states
   const [showNotifications, setShowNotifications] = useState(false);
@@ -309,6 +345,14 @@ export default function DashboardLayout({ children }) {
     } catch (error) {
       showToast(error.message || "Failed to log out", "error");
     }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setRefreshKey(prev => prev + 1);
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 1200); // skeletal loading duration
   };
 
   const getGpsLocation = () => {
@@ -632,6 +676,16 @@ export default function DashboardLayout({ children }) {
               </span>
             )}
 
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="w-8 h-8 flex items-center justify-center border border-border-card rounded-[10px] bg-bg-card hover:bg-bg-base text-text-sec transition-colors cursor-pointer flex-shrink-0"
+              title="Refresh Page"
+            >
+              <RefreshCw size={15} className={isRefreshing ? "animate-spin text-brand-primary" : ""} />
+            </button>
+
             {/* Light/Dark mode switcher */}
             <button
               onClick={toggleTheme}
@@ -662,11 +716,16 @@ export default function DashboardLayout({ children }) {
                   <div className="fixed top-[65px] sm:top-[75px] right-3 sm:right-4 lg:right-8 w-[calc(100vw-1.5rem)] max-w-[340px] bg-bg-card border border-border-card rounded-[16px] shadow-2xl p-4 z-[200] text-left animate-scale-up">
                     <div className="flex justify-between items-center mb-3 pb-2 border-b border-border-card">
                       <span className="font-extrabold text-xs text-text-main uppercase tracking-wider"><Bell size={14} className='inline-block mr-1' /> Notifications</span>
-                      {totalUnreadCount > 0 && (
-                        <span className="bg-brand-primary text-white px-2 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
-                          {totalUnreadCount} New
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {totalUnreadCount > 0 && (
+                          <span className="bg-brand-primary text-white px-2 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
+                            {totalUnreadCount} New
+                          </span>
+                        )}
+                        <button onClick={() => setShowNotifications(false)} className="text-text-mut hover:text-text-main transition-colors cursor-pointer flex items-center justify-center p-0.5" title="Close notifications">
+                          <X size={16} />
+                        </button>
+                      </div>
                     </div>
 
                     {combinedNotifs.length === 0 ? (
@@ -800,7 +859,13 @@ export default function DashboardLayout({ children }) {
 
         {/* Dashboard Content Container with padding to clear fixed header */}
         <main className="flex-grow p-3 sm:p-4 lg:p-8 pt-[72px] sm:pt-[86px] lg:pt-[102px] overflow-y-auto">
-          {children}
+          {isRefreshing ? (
+            <DashboardSkeleton />
+          ) : (
+            <div key={refreshKey} className="w-full h-full flex flex-col">
+              {children}
+            </div>
+          )}
         </main>
       </div>
 

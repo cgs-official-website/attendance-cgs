@@ -25,6 +25,7 @@ export default function ProjectManagement() {
   const [selectedUserForTeam, setSelectedUserForTeam] = useState("");
   const [adminProjectInput, setAdminProjectInput] = useState("");
   const [filterProject, setFilterProject] = useState("All");
+  const [filterDesignation, setFilterDesignation] = useState("All");
   
   const [selectedPmProjects, setSelectedPmProjects] = useState([]);
   const [adminEditProjectsInput, setAdminEditProjectsInput] = useState("");
@@ -105,10 +106,9 @@ export default function ProjectManagement() {
   }, [currentUser, taskTargetUser?.uid]);
 
   useEffect(() => {
-    if ((showReportsModal || showMemberReportsModal) && teamMembers.length > 0) {
+    if (teamMembers.length > 0) {
       const allTaskIds = teamMembers.flatMap(m => (m.tasks || []).map(t => t.id));
       const unsubs = [];
-      const newReports = {};
       
       allTaskIds.forEach(taskId => {
         const unsub = subscribeToTaskReports(taskId, (reports) => {
@@ -121,7 +121,7 @@ export default function ProjectManagement() {
         unsubs.forEach(fn => fn());
       };
     }
-  }, [showReportsModal, showMemberReportsModal, teamMembers]);
+  }, [teamMembers]);
 
   const calculateTimeSpent = (reports) => {
     if (!reports || reports.length === 0) return 0;
@@ -487,13 +487,16 @@ export default function ProjectManagement() {
   };
 
   const uniqueProjects = Array.from(new Set(teamMembers.flatMap(m => m.projects?.length ? m.projects : (m.project ? [m.project] : [])))).filter(Boolean);
+  const uniqueDesignations = Array.from(new Set(teamMembers.map(m => m.designation || m.jobType || "Unassigned"))).filter(Boolean).sort();
 
   const filteredTeam = teamMembers.filter(m => {
     const matchesSearch = m.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          m.designation?.toLowerCase().includes(searchQuery.toLowerCase());
+                          (m.designation || m.jobType || "Unassigned").toLowerCase().includes(searchQuery.toLowerCase());
     const mProjects = m.projects?.length ? m.projects : (m.project ? [m.project] : []);
     const matchesProject = filterProject === "All" || mProjects.includes(filterProject);
-    return matchesSearch && matchesProject;
+    const mDesignation = m.designation || m.jobType || "Unassigned";
+    const matchesDesignation = filterDesignation === "All" || mDesignation === filterDesignation;
+    return matchesSearch && matchesProject && matchesDesignation;
   });
 
   const availableUsersToAdd = currentUser?.role === "admin"
@@ -567,6 +570,18 @@ export default function ProjectManagement() {
               <option value="All">All Projects</option>
               {uniqueProjects.map(p => (
                 <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative w-full sm:max-w-[200px] mt-2 sm:mt-0">
+            <select
+              value={filterDesignation}
+              onChange={(e) => setFilterDesignation(e.target.value)}
+              className="w-full px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+            >
+              <option value="All">All Designations</option>
+              {uniqueDesignations.map(d => (
+                <option key={d} value={d}>{d}</option>
               ))}
             </select>
           </div>

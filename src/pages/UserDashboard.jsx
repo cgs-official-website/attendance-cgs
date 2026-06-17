@@ -13,7 +13,8 @@ import {
   subscribeToPaidLeaves,
   subscribeToLeaveRequests,
   getAllRegisteredUsers,
-  stopTaskTimer
+  stopTaskTimer,
+  getLocalDateString
 } from "../firebase";
 import {
   Play,
@@ -226,7 +227,7 @@ export default function UserDashboard() {
 
     const unsubscribe = subscribeToUserLogs(currentUser.uid, (logs) => {
       setUserLogs(logs);
-      const todayStr = new Date().toISOString().split("T")[0];
+      const todayStr = getLocalDateString();
       const today = logs.find(log => log.date === todayStr);
       setTodayLog(today || null);
       setLoading(false);
@@ -239,7 +240,7 @@ export default function UserDashboard() {
     const unsubscribeLeaves = subscribeToLeaveRequests((list) => {
       setMyLeaveRequests(list.filter(r => r.userId === currentUser.uid));
       
-      const todayStr = new Date().toISOString().split("T")[0];
+      const todayStr = getLocalDateString();
       const deptOnLeave = list.filter(r => 
         r.status === "approved" && 
         r.userDept === currentUser.department && 
@@ -380,24 +381,36 @@ export default function UserDashboard() {
         return;
       }
 
+      const handleSuccess = (position) => {
+        const loc = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy)
+        };
+        setGpsLocation(loc);
+        resolve(loc);
+      };
+
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const loc = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: Math.round(position.coords.accuracy)
-          };
-          setGpsLocation(loc);
-          resolve(loc);
-        },
+        handleSuccess,
         (error) => {
-          let msg = "Could not fetch active GPS coordinates. Please ensure location is enabled.";
-          if (error.code === error.PERMISSION_DENIED) {
-            msg = "Location permission denied. Please allow GPS access to check-in/out.";
+          if (error.code === error.TIMEOUT || error.code === error.POSITION_UNAVAILABLE) {
+            navigator.geolocation.getCurrentPosition(
+              handleSuccess,
+              (err2) => {
+                reject(new Error("Could not fetch GPS coordinates. Please ensure location is enabled."));
+              },
+              { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+            );
+          } else {
+            let msg = "Could not fetch active GPS coordinates. Please ensure location is enabled.";
+            if (error.code === error.PERMISSION_DENIED) {
+              msg = "Location permission denied. Please allow GPS access to check-in/out.";
+            }
+            reject(new Error(msg));
           }
-          reject(new Error(msg));
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     });
   };
@@ -1161,14 +1174,17 @@ export default function UserDashboard() {
                 {birthdays.length > 0 ? (
                   <div className="space-y-4">
                     {birthdays.map((b, idx) => (
-                      <div key={idx} className="flex items-center gap-3 p-3 bg-bg-base/30 rounded-[12px] border border-border-card hover:border-brand-primary/30 transition-colors">
-                        <div className="w-10 h-10 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0">
-                          {b.name ? b.name.charAt(0) : "U"}
+                      <div key={idx} className={`flex items-center gap-3 p-3 rounded-[12px] border transition-all relative overflow-hidden ${b.isBirthdayToday ? 'bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)] scale-[1.02]' : 'bg-bg-base/30 border-border-card hover:border-brand-primary/30'}`}>
+                        {b.isBirthdayToday && (
+                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ animation: "shimmer 2s infinite" }} />
+                        )}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0 z-10 ${b.isBirthdayToday ? 'bg-amber-500/20 text-amber-500' : 'bg-brand-primary/10 text-brand-primary'}`}>
+                          {b.isBirthdayToday ? <Cake size={20} className="animate-bounce" /> : (b.name ? b.name.charAt(0) : "U")}
                         </div>
-                        <div>
+                        <div className="z-10">
                           <h4 className="font-bold text-sm text-text-main">{b.name}</h4>
-                          <p className={`text-xs font-semibold ${b.isBirthdayToday ? 'text-emerald-500' : 'text-brand-primary'}`}>
-                            {b.isBirthdayToday ? "Today!" : "Tomorrow!"}
+                          <p className={`text-xs font-semibold ${b.isBirthdayToday ? 'text-amber-500' : 'text-brand-primary'}`}>
+                            {b.isBirthdayToday ? "🎉 Today!" : "Tomorrow!"}
                           </p>
                         </div>
                       </div>
@@ -1556,7 +1572,7 @@ export default function UserDashboard() {
                     <button
                       onClick={() => handleStartBreak("bio")}
                       disabled={actionLoading}
-                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                      className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                     >
                       <Coffee size={15} />
                       <span>Aux / Bio</span>

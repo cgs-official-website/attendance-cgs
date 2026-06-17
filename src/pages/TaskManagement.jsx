@@ -593,11 +593,11 @@ export default function TaskManagement() {
       <div className="mt-12 bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl relative overflow-hidden flex flex-col">
             
             <div className="flex flex-col sm:flex-row items-center justify-between mb-5 border-b border-border-card pb-5 gap-3 flex-shrink-0 relative mt-2">
-              <h3 className="font-bold text-xl text-text-main flex items-center gap-2">
+              <h3 className="font-bold text-xl text-text-main flex items-center gap-2 whitespace-nowrap">
                 <FileText size={20} className="text-brand-primary" />
                 My Task History
               </h3>
-              <div className="flex items-center justify-center gap-3 w-full flex-wrap">
+              <div className="flex items-center justify-end gap-3 w-full sm:w-auto flex-wrap">
                 <button 
                   onClick={handleDownloadPDF}
                   className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"

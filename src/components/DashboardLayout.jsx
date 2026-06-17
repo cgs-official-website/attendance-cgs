@@ -469,10 +469,10 @@ export default function DashboardLayout({ children }) {
     {
       label: "Leave Approval",
       icon: Calendar,
-      active: location.pathname === "/leave-approval",
+      active: location.pathname === "/admin" && activeTabParam === "logs",
       hidden: !isAdmin,
       badge: newUpdatesCount > 0 ? newUpdatesCount : null,
-      onClick: () => { navigate("/leave-approval"); setIsMobileOpen(false); }
+      onClick: () => { navigate("/admin?tab=logs"); setIsMobileOpen(false); }
     },
     {
       label: "Notice Board",

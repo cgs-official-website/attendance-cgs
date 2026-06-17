@@ -436,7 +436,8 @@ export const checkIn = async (user, location) => {
     breaks: [],
     totalWorkingMinutes: 0,
     shortBreakBalance: 1800, // 30 mins in seconds
-    longBreakBalance: 1800   // 30 mins in seconds
+    longBreakBalance: 2700,   // 45 mins in seconds
+    bioBreakBalance: 900      // 15 mins in seconds
   };
 
   if (dbType === "firebase") {
@@ -573,7 +574,7 @@ export const startBreak = async (userId, breakType, location) => {
     if (breakType === "short") {
       balance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
     } else if (breakType === "bio") {
-      balance = 900; // 15 mins for bio break
+      balance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900; // 15 mins
     } else {
       balance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
     }
@@ -619,7 +620,7 @@ export const startBreak = async (userId, breakType, location) => {
     if (breakType === "short") {
       balance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
     } else if (breakType === "bio") {
-      balance = 900; // 15 mins for bio break
+      balance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900; // 15 mins
     } else {
       balance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
     }
@@ -690,21 +691,24 @@ export const resumeWork = async (userId, location) => {
     activeBreak.durationMinutes = parseFloat((durationSeconds / 60).toFixed(1));
 
     let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
-    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
+    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2700;
+    let newBioBalance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900;
 
     if (activeBreak.type === "short") {
       newShortBalance = Math.max(0, newShortBalance - durationSeconds);
     } else if (activeBreak.type === "long") {
       newLongBalance = Math.max(0, newLongBalance - durationSeconds);
+    } else if (activeBreak.type === "bio") {
+      newBioBalance = Math.max(0, newBioBalance - durationSeconds);
     }
-    // bio break doesn't deduct from standard balances
     
     const updates = {
       status: "checked-in",
       breaks: updatedBreaks,
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
-      longBreakBalance: newLongBalance
+      longBreakBalance: newLongBalance,
+      bioBreakBalance: newBioBalance
     };
     
     await updateDoc(docRef, updates);
@@ -738,14 +742,16 @@ export const resumeWork = async (userId, location) => {
     activeBreak.durationMinutes = parseFloat((durationSeconds / 60).toFixed(1));
 
     let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
-    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
+    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2700;
+    let newBioBalance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900;
 
     if (activeBreak.type === "short") {
       newShortBalance = Math.max(0, newShortBalance - durationSeconds);
     } else if (activeBreak.type === "long") {
       newLongBalance = Math.max(0, newLongBalance - durationSeconds);
+    } else if (activeBreak.type === "bio") {
+      newBioBalance = Math.max(0, newBioBalance - durationSeconds);
     }
-    // bio break doesn't deduct from standard balances
     
     logs[logIndex] = {
       ...currentData,
@@ -753,7 +759,8 @@ export const resumeWork = async (userId, location) => {
       breaks: updatedBreaks,
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
-      longBreakBalance: newLongBalance
+      longBreakBalance: newLongBalance,
+      bioBreakBalance: newBioBalance
     };
     
     localDb.saveAttendance(logs);
@@ -1480,7 +1487,8 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           breaks: [],
           totalWorkingMinutes: workingMinutes,
           shortBreakBalance: 1800,
-          longBreakBalance: 1800
+          longBreakBalance: 2700,
+          bioBreakBalance: 900
         };
         
         await setDoc(doc(db, "attendance", recordId), attendanceData);
@@ -1519,7 +1527,8 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           breaks: [],
           totalWorkingMinutes: workingMinutes,
           shortBreakBalance: 1800,
-          longBreakBalance: 1800
+          longBreakBalance: 2700,
+          bioBreakBalance: 900
         };
         
         const logs = localDb.getAttendance();

@@ -1109,7 +1109,7 @@ export default function ProjectManagement() {
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {allTaskReports[task.id].map(r => (
+                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped")).map(r => (
                                   <div key={r.id} className="text-[10px]">
                                     <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
                                     <span className="text-text-main ml-2">{r.reportText}</span>
@@ -1196,7 +1196,7 @@ export default function ProjectManagement() {
                           <tr className="border-b border-border-card">
                             <td colSpan="3" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {allTaskReports[task.id].map(r => (
+                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped")).map(r => (
                                   <div key={r.id} className="text-[10px]">
                                     <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
                                     <span className="text-text-main ml-2">{r.reportText}</span>

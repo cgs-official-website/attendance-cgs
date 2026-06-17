@@ -731,9 +731,11 @@ export default function UserDashboard() {
 
   const shiftProgressPercent = getShiftProgress();
   const shortBreakBalance = todayLog?.shortBreakBalance !== undefined ? todayLog.shortBreakBalance : 1800;
-  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? todayLog.longBreakBalance : 1800;
+  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? todayLog.longBreakBalance : 2700;
+  const bioBreakBalance = todayLog?.bioBreakBalance !== undefined ? todayLog.bioBreakBalance : 900;
   const shortBreakPercent = (shortBreakBalance / 1800) * 100;
-  const longBreakPercent = (longBreakBalance / 1800) * 100;
+  const longBreakPercent = (longBreakBalance / 2700) * 100;
+  const bioBreakPercent = (bioBreakBalance / 900) * 100;
 
   const weeklyHoursData = getWeeklyHours();
   const recentActivities = getRecentActivitiesList();
@@ -1145,66 +1147,8 @@ export default function UserDashboard() {
                   </svg>
                 </button>
               </div>
-              </div>
             </div>
 
-            {/* Birthdays & News Card */}
-            <div className="bg-bg-card border border-border-card rounded-[24px] overflow-hidden shadow-sm">
-              <div className="bg-gradient-to-r from-brand-primary to-indigo-600 p-5 text-white text-left flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">HAPPENING NOW</span>
-                  <h3 className="font-extrabold text-base text-white mt-0.5 flex items-center gap-2">
-                    {birthdays.length > 0 ? (
-                      <>Upcoming Birthdays <Cake size={18} /></>
-                    ) : (
-                      <>Important Updates <Newspaper size={18} /></>
-                    )}
-                  </h3>
-                </div>
-                {birthdays.length > 0 ? (
-                  <div className="bg-white/20 p-2 rounded-full animate-pulse flex-shrink-0">
-                    <svg className="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                  </div>
-                ) : (
-                  <div className="bg-white/20 p-2 rounded-full flex-shrink-0">
-                    <svg className="w-5 h-5 text-blue-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2.5 2.5 0 00-2.5-2.5H15M9 11l3 3L22 4"/></svg>
-                  </div>
-                )}
-              </div>
-              <div className="p-5 text-left">
-                {birthdays.length > 0 ? (
-                  <div className="space-y-4">
-                    {birthdays.map((b, idx) => (
-                      <div key={idx} className={`flex items-center gap-3 p-3 rounded-[12px] border transition-all relative overflow-hidden ${b.isBirthdayToday ? 'bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)] scale-[1.02]' : 'bg-bg-base/30 border-border-card hover:border-brand-primary/30'}`}>
-                        {b.isBirthdayToday && (
-                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ animation: "shimmer 2s infinite" }} />
-                        )}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0 z-10 ${b.isBirthdayToday ? 'bg-amber-500/20 text-amber-500' : 'bg-brand-primary/10 text-brand-primary'}`}>
-                          {b.isBirthdayToday ? <Cake size={20} className="animate-bounce" /> : (b.name ? b.name.charAt(0) : "U")}
-                        </div>
-                        <div className="z-10">
-                          <h4 className="font-bold text-sm text-text-main">{b.name}</h4>
-                          <p className={`text-xs font-semibold ${b.isBirthdayToday ? 'text-amber-500' : 'text-brand-primary'}`}>
-                            {b.isBirthdayToday ? "🎉 Today!" : "Tomorrow!"}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : news.length > 0 ? (
-                  <div className="space-y-3">
-                    {news.map((item, idx) => (
-                      <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="block p-3 bg-bg-base/30 rounded-[12px] border border-border-card hover:border-brand-primary/30 hover:bg-bg-base/50 transition-all">
-                        <h4 className="font-bold text-xs text-text-main line-clamp-2 leading-tight mb-1">{item.title}</h4>
-                        <p className="text-[9px] text-text-mut font-semibold">{new Date(item.publishedAt).toLocaleDateString()}</p>
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-text-mut text-center py-4 italic font-semibold">No new updates today.</p>
-                )}
-              </div>
-            </div>
 
             {/* Task Management Shortcut */}
             <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm text-left cursor-pointer hover:border-brand-primary/50 hover:shadow-md transition-all group" onClick={() => navigate("/task-management")}>
@@ -1256,7 +1200,7 @@ export default function UserDashboard() {
             </div>
           </div>
         </div>
-      // </div>
+      </div>
     );
   }
 
@@ -1532,6 +1476,7 @@ export default function UserDashboard() {
             {todayLog && todayLog.status === "checked-in" && (() => {
               const shortBalMin = Math.max(0, Math.round(shortBreakBalance / 60));
               const longBalMin = Math.max(0, Math.round(longBreakBalance / 60));
+              const bioBalMin = Math.max(0, Math.round(bioBreakBalance / 60));
 
               return (
                 <div className="w-full text-center p-2">
@@ -1572,11 +1517,11 @@ export default function UserDashboard() {
                     </button>
                     <button
                       onClick={() => handleStartBreak("bio")}
-                      disabled={actionLoading}
+                      disabled={actionLoading || bioBreakBalance <= 0}
                       className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                     >
                       <Coffee size={15} />
-                      <span>Aux / Bio</span>
+                      <span>Aux / Bio ({bioBalMin}m left)</span>
                     </button>
                   </div>
 
@@ -1780,6 +1725,63 @@ export default function UserDashboard() {
               </div>
             </div>
           )}
+            {/* Birthdays & News Card */}
+            <div className="bg-bg-card border border-border-card rounded-[24px] overflow-hidden shadow-sm">
+              <div className="bg-gradient-to-r from-brand-primary to-indigo-600 p-5 text-white text-left flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">HAPPENING NOW</span>
+                  <h3 className="font-extrabold text-base text-white mt-0.5 flex items-center gap-2">
+                    {birthdays.length > 0 ? (
+                      <>Upcoming Birthdays <Cake size={18} /></>
+                    ) : (
+                      <>Important Updates <Newspaper size={18} /></>
+                    )}
+                  </h3>
+                </div>
+                {birthdays.length > 0 ? (
+                  <div className="bg-white/20 p-2 rounded-full animate-pulse flex-shrink-0">
+                    <svg className="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                  </div>
+                ) : (
+                  <div className="bg-white/20 p-2 rounded-full flex-shrink-0">
+                    <svg className="w-5 h-5 text-blue-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2.5 2.5 0 00-2.5-2.5H15M9 11l3 3L22 4"/></svg>
+                  </div>
+                )}
+              </div>
+              <div className="p-5 text-left">
+                {birthdays.length > 0 ? (
+                  <div className="space-y-4">
+                    {birthdays.map((b, idx) => (
+                      <div key={idx} className={`flex items-center gap-3 p-3 rounded-[12px] border transition-all relative overflow-hidden ${b.isBirthdayToday ? 'bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)] scale-[1.02]' : 'bg-bg-base/30 border-border-card hover:border-brand-primary/30'}`}>
+                        {b.isBirthdayToday && (
+                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ animation: "shimmer 2s infinite" }} />
+                        )}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0 z-10 ${b.isBirthdayToday ? 'bg-amber-500/20 text-amber-500' : 'bg-brand-primary/10 text-brand-primary'}`}>
+                          {b.isBirthdayToday ? <Cake size={20} className="animate-bounce" /> : (b.name ? b.name.charAt(0) : "U")}
+                        </div>
+                        <div className="z-10">
+                          <h4 className="font-bold text-sm text-text-main">{b.name}</h4>
+                          <p className={`text-xs font-semibold ${b.isBirthdayToday ? 'text-amber-500' : 'text-brand-primary'}`}>
+                            {b.isBirthdayToday ? "🎉 Today!" : "Tomorrow!"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : news.length > 0 ? (
+                  <div className="space-y-3">
+                    {news.map((item, idx) => (
+                      <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="block p-3 bg-bg-base/30 rounded-[12px] border border-border-card hover:border-brand-primary/30 hover:bg-bg-base/50 transition-all">
+                        <h4 className="font-bold text-xs text-text-main line-clamp-2 leading-tight mb-1">{item.title}</h4>
+                        <p className="text-[9px] text-text-mut font-semibold">{new Date(item.publishedAt).toLocaleDateString()}</p>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-mut text-center py-4 italic font-semibold">No new updates today.</p>
+                )}
+              </div>
+            </div>
 
           {/* Card 1: GPS Coordinates Card */}
           <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
@@ -1862,8 +1864,8 @@ export default function UserDashboard() {
               <span>View All History</span>
               <ChevronRight size={14} />
             </button>
-          </div>
         </div>
+      </div>
       </div>
 
       {/* Glassmorphic Checkout Confirmation Modal */}

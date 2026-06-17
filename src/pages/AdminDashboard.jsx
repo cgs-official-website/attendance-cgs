@@ -1358,7 +1358,7 @@ export default function AdminDashboard() {
                         <th className="pb-3 px-4">Department</th>
                         <th className="pb-3 px-4">Check-In</th>
                         <th className="pb-3 px-4">Check-Out</th>
-                        <th className="pb-3 px-4 text-center">Breaks</th>
+                        <th className="pb-3 px-4 text-center">Breaks (Taken)</th>
                         <th className="pb-3 px-4 text-center">Total Hours</th>
                         <th className="pb-3 pl-4 text-right">Status</th>
                       </tr>
@@ -1373,9 +1373,22 @@ export default function AdminDashboard() {
                           : "—";
 
                         let totalHrsStr = "—";
-                        let breaksCount = 0;
+                        let shortTaken = 0;
+                        let longTaken = 0;
+                        let bioTaken = 0;
+                        
                         if (log) {
-                          breaksCount = log.breaks ? log.breaks.length : 0;
+                          if (log.breaks) {
+                            log.breaks.forEach(b => {
+                              const bStart = new Date(b.startTime).getTime();
+                              const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
+                              const mins = Math.round((bEnd - bStart) / 60000);
+                              if (b.type === "short") shortTaken += mins;
+                              else if (b.type === "long") longTaken += mins;
+                              else if (b.type === "bio") bioTaken += mins;
+                            });
+                          }
+                          
                           if (log.totalWorkingMinutes !== undefined) {
                             totalHrsStr = (log.totalWorkingMinutes / 60).toFixed(2) + "h";
                           } else if (log.checkInTime) {
@@ -1405,9 +1418,19 @@ export default function AdminDashboard() {
                             <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold">{inTime}</td>
                             <td className="py-3.5 px-4 text-text-sec">{outTime}</td>
-                            <td className="py-3.5 px-4 text-text-sec font-bold text-center">{breaksCount}</td>
+                            <td className="py-3.5 px-4 text-center">
+                              {(shortTaken > 0 || longTaken > 0 || bioTaken > 0) ? (
+                                <div className="flex flex-col gap-1 items-center text-[9px] font-extrabold uppercase">
+                                  {shortTaken > 0 && <span className="text-brand-warning bg-brand-warning/10 px-1.5 py-0.5 rounded shadow-sm">B1: {shortTaken}m</span>}
+                                  {longTaken > 0 && <span className="text-brand-warning bg-brand-warning/10 px-1.5 py-0.5 rounded shadow-sm">B2: {longTaken}m</span>}
+                                  {bioTaken > 0 && <span className="text-brand-success bg-brand-success/10 px-1.5 py-0.5 rounded shadow-sm">Bio: {bioTaken}m</span>}
+                                </div>
+                              ) : (
+                                <span className="text-text-mut font-semibold">—</span>
+                              )}
+                            </td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold text-center">{totalHrsStr}</td>
-                            <td className="py-3.5 pl-4 text-right">{getStatusBadge(status)}</td>
+                            <td className="py-3.5 pl-4 text-right flex justify-end items-center">{getStatusBadge(status)}</td>
                           </tr>
                         );
                       })}

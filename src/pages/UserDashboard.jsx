@@ -45,6 +45,7 @@ import {
   Check,
   Activity
 } from "lucide-react";
+import CustomDateRangePicker from "../components/CustomDateRangePicker";
 
 export default function UserDashboard() {
   const { currentUser } = useAuth();
@@ -107,7 +108,7 @@ export default function UserDashboard() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [teamOnLeaveCount, setTeamOnLeaveCount] = useState(0);
   const [birthdays, setBirthdays] = useState([]);
-  const [news, setNews] = useState([]);
+
 
   const toastShownRef = useRef(false);
 
@@ -281,15 +282,6 @@ export default function UserDashboard() {
       setBirthdays(upcomingBirthdays);
     }).catch(err => console.warn("Failed to fetch team members:", err));
 
-    // Fetch News unconditionally
-    fetch('https://saurav.tech/NewsAPI/top-headlines/category/technology/in.json')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.articles) {
-          setNews(data.articles.filter(a => a.title).slice(0, 3));
-        }
-      })
-      .catch(err => console.warn("Failed to fetch news:", err));
 
     return () => {
       unsubscribe();
@@ -731,10 +723,10 @@ export default function UserDashboard() {
 
   const shiftProgressPercent = getShiftProgress();
   const shortBreakBalance = todayLog?.shortBreakBalance !== undefined ? todayLog.shortBreakBalance : 1800;
-  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? todayLog.longBreakBalance : 2700;
+  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? Math.min(todayLog.longBreakBalance, 1800) : 1800;
   const bioBreakBalance = todayLog?.bioBreakBalance !== undefined ? todayLog.bioBreakBalance : 900;
   const shortBreakPercent = (shortBreakBalance / 1800) * 100;
-  const longBreakPercent = (longBreakBalance / 2700) * 100;
+  const longBreakPercent = (longBreakBalance / 1800) * 100;
   const bioBreakPercent = (bioBreakBalance / 900) * 100;
 
   const weeklyHoursData = getWeeklyHours();
@@ -860,34 +852,15 @@ export default function UserDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Start Date */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-text-sec" htmlFor="start-date-input">Start Date</label>
-                    <input
-                      id="start-date-input"
-                      type="date"
-                      min={isEmergency ? todayStr : tomorrowStr}
-                      className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  {/* End Date */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-text-sec" htmlFor="end-date-input">End Date</label>
-                    <input
-                      id="end-date-input"
-                      type="date"
-                      min={startDate || (isEmergency ? todayStr : tomorrowStr)}
-                      className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      required
-                    />
-                  </div>
+                {/* Custom Date Range Picker */}
+                <div className="mb-6">
+                  <CustomDateRangePicker 
+                    startDate={startDate}
+                    endDate={endDate}
+                    setStartDate={setStartDate}
+                    setEndDate={setEndDate}
+                    minDate={isEmergency ? todayStr : tomorrowStr}
+                  />
                 </div>
 
                 {/* Reason for Leave Textarea */}
@@ -1768,15 +1741,6 @@ export default function UserDashboard() {
                       </div>
                     ))}
                   </div>
-                ) : news.length > 0 ? (
-                  <div className="space-y-3">
-                    {news.map((item, idx) => (
-                      <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer" className="block p-3 bg-bg-base/30 rounded-[12px] border border-border-card hover:border-brand-primary/30 hover:bg-bg-base/50 transition-all">
-                        <h4 className="font-bold text-xs text-text-main line-clamp-2 leading-tight mb-1">{item.title}</h4>
-                        <p className="text-[9px] text-text-mut font-semibold">{new Date(item.publishedAt).toLocaleDateString()}</p>
-                      </a>
-                    ))}
-                  </div>
                 ) : (
                   <p className="text-xs text-text-mut text-center py-4 italic font-semibold">No new updates today.</p>
                 )}
@@ -1827,8 +1791,11 @@ export default function UserDashboard() {
           <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
             <h3 className="font-extrabold text-base text-text-main tracking-tight mb-6">Recent Activity</h3>
 
-            {/* Timeline nodes */}
-            <div className="relative pl-5 border-l border-border-card space-y-6 ml-2 text-left">
+            {/* Timeline nodes (Horizontal) */}
+            <div className="relative flex gap-6 overflow-x-auto text-left py-2 mt-2 [&::-webkit-scrollbar]:hidden">
+              {/* Horizontal Line Background */}
+              <div className="absolute top-4 left-0 right-0 h-px bg-border-card" />
+              
               {recentActivities.map((act, idx) => {
                 let dotColor = "bg-brand-primary";
                 if (act.type === "out") dotColor = "bg-brand-danger";
@@ -1837,16 +1804,16 @@ export default function UserDashboard() {
                 if (act.type === "in") dotColor = "bg-brand-success";
 
                 return (
-                  <div key={idx} className="relative">
+                  <div key={idx} className="relative min-w-[130px] pt-7 flex-shrink-0">
                     {/* Node Dot */}
-                    <div className={`absolute -left-[25px] top-1 w-2.5 h-2.5 rounded-full border-2 border-bg-card ${dotColor}`} />
+                    <div className={`absolute left-0 top-[11px] w-3 h-3 rounded-full border-2 border-bg-card ${dotColor} z-10`} />
 
-                    <div className="flex justify-between items-start">
-                      <div>
+                    <div className="flex flex-col items-start">
+                      <div className="mb-2">
                         <h4 className="text-xs font-extrabold text-text-main">{act.title}</h4>
-                        <span className="text-[10px] text-text-mut font-semibold">{act.desc}</span>
+                        <span className="text-[10px] text-text-mut font-semibold block mt-0.5">{act.desc}</span>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left border-t border-border-card/50 pt-1.5 w-full">
                         <span className="text-[10px] font-bold text-text-main block">{act.time}</span>
                         <span className="text-[8px] text-text-mut uppercase font-extrabold block">{act.dateText}</span>
                       </div>

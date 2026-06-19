@@ -257,8 +257,8 @@ export default function History() {
             {chartData.map((c, idx) => {
               const barHeight = Math.max(10, Math.round((c.hours / maxChartHours) * 100));
               return (
-                <div key={idx} className="flex flex-col items-center gap-2 group w-12">
-                  <div className="opacity-0 group-hover:opacity-100 absolute transform -translate-y-12 bg-slate-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow pointer-events-none transition-opacity duration-150">
+                <div key={idx} className="flex flex-col items-center justify-end gap-2 group w-12 h-full">
+                  <div className="opacity-0 group-hover:opacity-100 absolute transform -translate-y-12 z-10 bg-slate-900 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow pointer-events-none transition-opacity duration-150">
                     {c.hours} hours
                   </div>
                   

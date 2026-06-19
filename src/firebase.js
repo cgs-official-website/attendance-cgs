@@ -416,6 +416,8 @@ export const checkIn = async (user, location) => {
     
     if (checkInDate >= shiftStartToday && checkInDate <= shiftStartPlusOneHour) {
       checkInDate = shiftStartToday;
+    } else if (checkInDate > shiftStartPlusOneHour) {
+      checkInDate = shiftStartPlusOneHour;
     }
   }
   const timeStr = checkInDate.toISOString();
@@ -436,7 +438,7 @@ export const checkIn = async (user, location) => {
     breaks: [],
     totalWorkingMinutes: 0,
     shortBreakBalance: 1800, // 30 mins in seconds
-    longBreakBalance: 2700,   // 45 mins in seconds
+    longBreakBalance: 1800,   // 30 mins in seconds
     bioBreakBalance: 900      // 15 mins in seconds
   };
 
@@ -576,7 +578,7 @@ export const startBreak = async (userId, breakType, location) => {
     } else if (breakType === "bio") {
       balance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900; // 15 mins
     } else {
-      balance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
+      balance = currentData.longBreakBalance !== undefined ? Math.min(currentData.longBreakBalance, 1800) : 1800;
     }
 
     if (balance <= 0) {
@@ -622,7 +624,7 @@ export const startBreak = async (userId, breakType, location) => {
     } else if (breakType === "bio") {
       balance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900; // 15 mins
     } else {
-      balance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 1800;
+      balance = currentData.longBreakBalance !== undefined ? Math.min(currentData.longBreakBalance, 1800) : 1800;
     }
 
     if (balance <= 0) {
@@ -691,7 +693,7 @@ export const resumeWork = async (userId, location) => {
     activeBreak.durationMinutes = parseFloat((durationSeconds / 60).toFixed(1));
 
     let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
-    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2700;
+    let newLongBalance = currentData.longBreakBalance !== undefined ? Math.min(currentData.longBreakBalance, 1800) : 1800;
     let newBioBalance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900;
 
     if (activeBreak.type === "short") {
@@ -742,7 +744,7 @@ export const resumeWork = async (userId, location) => {
     activeBreak.durationMinutes = parseFloat((durationSeconds / 60).toFixed(1));
 
     let newShortBalance = currentData.shortBreakBalance !== undefined ? currentData.shortBreakBalance : 1800;
-    let newLongBalance = currentData.longBreakBalance !== undefined ? currentData.longBreakBalance : 2700;
+    let newLongBalance = currentData.longBreakBalance !== undefined ? Math.min(currentData.longBreakBalance, 1800) : 1800;
     let newBioBalance = currentData.bioBreakBalance !== undefined ? currentData.bioBreakBalance : 900;
 
     if (activeBreak.type === "short") {
@@ -1487,7 +1489,7 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           breaks: [],
           totalWorkingMinutes: workingMinutes,
           shortBreakBalance: 1800,
-          longBreakBalance: 2700,
+          longBreakBalance: 1800,
           bioBreakBalance: 900
         };
         
@@ -1527,7 +1529,7 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           breaks: [],
           totalWorkingMinutes: workingMinutes,
           shortBreakBalance: 1800,
-          longBreakBalance: 2700,
+          longBreakBalance: 1800,
           bioBreakBalance: 900
         };
         

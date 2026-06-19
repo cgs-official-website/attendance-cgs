@@ -21,6 +21,9 @@ export default function ProjectManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  
   const [showAddTeamModal, setShowAddTeamModal] = useState(false);
   const [selectedUserForTeam, setSelectedUserForTeam] = useState("");
   const [adminProjectInput, setAdminProjectInput] = useState("");
@@ -499,6 +502,14 @@ export default function ProjectManagement() {
     return matchesSearch && matchesProject && matchesDesignation;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterProject, filterDesignation]);
+
+  const totalPages = Math.ceil(filteredTeam.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedTeam = filteredTeam.slice(startIndex, startIndex + itemsPerPage);
+
   const availableUsersToAdd = currentUser?.role === "admin"
     ? allUsers.filter(u => u.uid !== currentUser?.uid && u.role !== "admin")
     : allUsers.filter(u => {
@@ -617,7 +628,7 @@ export default function ProjectManagement() {
                   </td>
                 </tr>
               ) : (
-                filteredTeam.map((member) => {
+                paginatedTeam.map((member) => {
                   const tasks = member.tasks || [];
                   const totalEstimatedHours = tasks.reduce((sum, t) => sum + (Number(t.duration) || 0), 0);
                   const totalTrackedHours = tasks.reduce((sum, t) => sum + calculateTimeSpent(allTaskReports[t.id] || []), 0);
@@ -716,6 +727,43 @@ export default function ProjectManagement() {
             </tbody>
           </table>
         </div>
+        
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center pt-4 border-t border-border-card text-xs flex-wrap gap-4 px-4 pb-4">
+            <span className="text-text-mut font-semibold">
+              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredTeam.length)} of {filteredTeam.length} entries
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 bg-bg-card border border-border-card rounded-[8px] hover:bg-bg-base hover:text-brand-primary font-bold disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Prev
+              </button>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`w-7 h-7 rounded-[8px] font-bold transition-colors cursor-pointer ${
+                    currentPage === i + 1 
+                      ? "bg-brand-primary text-white" 
+                      : "bg-bg-card border border-border-card text-text-sec hover:bg-bg-base hover:text-brand-primary"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 bg-bg-card border border-border-card rounded-[8px] hover:bg-bg-base hover:text-brand-primary font-bold disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Team Member Modal */}

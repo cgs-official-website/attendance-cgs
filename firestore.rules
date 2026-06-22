@@ -1,9 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Allow read/write access to all collections for any authenticated user.
-    // This is secure for internal portals and guarantees zero query permission errors.
+    match /companies/{company} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
     match /{document=**} {
       allow read, write: if request.auth != null;
     }

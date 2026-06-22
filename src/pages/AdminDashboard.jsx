@@ -271,7 +271,7 @@ export default function AdminDashboard() {
 
   const loadDirectoryData = async () => {
     try {
-      const u = await getAllRegisteredUsers();
+      const u = await getAllRegisteredUsers(currentUser.companyId);
       setUsers(u);
     } catch (err) {
       showToast("Failed to load user directory.", "error");
@@ -284,19 +284,19 @@ export default function AdminDashboard() {
     loadDirectoryData();
 
     // Subscribe to live logs
-    const unsubscribe = subscribeToAdminDashboard((data) => {
+    const unsubscribe = subscribeToAdminDashboard(currentUser.companyId, (data) => {
       setLogs(data);
       setLoading(false);
     });
 
     // Subscribe to leave requests
-    const unsubscribeLeaves = subscribeToLeaveRequests((data) => {
+    const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (data) => {
       setAllRequests(data || []);
       setLeaveRequests(data.filter(r => r.status === "pending"));
     });
 
     // Subscribe to regularization requests
-    const unsubscribeRegs = subscribeToRegularizationRequests((data) => {
+    const unsubscribeRegs = subscribeToRegularizationRequests(currentUser.companyId, (data) => {
       setAllRegularizationRequests(data || []);
       setRegularizationRequests(data.filter(r => r.status === "pending"));
     });
@@ -307,7 +307,7 @@ export default function AdminDashboard() {
     });
 
     // Subscribe to paid leaves
-    const unsubscribePaidLeaves = subscribeToPaidLeaves((data) => {
+    const unsubscribePaidLeaves = subscribeToPaidLeaves(currentUser.companyId, (data) => {
       setPaidLeaves(data || []);
     });
 
@@ -325,14 +325,14 @@ export default function AdminDashboard() {
     if (activeTab !== "chat" || currentUser.role !== "admin") return;
     setChatLoading(true);
     Promise.all([
-      getAllMessagesAdmin(),
-      getAllDmThreadsAdmin()
+      getAllMessagesAdmin(currentUser.companyId),
+      getAllDmThreadsAdmin(currentUser.companyId)
     ]).then(([msgs, dms]) => {
       setChatMessages(msgs || []);
       setChatDmThreads(dms || []);
     }).catch(() => {}).finally(() => setChatLoading(false));
 
-    const unsubCh = subscribeToChannels(setChatChannels);
+    const unsubCh = subscribeToChannels(currentUser.companyId, setChatChannels);
     return unsubCh;
   }, [activeTab, currentUser.role]);
 
@@ -1864,10 +1864,17 @@ export default function AdminDashboard() {
                 </button>
                 <button 
                   onClick={handleExportExcel} 
-                  className="flex items-center gap-1.5 py-2.5 px-4 border border-border-card text-xs font-bold rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 py-2.5 px-4 border border-emerald-500/30 text-xs font-bold rounded-[12px] bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer"
                 >
                   <Download size={14} /> 
-                  <span>Export Report</span>
+                  <span>Excel</span>
+                </button>
+                <button 
+                  onClick={handleExportPDF} 
+                  className="flex items-center gap-1.5 py-2.5 px-4 border border-red-500/30 text-xs font-bold rounded-[12px] bg-red-500/5 hover:bg-red-500/10 text-red-600 dark:text-red-400 transition-colors cursor-pointer"
+                >
+                  <FileText size={14} /> 
+                  <span>PDF</span>
                 </button>
               </div>
             </div>

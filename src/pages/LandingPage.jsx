@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Moon, Sun, ArrowRight, Shield, Users, Clock, CheckCircle, BarChart, Briefcase } from "lucide-react";
+import { Moon, Sun, ArrowRight, Shield, Users, Clock, CheckCircle, BarChart, Briefcase, Menu, X, Star, Zap, ChevronRight, Check } from "lucide-react";
+import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import logoImg from "../assets/zuna-logo.png";
 import Logo from "../components/Logo";
 
+// Imported Assets
+import dashboardMockup from "../assets/landing_dashboard.png";
+import avatarImg from "../assets/testimonial_avatar.png";
+
 export default function LandingPage() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const heroRef = useRef(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  
+  const { scrollY } = useScroll();
+  const yHeroText = useTransform(scrollY, [0, 500], [0, 100]);
+  const opacityHero = useTransform(scrollY, [0, 300], [1, 0]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -15,16 +24,12 @@ export default function LandingPage() {
   }, [theme]);
 
   useEffect(() => {
-    const handleMouseMove = (e) => {
-      if (!heroRef.current) return;
-      const rect = heroRef.current.getBoundingClientRect();
-      setMousePos({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
+    document.title = "Zuna | HRMS";
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50);
     };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const toggleTheme = () => {
@@ -33,327 +38,436 @@ export default function LandingPage() {
 
   const isDark = theme === "dark";
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.2 } }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100, damping: 20 } }
+  };
+
   return (
-    <div className="min-h-screen bg-bg-base text-text-main font-sans overflow-x-hidden selection:bg-brand-primary/30 transition-colors duration-500">
+    <div className="min-h-screen bg-bg-base text-text-main font-sans overflow-x-hidden selection:bg-brand-primary/30 transition-colors duration-500 relative">
       
-      {/* Dynamic Background with Grid and Orbs */}
-      <div className="fixed inset-0 z-[-1] bg-bg-base transition-colors duration-500">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
-        <div className={`absolute top-0 z-[-2] h-screen w-screen transition-all duration-700 ${isDark ? 'bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(139,92,246,0.15),rgba(0,0,0,0))]' : 'bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(139,92,246,0.1),rgba(255,255,255,0))]'}`}></div>
-        
-        {/* Futuristic grid */}
-        <div 
-          className="absolute inset-0 z-[-1] opacity-[0.03] dark:opacity-[0.05]"
-          style={{
-            backgroundImage: `linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)`,
-            backgroundSize: '50px 50px',
-            maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%)'
-          }}
-        />
+      {/* Deep Mesh Background */}
+      <div className="fixed inset-0 z-0 bg-bg-base pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+        <div className={`absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-brand-primary/20' : 'bg-brand-primary/10'}`}></div>
+        <div className={`absolute bottom-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-indigo-600/20' : 'bg-indigo-600/10'}`}></div>
+        <div className={`absolute top-[40%] right-[10%] w-[30vw] h-[30vw] rounded-full blur-[120px] transition-all duration-1000 ${isDark ? 'bg-purple-600/20' : 'bg-purple-600/10'}`}></div>
       </div>
 
-      <style>{`
-        .glass-card {
-          background: color-mix(in srgb, var(--bg-card) 60%, transparent);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid color-mix(in srgb, var(--border-card) 60%, transparent);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
-        }
-        [data-theme="dark"] .glass-card {
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        }
-        .hover-tilt {
-          transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        .hover-tilt:hover {
-          transform: translateY(-10px) scale(1.02) rotateX(2deg) rotateY(-2deg);
-          border-color: rgba(139, 92, 246, 0.5);
-          box-shadow: 0 20px 40px rgba(139, 92, 246, 0.15);
-          z-index: 10;
-        }
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
-        }
-        .animate-float-delayed {
-          animation: float 7s ease-in-out 2s infinite;
-        }
-        @keyframes float {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-15px); }
-          100% { transform: translateY(0px); }
-        }
-        @keyframes blob {
-          0% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-          100% { transform: translate(0px, 0px) scale(1); }
-        }
-        .animate-blob {
-          animation: blob 8s infinite alternate;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
-
       {/* Navigation */}
-      <nav className="fixed w-full top-0 z-50 glass-card !opacity-100 transition-all duration-300">
+      <motion.nav 
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className={`fixed w-full top-0 z-50 transition-all duration-300 ${scrolled ? 'bg-bg-card/70 backdrop-blur-2xl border-b border-border-card shadow-lg shadow-black/5' : 'bg-transparent'}`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <div className="flex items-center gap-3 hover:scale-105 transition-transform duration-300">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="cursor-pointer">
               <Logo size={32} showText={true} />
+            </motion.div>
+            
+            <div className="hidden md:flex items-center gap-8">
+              <a href="#features" className="text-sm font-bold text-text-sec hover:text-text-main transition-colors">Features</a>
+              <a href="#testimonials" className="text-sm font-bold text-text-sec hover:text-text-main transition-colors">Testimonials</a>
+              <a href="#pricing" className="text-sm font-bold text-text-sec hover:text-text-main transition-colors">Pricing</a>
             </div>
-            <div className="flex items-center gap-4 sm:gap-6">
-              <button
+
+            <div className="flex items-center gap-4">
+              <motion.button
+                whileHover={{ scale: 1.1, rotate: 15 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={toggleTheme}
-                className="w-10 h-10 rounded-full flex items-center justify-center bg-bg-base border border-border-card text-text-sec hover:text-brand-primary hover:shadow-[0_0_10px_rgba(139,92,246,0.2)] transition-all cursor-pointer"
-                title="Toggle Theme"
+                className="w-10 h-10 rounded-full flex items-center justify-center bg-bg-card border border-border-card text-text-sec hover:text-brand-primary hover:shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all cursor-pointer"
               >
                 {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+              </motion.button>
+
+              <div className="hidden sm:flex items-center gap-4">
+                <Link to="/login" className="px-5 py-2.5 text-sm font-bold text-text-main border border-border-card rounded-full bg-bg-card hover:bg-bg-base transition-colors shadow-sm">
+                  Log in
+                </Link>
+                <Link to="/purchase" className="group relative px-6 py-2.5 font-bold text-white rounded-full overflow-hidden shadow-[0_0_20px_rgba(139,92,246,0.4)] block hover:shadow-[0_0_30px_rgba(139,92,246,0.6)] transition-shadow">
+                  <div className="absolute inset-0 bg-gradient-to-r from-brand-primary to-indigo-500"></div>
+                  <div className="relative flex items-center gap-2">
+                    Get Started
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </Link>
+              </div>
+
+              <button 
+                className="sm:hidden text-text-main"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
-              <Link to="/login" className="hidden sm:block text-sm font-bold text-text-sec hover:text-text-main transition-colors">
-                Log in
-              </Link>
-              <Link to="/register" className="group relative px-5 sm:px-6 py-2.5 font-bold text-white rounded-full overflow-hidden shadow-lg shadow-brand-primary/20">
-                <div className="absolute inset-0 bg-brand-primary opacity-90 group-hover:opacity-100 transition-opacity"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-brand-primary via-[#a855f7] to-[#6366f1] opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-[2px]"></div>
-                <div className="relative flex items-center gap-2">
-                  Get Started
-                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                </div>
-              </Link>
             </div>
           </div>
         </div>
-      </nav>
+
+        {/* Mobile Menu */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="sm:hidden bg-bg-card/95 backdrop-blur-3xl border-t border-border-card px-4 py-6 flex flex-col gap-4 overflow-hidden"
+            >
+              <a href="#features" onClick={() => setIsMobileMenuOpen(false)} className="py-2 text-sm font-bold text-text-sec">Features</a>
+              <a href="#pricing" onClick={() => setIsMobileMenuOpen(false)} className="py-2 text-sm font-bold text-text-sec">Pricing</a>
+              <hr className="border-border-card my-2" />
+              <Link to="/login" className="w-full text-center py-3 text-sm font-bold text-text-main border border-border-card rounded-[12px] bg-bg-base" onClick={() => setIsMobileMenuOpen(false)}>
+                Log in
+              </Link>
+              <Link to="/purchase" className="w-full text-center py-3 text-sm font-bold text-white bg-brand-primary rounded-[12px]" onClick={() => setIsMobileMenuOpen(false)}>
+                Register Workspace
+              </Link>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.nav>
 
       {/* Hero Section */}
-      <main ref={heroRef} className="pt-32 pb-20 sm:pt-48 sm:pb-32 lg:min-h-[90vh] flex items-center justify-center relative overflow-hidden">
-        
-        {/* Antigravity-style Interactive Spotlight */}
-        <div 
-          className={`absolute inset-0 pointer-events-none transition-opacity duration-300 z-0 ${isDark ? 'opacity-100' : 'opacity-0'}`}
-          style={{
-            background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, color-mix(in srgb, var(--brand-primary) 15%, transparent), transparent 40%)`
-          }}
-        />
-
-        {/* Floating background orbs */}
-        <div className={`absolute top-1/4 left-1/4 w-[30vw] h-[30vw] max-w-md max-h-md bg-brand-primary rounded-full mix-blend-multiply filter blur-[100px] ${isDark ? 'opacity-30' : 'opacity-5'} animate-blob`}></div>
-        <div className={`absolute top-1/3 right-1/4 w-[30vw] h-[30vw] max-w-md max-h-md bg-purple-400 dark:bg-purple-600 rounded-full mix-blend-multiply filter blur-[100px] ${isDark ? 'opacity-30' : 'opacity-5'} animate-blob animation-delay-2000`}></div>
-        <div className={`absolute bottom-1/4 left-1/2 w-[30vw] h-[30vw] max-w-md max-h-md bg-blue-400 dark:bg-indigo-500 rounded-full mix-blend-multiply filter blur-[100px] ${isDark ? 'opacity-30' : 'opacity-5'} animate-blob animation-delay-4000`}></div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center flex flex-col items-center">
-          
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card !opacity-100 border-brand-primary/30 text-brand-primary text-xs font-bold uppercase tracking-wider mb-8 hover:scale-105 transition-transform duration-300 cursor-default animate-float shadow-[0_0_15px_rgba(139,92,246,0.15)] dark:shadow-[0_0_20px_rgba(139,92,246,0.3)]">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-brand-primary"></span>
-            </span>
-            Multi-Vendor HRMS Platform
-          </div>
-
-          <h1 className="text-5xl sm:text-7xl md:text-8xl font-black tracking-tighter text-text-main mb-6 drop-shadow-sm dark:drop-shadow-2xl transition-colors duration-500">
-            Unify Your Workforce, <br className="hidden sm:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary via-purple-500 to-indigo-600 dark:from-brand-primary dark:via-purple-400 dark:to-indigo-400 mt-2 block sm:inline-block">
-              Anywhere, Anytime.
-            </span>
-          </h1>
-          
-          <p className="mt-6 max-w-2xl text-lg sm:text-xl text-text-sec mx-auto mb-12 font-medium leading-relaxed transition-colors duration-500">
-            The ultimate multi-vendor attendance and project management system. Streamline tracking, boost productivity, and manage multiple client workspaces with a single intuitive platform.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-5 justify-center items-center w-full sm:w-auto">
-            <Link to="/register" className="group relative w-full sm:w-auto p-[2px] rounded-full overflow-hidden bg-gradient-to-r from-brand-primary via-purple-500 to-indigo-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-r from-brand-primary via-purple-500 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl"></div>
-              <div className="relative px-8 py-4 bg-bg-base rounded-full text-text-main font-bold text-sm sm:text-base flex items-center justify-center gap-3 transition-all group-hover:bg-opacity-0 group-hover:text-white">
-                Start Your Free Trial
-                <ArrowRight size={18} className="group-hover:translate-x-1.5 transition-transform" />
-              </div>
-            </Link>
+      <main className="relative z-10 pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden flex items-center min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-8 items-center">
             
-            <a href="#features" className="group w-full sm:w-auto px-8 py-4 text-sm sm:text-base font-bold rounded-full glass-card !opacity-100 text-text-main hover:text-brand-primary transition-all flex items-center justify-center gap-3 hover:border-brand-primary/50">
-              Explore Features
-              <div className="w-6 h-6 rounded-full bg-border-card flex items-center justify-center group-hover:bg-brand-primary/10 transition-colors">
-                <ArrowRight size={14} className="rotate-90 group-hover:translate-y-0.5 transition-transform" />
-              </div>
-            </a>
+            {/* Left Content */}
+            <motion.div 
+              style={{ y: yHeroText, opacity: opacityHero }}
+              className="text-left"
+            >
+              <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary/10 border border-brand-primary/20 text-brand-primary text-xs font-bold uppercase tracking-widest mb-6"
+              >
+                <Zap size={14} className="text-brand-primary" />
+                The Future of Work is Here
+              </motion.div>
+
+              <motion.h1 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-text-main mb-6 leading-[1.1]"
+              >
+                Unify Your <br/>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary via-[#a855f7] to-[#6366f1] inline-block pb-2">
+                  Multi-Vendor Teams
+                </span>
+              </motion.h1>
+              
+              <motion.p 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="text-lg sm:text-xl text-text-sec max-w-lg mb-10 font-medium leading-relaxed"
+              >
+                An enterprise-grade HRMS that seamlessly tracks attendance, manages projects, and aligns your entire distributed workforce across multiple organizations.
+              </motion.p>
+
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="flex flex-col sm:flex-row gap-4"
+              >
+                <Link to="/purchase" className="group px-8 py-4 bg-text-main text-bg-base font-bold text-base rounded-full hover:scale-105 transition-all flex items-center justify-center gap-2 shadow-xl shadow-black/10">
+                  Register Workspace
+                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                </Link>
+                <Link to="/login" className="group px-8 py-4 bg-bg-card/50 backdrop-blur-md border border-border-card text-text-main font-bold text-base rounded-full hover:bg-bg-base transition-all flex items-center justify-center gap-2 hover:border-brand-primary/50">
+                  Employee Login
+                </Link>
+              </motion.div>
+              
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 1, delay: 0.6 }}
+                className="mt-10 flex items-center gap-4 text-sm font-semibold text-text-sec"
+              >
+                <div className="flex -space-x-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="w-10 h-10 rounded-full border-2 border-bg-base bg-bg-card overflow-hidden">
+                      <img src={avatarImg} alt="User" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1 text-amber-500 mb-1">
+                    {[1,2,3,4,5].map(s => <Star key={s} size={14} fill="currentColor" />)}
+                  </div>
+                  <p>Trusted by 5,000+ modern teams</p>
+                </div>
+              </motion.div>
+            </motion.div>
+
+            {/* Right Dashboard Mockup (Floating & 3D) */}
+            <motion.div 
+              initial={{ opacity: 0, x: 50, rotateY: 15 }}
+              animate={{ opacity: 1, x: 0, rotateY: -5 }}
+              transition={{ duration: 1, delay: 0.2, type: "spring", stiffness: 50 }}
+              className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-[600px] perspective-1000"
+            >
+              {/* Decorative glows behind image */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-brand-primary/40 to-indigo-500/40 rounded-3xl blur-[80px] -z-10"></div>
+              
+              <motion.div 
+                animate={{ y: [0, -20, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                className="w-full h-full relative z-10"
+                style={{ transformStyle: 'preserve-3d' }}
+              >
+                <div className="absolute inset-0 bg-bg-card/40 backdrop-blur-3xl border border-white/10 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center">
+                  <img src={dashboardMockup} alt="Zuna Dashboard Interface" className="w-[110%] h-[110%] object-cover opacity-90 mix-blend-lighten" />
+                  
+                  {/* Floating Glass Cards Overlay */}
+                  <motion.div 
+                    animate={{ y: [0, 15, 0] }}
+                    transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    className="absolute -left-6 bottom-20 bg-bg-card/80 backdrop-blur-xl border border-border-card p-4 rounded-2xl shadow-2xl flex items-center gap-4"
+                  >
+                    <div className="w-12 h-12 bg-emerald-500/20 text-emerald-500 rounded-xl flex items-center justify-center">
+                      <CheckCircle size={24} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-mut font-bold uppercase">Attendance Rate</p>
+                      <p className="text-xl font-black text-text-main">98.5%</p>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    animate={{ y: [0, -10, 0] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                    className="absolute -right-6 top-20 bg-bg-card/80 backdrop-blur-xl border border-border-card p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+                  >
+                    <p className="text-xs text-text-mut font-bold uppercase">Active Projects</p>
+                    <div className="flex -space-x-2">
+                      <div className="w-8 h-8 rounded-full bg-brand-primary/20 border border-brand-primary"></div>
+                      <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500"></div>
+                      <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500"></div>
+                      <div className="w-8 h-8 rounded-full bg-bg-base border border-border-card flex items-center justify-center text-[10px] font-bold">+12</div>
+                    </div>
+                  </motion.div>
+                </div>
+              </motion.div>
+            </motion.div>
+
           </div>
         </div>
       </main>
 
-      {/* Futuristic Features Section / Bento Grid */}
-      <section id="features" className="py-24 relative z-10">
+      {/* Social Proof Text */}
+      <section className="py-10 border-y border-border-card bg-bg-base/50 relative z-10 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-sm font-bold text-text-mut uppercase tracking-widest">
+            Empowering Modern Enterprises with Secure Workforce Management
+          </p>
+        </div>
+      </section>
+
+      {/* Premium Bento Grid Features */}
+      <section id="features" className="py-32 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-20">
-            <h2 className="text-3xl md:text-5xl font-black text-text-main mb-6 tracking-tight transition-colors duration-500">Everything you need to <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary to-purple-500">manage your teams</span></h2>
-            <p className="text-text-sec text-lg sm:text-xl transition-colors duration-500">Powerful features designed specifically for modern, distributed multi-vendor teams.</p>
+            <h2 className="text-4xl md:text-5xl font-black text-text-main mb-6 tracking-tight">Everything to manage your <span className="text-brand-primary">workforce</span></h2>
+            <p className="text-text-sec text-lg font-medium">From precise GPS attendance to complex project tracking, Zuna handles it all with an elegant, intuitive interface.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {/* Feature 1 */}
-            <div className="glass-card !opacity-100 p-8 rounded-[2rem] hover-tilt group relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-brand-primary/10 dark:bg-brand-primary/20 rounded-full blur-2xl group-hover:bg-brand-primary/30 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-card border border-border-card rounded-2xl flex items-center justify-center text-brand-primary mb-6 group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[320px]">
+            {/* Large Card 1 */}
+            <motion.div 
+              whileHover={{ y: -5 }}
+              className="md:col-span-2 bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-brand-primary/30 transition-colors"
+            >
+              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary/10 rounded-full blur-3xl group-hover:bg-brand-primary/20 transition-colors"></div>
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-brand-primary mb-6 relative z-10">
                 <Clock size={28} />
               </div>
-              <h3 className="text-xl font-bold text-text-main mb-3 tracking-wide transition-colors duration-500">Live Attendance Tracking</h3>
-              <p className="text-text-sec leading-relaxed font-medium transition-colors duration-500">
-                Precise GPS-enabled check-ins, automated timesheets, and comprehensive break management ensure exact tracking of billable hours.
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Live GPS Attendance</h3>
+              <p className="text-text-sec leading-relaxed font-medium max-w-md relative z-10">
+                Precision tracking with geofencing. Know exactly when and where your remote or on-site team members clock in, complete with automated break timers.
               </p>
-            </div>
+            </motion.div>
 
-            {/* Feature 2 */}
-            <div className="glass-card !opacity-100 p-8 rounded-[2rem] hover-tilt group relative overflow-hidden lg:-translate-y-8">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-purple-500/10 dark:bg-purple-500/20 rounded-full blur-2xl group-hover:bg-purple-500/30 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-card border border-border-card rounded-2xl flex items-center justify-center text-purple-500 dark:text-purple-400 mb-6 group-hover:scale-110 group-hover:-rotate-3 transition-transform shadow-sm">
-                <Briefcase size={28} />
-              </div>
-              <h3 className="text-xl font-bold text-text-main mb-3 tracking-wide transition-colors duration-500">Project & Task Mastery</h3>
-              <p className="text-text-sec leading-relaxed font-medium transition-colors duration-500">
-                Assign tasks, track progress in real-time, and manage multi-vendor projects effortlessly with tailored access controls.
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="glass-card !opacity-100 p-8 rounded-[2rem] hover-tilt group relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/20 rounded-full blur-2xl group-hover:bg-indigo-500/30 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-card border border-border-card rounded-2xl flex items-center justify-center text-indigo-500 dark:text-indigo-400 mb-6 group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-sm">
-                <Users size={28} />
-              </div>
-              <h3 className="text-xl font-bold text-text-main mb-3 tracking-wide transition-colors duration-500">Multi-Vendor Sync</h3>
-              <p className="text-text-sec leading-relaxed font-medium transition-colors duration-500">
-                Easily collaborate across different organizational boundaries. Keep all external teams and internal staff aligned in one unified hub.
-              </p>
-            </div>
-
-            {/* Feature 4 */}
-            <div className="glass-card !opacity-100 p-8 rounded-[2rem] hover-tilt group relative overflow-hidden lg:translate-y-8">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-pink-500/10 dark:bg-pink-500/20 rounded-full blur-2xl group-hover:bg-pink-500/30 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-card border border-border-card rounded-2xl flex items-center justify-center text-pink-500 dark:text-pink-400 mb-6 group-hover:scale-110 group-hover:-rotate-3 transition-transform shadow-sm">
+            {/* Small Card 1 */}
+            <motion.div 
+              whileHover={{ y: -5 }}
+              className="bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-purple-500/30 transition-colors"
+            >
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-purple-500 mb-6 relative z-10">
                 <Shield size={28} />
               </div>
-              <h3 className="text-xl font-bold text-text-main mb-3 tracking-wide transition-colors duration-500">Leave Management</h3>
-              <p className="text-text-sec leading-relaxed font-medium transition-colors duration-500">
-                Seamlessly request, review, and approve leaves with transparent tracking of paid leaves, casual leaves, and sick days.
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Leave Management</h3>
+              <p className="text-text-sec leading-relaxed font-medium relative z-10">
+                Automated workflows for sick, casual, and paid leaves with instant manager approvals.
               </p>
-            </div>
+            </motion.div>
 
-            {/* Feature 5 */}
-            <div className="glass-card !opacity-100 p-8 rounded-[2rem] hover-tilt group relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-blue-500/10 dark:bg-blue-500/20 rounded-full blur-2xl group-hover:bg-blue-500/30 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-card border border-border-card rounded-2xl flex items-center justify-center text-blue-500 dark:text-blue-400 mb-6 group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-sm">
-                <BarChart size={28} />
+            {/* Small Card 2 */}
+            <motion.div 
+              whileHover={{ y: -5 }}
+              className="bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-indigo-500/30 transition-colors"
+            >
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-indigo-500 mb-6 relative z-10">
+                <Users size={28} />
               </div>
-              <h3 className="text-xl font-bold text-text-main mb-3 tracking-wide transition-colors duration-500">Advanced Analytics</h3>
-              <p className="text-text-sec leading-relaxed font-medium transition-colors duration-500">
-                Generate instant reports on team performance, project completion rates, and individual workloads with a click.
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Multi-Vendor</h3>
+              <p className="text-text-sec leading-relaxed font-medium relative z-10">
+                Manage multiple organizations and sub-contractors from a single super-admin pane of glass.
               </p>
-            </div>
+            </motion.div>
 
-            {/* Feature 6 */}
-            <div className="glass-card !opacity-100 p-8 rounded-[2rem] hover-tilt group relative overflow-hidden lg:-translate-y-8">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-emerald-500/10 dark:bg-emerald-500/20 rounded-full blur-2xl group-hover:bg-emerald-500/30 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-card border border-border-card rounded-2xl flex items-center justify-center text-emerald-500 dark:text-emerald-400 mb-6 group-hover:scale-110 group-hover:-rotate-3 transition-transform shadow-sm">
-                <CheckCircle size={28} />
+            {/* Large Card 2 */}
+            <motion.div 
+              whileHover={{ y: -5 }}
+              className="md:col-span-2 bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-emerald-500/30 transition-colors"
+            >
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors"></div>
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-emerald-500 mb-6 relative z-10">
+                <Briefcase size={28} />
               </div>
-              <h3 className="text-xl font-bold text-text-main mb-3 tracking-wide transition-colors duration-500">Admin Panel Controls</h3>
-              <p className="text-text-sec leading-relaxed font-medium transition-colors duration-500">
-                Deep customization for roles, permissions, dynamic rules, and detailed activity logs giving admins complete system oversight.
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Project & Task Mastery</h3>
+              <p className="text-text-sec leading-relaxed font-medium max-w-md relative z-10">
+                Assign tasks, track progress in real-time, and manage multi-vendor projects effortlessly with tailored access controls and agile kanban boards.
               </p>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* Animated CTA Section */}
-      <section className="py-32 relative z-10 overflow-hidden">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          
-          <div className="glass-card !opacity-100 border-brand-primary/30 rounded-[3rem] p-10 sm:p-20 text-center relative overflow-hidden group shadow-2xl">
-            {/* Animated gradients inside CTA */}
-            <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/10 via-purple-600/10 to-indigo-600/10 dark:from-brand-primary/20 dark:via-purple-600/20 dark:to-indigo-600/20 opacity-50 group-hover:opacity-100 transition-opacity duration-700"></div>
-            <div className="absolute -top-32 -right-32 w-96 h-96 bg-brand-primary/30 rounded-full blur-[100px] animate-blob"></div>
-            <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-indigo-500/30 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
-            
-            <h2 className="text-4xl sm:text-6xl font-black mb-6 relative z-10 text-text-main tracking-tight drop-shadow-sm transition-colors duration-500">
-              Ready to <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary to-purple-500 dark:to-purple-400">transform</span> your workflow?
-            </h2>
-            <p className="text-text-sec text-lg sm:text-xl max-w-2xl mx-auto mb-10 relative z-10 font-medium transition-colors duration-500">
-              Join hundreds of teams already using our platform to centralize their multi-vendor operations and boost efficiency.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-5 relative z-10">
-              <Link to="/register" className="group relative w-full sm:w-auto p-[2px] rounded-full overflow-hidden bg-gradient-to-r from-brand-primary via-purple-500 to-indigo-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] transition-all duration-300">
-                <div className="relative px-8 py-4 bg-brand-primary group-hover:bg-transparent text-white font-black text-lg flex items-center justify-center gap-3 transition-colors duration-300">
-                  Create Free Account
-                  <ArrowRight size={20} className="group-hover:translate-x-1.5 transition-transform" />
-                </div>
-              </Link>
-              <Link to="/login" className="w-full sm:w-auto px-8 py-4 glass-card !opacity-100 border-border-card text-text-main font-bold text-lg rounded-full hover:bg-bg-base transition-all flex items-center justify-center">
-                Sign In
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-border-card bg-bg-card/50 backdrop-blur-xl pt-20 pb-10 transition-colors duration-500">
+      {/* Pricing Section */}
+      <section id="pricing" className="py-24 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-16 mb-16">
-            <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3 mb-6 hover:scale-105 transition-transform origin-left w-max">
-                <Logo size={32} showText={true} />
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-4xl font-black text-text-main mb-4 tracking-tight">Simple, Transparent Pricing</h2>
+            <p className="text-text-sec text-lg font-medium">One powerful enterprise plan designed to scale with your organization.</p>
+          </div>
+
+          <div className="max-w-lg mx-auto bg-bg-card/60 backdrop-blur-3xl border-2 border-brand-primary/40 rounded-[3rem] p-10 sm:p-12 shadow-[0_0_50px_rgba(139,92,246,0.15)] relative overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-brand-primary via-purple-500 to-indigo-500"></div>
+            
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-text-main">Enterprise</h3>
+                <p className="text-text-sec text-sm font-semibold mt-1">For growing organizations</p>
               </div>
-              <p className="text-text-sec max-w-sm mb-8 font-medium leading-relaxed transition-colors duration-500">
+              <div className="px-4 py-1.5 bg-brand-primary/10 text-brand-primary text-xs font-bold uppercase tracking-wider rounded-full border border-brand-primary/20">
+                Popular
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <span className="text-5xl font-black text-text-main">INR 24,999</span>
+              <span className="text-text-mut font-bold"> / month</span>
+            </div>
+
+            <ul className="space-y-4 mb-10">
+              {["Unlimited Employees", "Advanced GPS Attendance", "Leave Management Workflow", "Project & Task Management", "24/7 Priority Support", "Custom Excel/PDF Reports"].map((feature, i) => (
+                <li key={i} className="flex items-center gap-3 text-text-main font-semibold text-sm">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center flex-shrink-0">
+                    <Check size={12} strokeWidth={4} />
+                  </div>
+                  {feature}
+                </li>
+              ))}
+            </ul>
+
+            <Link to="/purchase" className="w-full block text-center py-4 bg-brand-primary hover:bg-brand-hover text-white font-bold rounded-xl transition-colors shadow-lg shadow-brand-primary/20">
+              Start Your Free Trial
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Why Choose Zuna */}
+      <section id="testimonials" className="py-24 relative z-10 border-y border-border-card bg-bg-card/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-black text-center mb-16 text-text-main">Enterprise-Grade Security & Reliability</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="bg-bg-card border border-border-card p-8 rounded-3xl relative">
+              <div className="flex gap-1 text-brand-primary mb-6">
+                <Shield size={24} />
+              </div>
+              <h4 className="font-bold text-text-main text-lg mb-2">Secure by Design</h4>
+              <p className="text-text-sec font-medium leading-relaxed mb-4 relative z-10">
+                End-to-end encryption for all organizational data. Role-based access control guarantees that super-admins, admins, and employees only see exactly what they need.
+              </p>
+            </div>
+            
+            <div className="bg-bg-card border border-border-card p-8 rounded-3xl relative">
+              <div className="flex gap-1 text-emerald-500 mb-6">
+                <CheckCircle size={24} />
+              </div>
+              <h4 className="font-bold text-text-main text-lg mb-2">Multi-Tenant Architecture</h4>
+              <p className="text-text-sec font-medium leading-relaxed mb-4 relative z-10">
+                Manage multiple workspaces securely. Complete data isolation between different vendor organizations with a unified interface for Super Admins.
+              </p>
+            </div>
+
+            <div className="bg-bg-card border border-border-card p-8 rounded-3xl relative">
+              <div className="flex gap-1 text-purple-500 mb-6">
+                <Clock size={24} />
+              </div>
+              <h4 className="font-bold text-text-main text-lg mb-2">Real-Time Sync</h4>
+              <p className="text-text-sec font-medium leading-relaxed mb-4 relative z-10">
+                Instantly track GPS attendance, timesheets, and live chat across distributed global teams with zero delay and perfect accuracy.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer CTA */}
+      <section className="py-32 relative z-10 overflow-hidden text-center">
+        <h2 className="text-5xl sm:text-7xl font-black mb-8 text-text-main tracking-tight">Ready to <span className="text-brand-primary">Elevate?</span></h2>
+        <Link to="/purchase" className="inline-flex items-center justify-center px-10 py-5 bg-text-main text-bg-base font-black text-lg rounded-full hover:scale-105 transition-all shadow-2xl">
+          Get Started Today <ChevronRight className="ml-2" />
+        </Link>
+      </section>
+
+      {/* Footer Links */}
+      <footer className="relative z-10 border-t border-border-card bg-bg-base pt-16 pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
+            <div className="col-span-2">
+              <Logo size={32} showText={true} />
+              <p className="text-text-sec mt-6 font-medium max-w-sm">
                 A premium, reliable, and flexible multi-vendor platform designed to modernize the future of work.
               </p>
-              <div className="flex gap-4">
-                <div className="w-12 h-12 rounded-full glass-card !opacity-100 flex items-center justify-center text-text-sec hover:text-brand-primary hover:border-brand-primary/50 hover:shadow-[0_0_15px_rgba(139,92,246,0.2)] cursor-pointer transition-all hover:-translate-y-1">
-                  <span className="sr-only">Twitter</span>
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z" /></svg>
-                </div>
-                <div className="w-12 h-12 rounded-full glass-card !opacity-100 flex items-center justify-center text-text-sec hover:text-brand-primary hover:border-brand-primary/50 hover:shadow-[0_0_15px_rgba(139,92,246,0.2)] cursor-pointer transition-all hover:-translate-y-1">
-                  <span className="sr-only">LinkedIn</span>
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" /></svg>
-                </div>
-              </div>
             </div>
-            
             <div>
-              <h4 className="font-bold text-text-main mb-6 uppercase tracking-wider text-sm transition-colors duration-500">Product</h4>
-              <ul className="space-y-4">
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Features</a></li>
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Pricing</a></li>
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Integrations</a></li>
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Changelog</a></li>
+              <h4 className="font-bold text-text-main mb-6 uppercase tracking-wider text-xs">Product</h4>
+              <ul className="space-y-3 text-sm font-semibold text-text-sec">
+                <li><a href="#" className="hover:text-brand-primary transition-colors">Features</a></li>
+                <li><a href="#" className="hover:text-brand-primary transition-colors">Pricing</a></li>
+                <li><a href="#" className="hover:text-brand-primary transition-colors">Security</a></li>
               </ul>
             </div>
-            
             <div>
-              <h4 className="font-bold text-text-main mb-6 uppercase tracking-wider text-sm transition-colors duration-500">Company</h4>
-              <ul className="space-y-4">
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">About Us</a></li>
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Careers</a></li>
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Contact</a></li>
-                <li><a href="#" className="text-text-sec hover:text-brand-primary hover:translate-x-1 inline-block transition-all font-medium">Privacy Policy</a></li>
+              <h4 className="font-bold text-text-main mb-6 uppercase tracking-wider text-xs">Company</h4>
+              <ul className="space-y-3 text-sm font-semibold text-text-sec">
+                <li><a href="#" className="hover:text-brand-primary transition-colors">About Us</a></li>
+                <li><a href="#" className="hover:text-brand-primary transition-colors">Contact</a></li>
+                <li><a href="#" className="hover:text-brand-primary transition-colors">Privacy Policy</a></li>
               </ul>
             </div>
           </div>
-          
-          <div className="pt-8 border-t border-border-card text-center sm:text-left flex flex-col sm:flex-row justify-between items-center gap-4 transition-colors duration-500">
-            <p className="text-sm text-text-mut font-medium">
-              &copy; {new Date().getFullYear()} Carrezza Global Solutions. All rights reserved.
-            </p>
-            <div className="flex gap-8">
-              <a href="#" className="text-sm text-text-mut hover:text-brand-primary transition-colors font-medium">Terms of Service</a>
-              <a href="#" className="text-sm text-text-mut hover:text-brand-primary transition-colors font-medium">Cookie Policy</a>
+          <div className="pt-8 border-t border-border-card text-center sm:text-left flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-bold text-text-mut">
+            <p>&copy; {new Date().getFullYear()} Carrezza Global Solutions. All rights reserved.</p>
+            <div className="flex gap-6">
+              <a href="#" className="hover:text-text-main transition-colors">Terms</a>
+              <a href="#" className="hover:text-text-main transition-colors">Privacy</a>
             </div>
           </div>
         </div>

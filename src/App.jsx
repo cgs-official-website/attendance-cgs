@@ -13,13 +13,15 @@ import TeamHub from "./pages/TeamHub";
 import ProjectManagement from "./pages/ProjectManagement";
 import TaskManagement from "./pages/TaskManagement";
 import LandingPage from "./pages/LandingPage";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import PurchaseOrganization from "./pages/PurchaseOrganization";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
   
   if (!currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   
   return children;
@@ -30,10 +32,25 @@ function AdminRoute({ children }) {
   const { currentUser } = useAuth();
   
   if (!currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   
   if (currentUser.role !== "admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+}
+
+// Protected Route Component for Super Admin only
+function SuperAdminRoute({ children }) {
+  const { currentUser } = useAuth();
+  
+  if (!currentUser) {
+    return <Navigate to="/" replace />;
+  }
+  
+  if (currentUser.role !== "superadmin") {
     return <Navigate to="/dashboard" replace />;
   }
   
@@ -45,6 +62,9 @@ function PublicRoute({ children }) {
   const { currentUser } = useAuth();
   
   if (currentUser) {
+    if (currentUser.role === "superadmin") {
+      return <Navigate to="/superadmin" replace />;
+    }
     if (currentUser.role === "admin") {
       return <Navigate to="/admin" replace />;
     }
@@ -78,7 +98,27 @@ export default function App() {
           } 
         />
         <Route 
+          path="/purchase" 
+          element={
+            <PublicRoute>
+              <PurchaseOrganization />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/:companySlug/login" 
+          element={<Login />} 
+        />
+        <Route 
           path="/register" 
+          element={
+            <PublicRoute>
+              <Register />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/:companySlug/register" 
           element={
             <PublicRoute>
               <Register />
@@ -160,14 +200,28 @@ export default function App() {
           } 
         />
 
+        {/* Super Admin Protected Routes */}
+        <Route 
+          path="/superadmin" 
+          element={
+            <SuperAdminRoute>
+              <DashboardLayout>
+                <SuperAdminDashboard />
+              </DashboardLayout>
+            </SuperAdminRoute>
+          } 
+        />
+
         {/* Catch-all redirect */}
         <Route 
           path="*" 
           element={
             currentUser 
-              ? currentUser.role === "admin" 
-                ? <Navigate to="/admin" replace /> 
-                : <Navigate to="/dashboard" replace />
+              ? currentUser.role === "superadmin"
+                ? <Navigate to="/superadmin" replace />
+                : currentUser.role === "admin" 
+                  ? <Navigate to="/admin" replace /> 
+                  : <Navigate to="/dashboard" replace />
               : <Navigate to="/" replace />
           } 
         />

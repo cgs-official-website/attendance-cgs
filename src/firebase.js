@@ -152,7 +152,7 @@ export const getDbType = () => dbType;
 /**
  * Register a new user
  */
-export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "") => {
+export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "") => {
   const role = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : "user";
   
   if (dbType === "firebase") {
@@ -172,6 +172,19 @@ export const registerUser = async (name, department, programType, email, passwor
       await updateProfile(user, { displayName: name });
     } catch (e) {
       console.warn("Failed to set displayName on auth user:", e);
+    }
+    
+    // Resolve companySlug to companyId AFTER auth is established
+    let finalCompanyId = "";
+    if (companySlug) {
+      try {
+        const company = await getCompanyBySlug(companySlug);
+        if (company) {
+          finalCompanyId = company.id;
+        }
+      } catch (e) {
+        console.warn("Failed to resolve companySlug:", e);
+      }
     }
     
     // Save additional details in Firestore
@@ -195,7 +208,8 @@ export const registerUser = async (name, department, programType, email, passwor
       jobType,
       designation,
       isProjectManager,
-      employeeId
+      employeeId,
+      companyId: finalCompanyId
     };
     
     await setDoc(doc(db, "users", user.uid), userData);
@@ -228,6 +242,7 @@ export const registerUser = async (name, department, programType, email, passwor
       designation,
       isProjectManager,
       employeeId,
+      companyId: companySlug ? (getLocalCompanies().find(c => c.slug === companySlug)?.id || "") : "",
       password // storing hashed or plain in local storage for local verification
     };
     
@@ -439,7 +454,8 @@ export const checkIn = async (user, location) => {
     totalWorkingMinutes: 0,
     shortBreakBalance: 1800, // 30 mins in seconds
     longBreakBalance: 1800,   // 30 mins in seconds
-    bioBreakBalance: 900      // 15 mins in seconds
+    bioBreakBalance: 900,      // 15 mins in seconds
+    companyId: user.companyId || ""
   };
 
   if (dbType === "firebase") {
@@ -459,8 +475,46 @@ export const checkIn = async (user, location) => {
     logs.push(data);
     localDb.saveAttendance(logs);
     notifyAttendanceListeners();
-    return data;
+    return true;
   }
+};
+
+export const deleteCompany = async (companyId) => {
+  if (dbType === "firebase") {
+    await deleteDoc(doc(db, "companies", companyId));
+  } else {
+    const companies = getLocalCompanies().filter(c => c.id !== companyId);
+    saveLocalCompanies(companies);
+  }
+  return true;
+};
+
+export const updateCompanyStatus = async (companyId, status) => {
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "companies", companyId), { status });
+  } else {
+    const companies = getLocalCompanies();
+    const idx = companies.findIndex(c => c.id === companyId);
+    if (idx !== -1) {
+      companies[idx].status = status;
+      saveLocalCompanies(companies);
+    }
+  }
+  return true;
+};
+
+export const updateCompanyDetails = async (companyId, updates) => {
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "companies", companyId), updates);
+  } else {
+    const companies = getLocalCompanies();
+    const idx = companies.findIndex(c => c.id === companyId);
+    if (idx !== -1) {
+      companies[idx] = { ...companies[idx], ...updates };
+      saveLocalCompanies(companies);
+    }
+  }
+  return true;
 };
 
 /**
@@ -810,12 +864,16 @@ export const getUserAttendanceLogs = async (userId) => {
 /**
  * Get All Registered Users (Admin only)
  */
-export const getAllRegisteredUsers = async () => {
+export const getAllRegisteredUsers = async (companyId = "") => {
   if (dbType === "firebase") {
-    const snapshot = await getDocs(collection(db, "users"));
+    let qRef = collection(db, "users");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    const snapshot = await getDocs(qRef);
     return snapshot.docs.map(doc => doc.data());
   } else {
-    return localDb.getUsers();
+    let users = localDb.getUsers();
+    if (companyId) users = users.filter(u => u.companyId === companyId);
+    return users;
   }
 };
 
@@ -918,12 +976,17 @@ export const deleteUserRecord = async (uid) => {
 /**
  * Get All Attendance Logs (Admin only)
  */
-export const getAllAttendanceLogs = async () => {
+export const getAllAttendanceLogs = async (companyId = "") => {
   if (dbType === "firebase") {
-    const snapshot = await getDocs(query(collection(db, "attendance"), orderBy("date", "desc")));
-    return snapshot.docs.map(doc => doc.data());
+    let qRef = collection(db, "attendance");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    const snapshot = await getDocs(qRef);
+    const logs = snapshot.docs.map(doc => doc.data());
+    return logs.sort((a, b) => b.date.localeCompare(a.date));
   } else {
-    return localDb.getAttendance().sort((a, b) => b.date.localeCompare(a.date));
+    let logs = localDb.getAttendance();
+    if (companyId) logs = logs.filter(l => l.companyId === companyId);
+    return logs.sort((a, b) => b.date.localeCompare(a.date));
   }
 };
 
@@ -960,9 +1023,10 @@ export const subscribeToUserLogs = (userId, callback) => {
 /**
  * Real-time listener for ALL logs and user statuses (Admin dashboard)
  */
-export const subscribeToAdminDashboard = (callback) => {
+export const subscribeToAdminDashboard = (companyId, callback) => {
   if (dbType === "firebase") {
-    const attCollection = collection(db, "attendance");
+    let attCollection = collection(db, "attendance");
+    if (companyId) attCollection = query(attCollection, where("companyId", "==", companyId));
     return onSnapshot(attCollection, (snapshot) => {
       const logs = snapshot.docs.map(doc => doc.data());
       logs.sort((a, b) => b.date.localeCompare(a.date));
@@ -970,8 +1034,9 @@ export const subscribeToAdminDashboard = (callback) => {
     });
   } else {
     const handler = () => {
-      const logs = localDb.getAttendance().sort((a, b) => b.date.localeCompare(a.date));
-      callback(logs);
+      let logs = localDb.getAttendance();
+      if (companyId) logs = logs.filter(l => l.companyId === companyId);
+      callback(logs.sort((a, b) => b.date.localeCompare(a.date)));
     };
     attendanceListeners.add(handler);
     handler(); // initial fire
@@ -1178,7 +1243,7 @@ function calculateWorkingMinutes(checkInTime, checkOutTime, breaks) {
 // ----------------------------------------------------
 
 // 1. Paid Leaves Announcements
-export const uploadPaidLeave = async (title, startDate, endDate, description, status = "active") => {
+export const uploadPaidLeave = async (title, startDate, endDate, description, status = "active", companyId = "") => {
   const newLeave = {
     id: dbType === "firebase" ? "" : "pl-" + Math.random().toString(36).substr(2, 9),
     title,
@@ -1186,7 +1251,8 @@ export const uploadPaidLeave = async (title, startDate, endDate, description, st
     endDate,
     status,
     description,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    companyId
   };
 
   if (dbType === "firebase") {
@@ -1231,9 +1297,11 @@ export const deletePaidLeave = async (id) => {
   }
 };
 
-export const subscribeToPaidLeaves = (callback) => {
+export const subscribeToPaidLeaves = (companyId, callback) => {
   if (dbType === "firebase") {
-    return onSnapshot(collection(db, "paid_leaves"), (snapshot) => {
+    let qRef = collection(db, "paid_leaves");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
       const list = snapshot.docs.map(doc => doc.data());
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
@@ -1299,7 +1367,7 @@ export const subscribeToAttendanceRules = (callback) => {
 };
 
 // 3. Leave Requests
-export const requestLeave = async (userId, userName, userDept, type, duration, startDate, endDate, reason, avatar, isEmergency = false) => {
+export const requestLeave = async (userId, userName, userDept, type, duration, startDate, endDate, reason, avatar, isEmergency = false, companyId = "") => {
   const req = {
     id: dbType === "firebase" ? "" : "lr-" + Math.random().toString(36).substr(2, 9),
     userId,
@@ -1313,7 +1381,8 @@ export const requestLeave = async (userId, userName, userDept, type, duration, s
     avatar: avatar || "",
     status: "pending",
     isEmergency,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    companyId
   };
 
   if (dbType === "firebase") {
@@ -1398,9 +1467,11 @@ export const updateLeaveRequest = async (id, status, managerComment) => {
   }
 };
 
-export const subscribeToLeaveRequests = (callback) => {
+export const subscribeToLeaveRequests = (companyId, callback) => {
   if (dbType === "firebase") {
-    return onSnapshot(collection(db, "leave_requests"), (snapshot) => {
+    let qRef = collection(db, "leave_requests");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
       const list = snapshot.docs.map(doc => doc.data());
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
@@ -1416,6 +1487,7 @@ export const subscribeToLeaveRequests = (callback) => {
       if (list.length !== originalLength) {
         localStorage.setItem("att_leave_requests", JSON.stringify(list));
       }
+      if (companyId) list = list.filter(l => l.companyId === companyId);
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
     };
@@ -1428,7 +1500,7 @@ export const subscribeToLeaveRequests = (callback) => {
 };
 
 // 4. Time Regularization APIs
-export const requestRegularization = async (userId, userName, userDept, date, checkInTime, checkOutTime, reason) => {
+export const requestRegularization = async (userId, userName, userDept, date, checkInTime, checkOutTime, reason, companyId = "") => {
   const req = {
     id: dbType === "firebase" ? "" : "reg-" + Math.random().toString(36).substr(2, 9),
     userId,
@@ -1439,7 +1511,8 @@ export const requestRegularization = async (userId, userName, userDept, date, ch
     checkOutTime,
     reason,
     status: "pending",
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    companyId
   };
 
   if (dbType === "firebase") {
@@ -1548,18 +1621,21 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
   }
 };
 
-export const subscribeToRegularizationRequests = (callback) => {
+export const subscribeToRegularizationRequests = (companyId, callback) => {
   if (dbType === "firebase") {
-    return onSnapshot(collection(db, "regularization_requests"), (snapshot) => {
+    let qRef = collection(db, "regularization_requests");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
       const list = snapshot.docs.map(doc => doc.data());
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
     });
   } else {
     const handler = () => {
-      const list = localStorage.getItem("att_regularizations")
+      let list = localStorage.getItem("att_regularizations")
         ? JSON.parse(localStorage.getItem("att_regularizations"))
         : [];
+      if (companyId) list = list.filter(l => l.companyId === companyId);
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
     };
@@ -1656,7 +1732,7 @@ if (dbType === "local") {
 /**
  * Create a new channel (admin only)
  */
-export const createChannel = async (name, description, creatorId, creatorName) => {
+export const createChannel = async (name, description, creatorId, creatorName, companyId = "") => {
   const channelData = {
     id: dbType === "firebase" ? "" : "ch-" + Math.random().toString(36).substr(2, 9),
     name: name.toLowerCase().replace(/\s+/g, "-"),
@@ -1666,7 +1742,8 @@ export const createChannel = async (name, description, creatorId, creatorName) =
     createdByName: creatorName,
     memberIds: [creatorId],
     isPrivate: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    companyId
   };
 
   if (dbType === "firebase") {
@@ -1685,17 +1762,17 @@ export const createChannel = async (name, description, creatorId, creatorName) =
 /**
  * Subscribe to channels list (real-time)
  */
-export const subscribeToChannels = (callback) => {
+export const subscribeToChannels = (companyId, callback) => {
   if (dbType === "firebase") {
     return onSnapshot(
-      query(collection(db, "channels"), orderBy("createdAt", "asc")),
+      query(collection(db, "channels"), where("companyId", "==", companyId || ""), orderBy("createdAt", "asc")),
       (snapshot) => {
         const list = snapshot.docs.map(d => d.data());
         callback(list);
       }
     );
   } else {
-    const handler = () => callback(getLocalChannels());
+    const handler = () => callback(getLocalChannels().filter(c => c.companyId === companyId));
     channelListeners.add(handler);
     handler();
     return () => channelListeners.delete(handler);
@@ -1761,7 +1838,7 @@ export const deleteChannel = async (channelId) => {
 /**
  * Send a message to a channel or DM thread
  */
-export const sendChatMessage = async (threadId, threadType, senderId, senderName, senderAvatar, text, fileData) => {
+export const sendChatMessage = async (threadId, threadType, senderId, senderName, senderAvatar, text, fileData, companyId) => {
   const msg = {
     id: dbType === "firebase" ? "" : "msg-" + Math.random().toString(36).substr(2, 9),
     threadId,
@@ -1772,7 +1849,8 @@ export const sendChatMessage = async (threadId, threadType, senderId, senderName
     text: text || "",
     fileData: fileData || null, // { name, url, driveId, size, mimeType }
     isDeleted: false,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    companyId: companyId || ""
   };
 
   if (dbType === "firebase") {
@@ -1839,12 +1917,13 @@ export const subscribeToMessages = (threadId, callback) => {
 /**
  * Subscribe to all chat messages (real-time) across channels and DMs
  */
-export const subscribeToAllMessages = (callback) => {
+export const subscribeToAllMessages = (companyId, callback) => {
   if (dbType === "firebase") {
     return onSnapshot(
       query(
         collection(db, "messages"),
-        where("isDeleted", "==", false)
+        where("isDeleted", "==", false),
+        where("companyId", "==", companyId || "")
       ),
       (snapshot) => {
         const msgs = snapshot.docs.map(d => d.data());
@@ -1858,7 +1937,7 @@ export const subscribeToAllMessages = (callback) => {
   } else {
     const handler = () => {
       const all = getLocalMessages()
-        .filter(m => !m.isDeleted)
+        .filter(m => !m.isDeleted && m.companyId === companyId)
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       callback(all);
     };
@@ -1965,14 +2044,16 @@ export const deleteChatMessage = async (messageId) => {
 /**
  * Get all messages (admin only — for monitoring)
  */
-export const getAllMessagesAdmin = async () => {
+export const getAllMessagesAdmin = async (companyId = "") => {
   if (dbType === "firebase") {
-    const snapshot = await getDocs(
-      query(collection(db, "messages"), orderBy("timestamp", "desc"))
-    );
+    let qRef = collection(db, "messages");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    const snapshot = await getDocs(query(qRef, orderBy("timestamp", "desc")));
     return snapshot.docs.map(d => d.data());
   } else {
-    return getLocalMessages().sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    let msgs = getLocalMessages();
+    if (companyId) msgs = msgs.filter(m => m.companyId === companyId);
+    return msgs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }
 };
 
@@ -1983,7 +2064,7 @@ export const getAllMessagesAdmin = async () => {
 /**
  * Get or create a DM thread between two users
  */
-export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName) => {
+export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName, companyId = "") => {
   // Canonical ID — always sorted so order doesn't matter
   const threadId = [userAId, userBId].sort().join("_dm_");
 
@@ -1995,7 +2076,8 @@ export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName
         id: threadId,
         participantIds: [userAId, userBId],
         participantNames: { [userAId]: userAName, [userBId]: userBName },
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        companyId
       };
       await setDoc(docRef, thread);
       return thread;
@@ -2009,7 +2091,8 @@ export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName
       id: threadId,
       participantIds: [userAId, userBId],
       participantNames: { [userAId]: userAName, [userBId]: userBName },
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      companyId
     };
     threads.push(thread);
     saveLocalDmThreads(threads);
@@ -2020,17 +2103,17 @@ export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName
 /**
  * Get all DM threads for a user
  */
-export const subscribeToDmThreads = (userId, callback) => {
+export const subscribeToDmThreads = (userId, companyId, callback) => {
   if (dbType === "firebase") {
     return onSnapshot(
-      query(collection(db, "dm_threads"), where("participantIds", "array-contains", userId)),
+      query(collection(db, "dm_threads"), where("participantIds", "array-contains", userId), where("companyId", "==", companyId || "")),
       (snapshot) => {
         callback(snapshot.docs.map(d => d.data()));
       }
     );
   } else {
     const handler = () => {
-      const threads = getLocalDmThreads().filter(t => t.participantIds.includes(userId));
+      const threads = getLocalDmThreads().filter(t => t.participantIds.includes(userId) && t.companyId === companyId);
       callback(threads);
     };
     channelListeners.add(handler); // reuse same notification bus
@@ -2042,12 +2125,16 @@ export const subscribeToDmThreads = (userId, callback) => {
 /**
  * Get all DM threads (admin only)
  */
-export const getAllDmThreadsAdmin = async () => {
+export const getAllDmThreadsAdmin = async (companyId = "") => {
   if (dbType === "firebase") {
-    const snapshot = await getDocs(collection(db, "dm_threads"));
+    let qRef = collection(db, "dm_threads");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    const snapshot = await getDocs(qRef);
     return snapshot.docs.map(d => d.data());
   } else {
-    return getLocalDmThreads();
+    let threads = getLocalDmThreads();
+    if (companyId) threads = threads.filter(t => t.companyId === companyId);
+    return threads;
   }
 };
 
@@ -2346,3 +2433,73 @@ export const markNotificationRead = async (notifId) => {
 };
 
 export { db };
+
+export const getCompanies = async () => {
+  if (dbType === "firebase") {
+    const snap = await getDocs(collection(db, "companies"));
+    return snap.docs.map(d => d.data());
+  } else {
+    return getLocalCompanies();
+  }
+};
+
+export const createCompany = async (companyData) => {
+  const company = {
+    ...companyData,
+    id: dbType === "firebase" ? "" : "comp-" + Math.random().toString(36).substr(2, 9),
+    status: companyData.status || "pending",
+    createdAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "companies"), company);
+    await updateDoc(docRef, { id: docRef.id });
+    company.id = docRef.id;
+  } else {
+    const companies = getLocalCompanies();
+    companies.push(company);
+    saveLocalCompanies(companies);
+  }
+  return company;
+};
+
+export const getCompanyStats = async () => {
+  const companies = await getCompanies();
+  return {
+    total: companies.length,
+    active: companies.filter(c => c.status === "active").length,
+    pending: companies.filter(c => c.status === "pending").length,
+    disabled: companies.filter(c => c.status === "disabled").length
+  };
+};
+
+
+
+
+export const approveCompany = async (companyId) => {
+  return updateCompanyStatus(companyId, "active");
+};
+
+export const autoMigrateFirebase = async () => {
+  return true;
+};
+
+export const getCompanyBySlug = async (slug) => {
+  const companies = await getCompanies();
+  return companies.find(c => c.slug === slug);
+};
+
+export const assignCompanyToUser = async (userId, companyId) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "users", userId);
+    await updateDoc(docRef, { companyId });
+  } else {
+    const users = getLocalUsers();
+    const idx = users.findIndex(u => u.uid === userId);
+    if (idx !== -1) {
+      users[idx].companyId = companyId;
+      saveLocalUsers(users);
+    }
+  }
+  return true;
+};

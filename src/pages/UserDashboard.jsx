@@ -235,11 +235,11 @@ export default function UserDashboard() {
       setLoading(false);
     });
 
-    const unsubscribePaid = subscribeToPaidLeaves((list) => {
+    const unsubscribePaid = subscribeToPaidLeaves(currentUser.companyId, (list) => {
       setPaidLeaves(list);
     });
 
-    const unsubscribeLeaves = subscribeToLeaveRequests((list) => {
+    const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (list) => {
       setMyLeaveRequests(list.filter(r => r.userId === currentUser.uid));
       
       const todayStr = getLocalDateString();
@@ -253,7 +253,7 @@ export default function UserDashboard() {
       setTeamOnLeaveCount(deptOnLeave.length);
     });
 
-    getAllRegisteredUsers().then(usersList => {
+    getAllRegisteredUsers(currentUser.companyId).then(usersList => {
       const deptUsers = usersList.filter(u => u.department === currentUser.department && u.uid !== currentUser.uid && u.role !== "admin");
       setTeamMembers(deptUsers);
       

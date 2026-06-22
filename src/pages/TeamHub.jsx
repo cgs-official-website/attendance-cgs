@@ -580,7 +580,8 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
         currentUser.name,
         currentUser.avatar || "",
         text,
-        fileData
+        fileData,
+        currentUser.companyId
       );
       // Replace the optimistic entry with the real one (has proper id)
       setMessages(prev =>
@@ -744,26 +745,26 @@ export default function TeamHub() {
 
   // Subscribe to channels
   useEffect(() => {
-    const unsub = subscribeToChannels(setChannels);
+    const unsub = subscribeToChannels(currentUser.companyId, setChannels);
     return unsub;
   }, []);
 
   // Subscribe to DM threads
   useEffect(() => {
     if (!currentUser?.uid) return;
-    const unsub = subscribeToDmThreads(currentUser.uid, setDmThreads);
+    const unsub = subscribeToDmThreads(currentUser.uid, currentUser.companyId, setDmThreads);
     return unsub;
   }, [currentUser?.uid]);
 
   // Load all users for DM picker
   useEffect(() => {
-    getAllRegisteredUsers().then(setAllUsers).catch(() => {});
+    getAllRegisteredUsers(currentUser.companyId).then(setAllUsers).catch(() => {});
   }, []);
 
   // Subscribe to all messages for unread counts
   useEffect(() => {
     if (!currentUser?.uid) return;
-    const unsub = subscribeToAllMessages(setAllMessages);
+    const unsub = subscribeToAllMessages(currentUser.companyId, setAllMessages);
     return unsub;
   }, [currentUser?.uid]);
 

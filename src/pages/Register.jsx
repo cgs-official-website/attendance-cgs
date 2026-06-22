@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { User, Mail, Lock, Building, Briefcase, Clock, Sparkles, EyeOff, Eye, Hash } from "lucide-react";
 import Logo from "../components/Logo";
+import { getCompanyBySlug } from "../firebase";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -21,6 +22,7 @@ export default function Register() {
   const { signup } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { companySlug } = useParams();
 
   const presets = [
     { label: "10 AM - 7 PM", start: "10:00", end: "19:00" },
@@ -42,10 +44,10 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd, employeeId);
+      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd, employeeId, companySlug);
       showToast("Account registered successfully! Welcome to the portal.", "success");
 
-      if (email.toLowerCase() === "admin@teamcarrezza.com") {
+      if (email.toLowerCase() === "admin@teamcarrezza.com" || email.toLowerCase().includes("superadmin")) {
         navigate("/admin");
       } else {
         navigate("/dashboard");
@@ -140,7 +142,7 @@ export default function Register() {
         <div className="max-w-[460px] w-full mx-auto my-auto py-8">
           {/* Tabs */}
           <div className="flex border-b border-border-card mb-6">
-            <Link to="/login" className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
+            <Link to={companySlug ? `/${companySlug}/login` : "/login"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
               Sign In
             </Link>
             <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">

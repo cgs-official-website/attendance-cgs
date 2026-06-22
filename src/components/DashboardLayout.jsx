@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { Mailbox, AlertTriangle, Check,
+import { Mailbox, AlertTriangle, Check, ShieldAlert,
   LayoutGrid,
   Shield,
   Users,
@@ -27,7 +27,8 @@ import { Mailbox, AlertTriangle, Check,
   Monitor,
   Briefcase,
   CheckSquare,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -41,7 +42,8 @@ import {
   subscribeToNotifications,
   markNotificationRead,
   createNotification,
-  updateTaskWarningSent
+  updateTaskWarningSent,
+  getCompanies
 } from "../firebase";
 
 const DashboardSkeleton = () => (
@@ -128,9 +130,37 @@ export default function DashboardLayout({ children }) {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rules, setRules] = useState("");
   const [leaveRequestsList, setLeaveRequestsList] = useState([]);
-  const [newUpdatesCount, setNewUpdatesCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const [newUpdatesCount, setNewUpdatesCount] = useState(0);
   const [systemNotifications, setSystemNotifications] = useState([]);
+  const [companyStatus, setCompanyStatus] = useState("active");
+  const [companyName, setCompanyName] = useState("");
+  const [companyLogo, setCompanyLogo] = useState("");
+
+  useEffect(() => {
+    if (currentUser?.companyId) {
+      getCompanies().then(comps => {
+        const found = comps.find(c => c.id === currentUser.companyId);
+        if (found) {
+          document.title = found.name;
+          setCompanyName(found.name || "");
+          setCompanyLogo(found.logoBase64 || "");
+          if (currentUser.role === "admin") {
+            setCompanyStatus(found.status || "active");
+          }
+        } else {
+          document.title = "Zuna | HRMS";
+        }
+      }).catch(console.error);
+    } else {
+      document.title = "Zuna | HRMS";
+    }
+    
+    return () => {
+      document.title = "Zuna | HRMS";
+    };
+  }, [currentUser]);
+
   const [dismissedNotifs, setDismissedNotifs] = useState(() => {
     try {
       const saved = localStorage.getItem(`dismissed_notifs_${currentUser?.uid}`);
@@ -187,7 +217,7 @@ export default function DashboardLayout({ children }) {
       setRules(data);
     });
 
-    const unsubscribeLeaves = subscribeToLeaveRequests((data) => {
+    const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (data) => {
       if (currentUser.role === "admin") {
         const pending = data.filter(r => r.status === "pending");
         setLeaveRequestsList(pending);
@@ -267,7 +297,7 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     if (!currentUser) return;
 
-    const unsubscribe = subscribeToAllMessages((allMsgs) => {
+    const unsubscribe = subscribeToAllMessages(currentUser.companyId, (allMsgs) => {
       // Find messages not sent by the current user
       const otherMsgs = allMsgs.filter(m => m.senderId !== currentUser.uid);
 
@@ -373,7 +403,7 @@ export default function DashboardLayout({ children }) {
     try {
       await logout();
       showToast("Logged out successfully.", "success");
-      navigate("/login");
+      navigate("/");
     } catch (error) {
       showToast(error.message || "Failed to log out", "error");
     }
@@ -439,6 +469,7 @@ export default function DashboardLayout({ children }) {
   };
 
   const isAdmin = currentUser?.role === "admin";
+  const isSuperAdmin = currentUser?.role === "superadmin";
   const activeTabParam = searchParams.get("tab") || "live";
 
   const activeTasksCount = currentUser?.tasks?.filter(t => !t.completed)?.length || 0;
@@ -447,7 +478,20 @@ export default function DashboardLayout({ children }) {
   const showProjectsBadge = activeProjects.length > 0 && clearedItems.projects !== activeProjects.sort().join(",");
 
   // Sidebar navigation items
-  const menuItems = isAdmin ? [
+  const menuItems = isSuperAdmin ? [
+    {
+      label: "Super Admin Portal",
+      icon: ShieldAlert,
+      active: location.pathname === "/superadmin",
+      onClick: () => { navigate("/superadmin"); setIsMobileOpen(false); }
+    },
+    {
+      label: "My Profile",
+      icon: User,
+      active: location.pathname === "/profile",
+      onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
+    }
+  ] : isAdmin ? [
     {
       label: "Dashboard",
       icon: LayoutGrid,
@@ -562,6 +606,40 @@ export default function DashboardLayout({ children }) {
     }
   ];
 
+  if (companyStatus === "pending") {
+    return (
+      <div className="min-h-screen w-full bg-bg-base flex flex-col items-center justify-center p-6 relative overflow-hidden animate-fade-in text-center">
+        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-10" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-brand-primary filter blur-[150px] opacity-10 pointer-events-none" />
+        
+        <div className="max-w-[460px] bg-bg-card border border-border-card rounded-[24px] p-10 shadow-2xl relative z-10">
+          <div className="w-20 h-20 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-amber-500/20">
+            <Lock size={36} />
+          </div>
+          <h1 className="text-3xl font-extrabold text-text-main mb-3">Module Frozen</h1>
+          <h2 className="text-sm font-bold text-amber-500 tracking-wider uppercase mb-6 bg-amber-500/10 inline-block px-3 py-1 rounded-full">Pending Super Admin Approval</h2>
+          <p className="text-sm text-text-sec leading-relaxed mb-8">
+            Your organization workspace has been registered successfully. However, your module is currently frozen pending review by the global system administrator.
+          </p>
+          <div className="p-4 bg-bg-base/50 rounded-[12px] border border-border-card text-left mb-8">
+            <h3 className="text-[11px] font-bold text-text-mut uppercase tracking-wider mb-2">What happens next?</h3>
+            <ul className="text-xs text-text-sec space-y-2 list-disc pl-4">
+              <li>Our team is reviewing your registration details.</li>
+              <li>Once approved, this portal will automatically unlock.</li>
+              <li>You will gain access to all management and employee onboarding tools.</li>
+            </ul>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-3 bg-bg-base hover:bg-border-card text-text-main font-bold text-sm rounded-[12px] border border-border-card transition-all flex items-center justify-center gap-2"
+          >
+            <LogOut size={16} /> Sign Out For Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen w-full bg-bg-base text-text-main overflow-x-hidden">
       {/* Sidebar Panel - Desktop */}
@@ -574,20 +652,24 @@ export default function DashboardLayout({ children }) {
         </div>
 
         {/* Small business branding card */}
-        <div className="mx-4 my-4 p-3 bg-brand-primary/5 rounded-[12px] border border-brand-primary/10 flex items-center gap-3">
-          <img
-            src="/logo.png"
-            alt="Logo"
-            className="w-10 h-10 rounded-[10px] object-contain bg-white p-1.5 shadow-sm"
-            onError={(e) => {
-              e.target.style.display = 'none';
-            }}
-          />
-          <div className="flex flex-col text-left">
-            <span className="font-bold text-[11px] leading-tight text-text-main">Carrezza Global Solutions Private Limited</span>
-            <span className="text-[9px] text-text-mut uppercase font-semibold tracking-wider mt-0.5">Attendance System</span>
+        {!isSuperAdmin && (
+          <div className="mx-4 my-4 p-3 bg-brand-primary/5 rounded-[12px] border border-brand-primary/10 flex items-center gap-3">
+            <img
+              src={companyLogo || "/logo.png"}
+              alt="Logo"
+              className="w-10 h-10 rounded-[10px] object-contain bg-white p-1.5 shadow-sm"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+            <div className="flex flex-col text-left">
+              <span className="font-bold text-[11px] leading-tight text-text-main">
+                {companyName || "Organization"}
+              </span>
+              <span className="text-[9px] font-black tracking-widest uppercase text-text-mut mt-1">ATTENDANCE SYSTEM</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Sidebar Nav links */}
         <nav className="flex-grow px-3 py-2 space-y-1.5 overflow-y-auto">

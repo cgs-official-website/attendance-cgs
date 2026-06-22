@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { Lock, Mail, ShieldAlert, Eye, EyeOff, Globe, Sparkles, Clock } from "lucide-react";
@@ -11,9 +11,16 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, logout, currentUser } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { companySlug } = useParams();
+
+  React.useEffect(() => {
+    if (currentUser) {
+      logout();
+    }
+  }, [currentUser, logout]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +33,9 @@ export default function Login() {
       const user = await login(email, password);
       showToast(`Welcome back, ${user.name}!`, "success");
       
-      if (user.role === "admin") {
+      if (user.role === "superadmin") {
+        navigate("/superadmin");
+      } else if (user.role === "admin") {
         navigate("/admin");
       } else {
         navigate("/dashboard");
@@ -145,7 +154,7 @@ export default function Login() {
             <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
               Sign In
             </button>
-            <Link to="/register" className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
+            <Link to={companySlug ? `/${companySlug}/register` : "/register"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
               Sign Up
             </Link>
           </div>

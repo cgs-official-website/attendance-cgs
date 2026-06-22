@@ -46,11 +46,11 @@ export default function History() {
       setLoading(false);
     });
 
-    const unsubscribeReg = subscribeToRegularizationRequests((data) => {
+    const unsubscribeReg = subscribeToRegularizationRequests(currentUser.companyId, (data) => {
       setMyRegularizations(data.filter(r => r.userId === currentUser.uid));
     });
 
-    const unsubscribeLeaves = subscribeToLeaveRequests((data) => {
+    const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (data) => {
       setMyLeaves(data.filter(r => r.userId === currentUser.uid));
     });
 

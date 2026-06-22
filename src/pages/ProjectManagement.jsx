@@ -57,7 +57,11 @@ export default function ProjectManagement() {
     if (!currentUser) return;
     
     if (getDbType() === "firebase") {
-      const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
+      let qRef = collection(db, "users");
+      if (currentUser.companyId) {
+        qRef = query(qRef, where("companyId", "==", currentUser.companyId));
+      }
+      const unsubscribe = onSnapshot(qRef, (snapshot) => {
         const users = snapshot.docs.map(d => ({ ...d.data(), uid: d.id }));
         setAllUsers(users);
         
@@ -82,7 +86,10 @@ export default function ProjectManagement() {
       return unsubscribe;
     } else {
       const handler = () => {
-        const users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
+        let users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
+        if (currentUser.companyId) {
+          users = users.filter(u => u.companyId === currentUser.companyId);
+        }
         setAllUsers(users);
         
         if (currentUser.role === "admin") {

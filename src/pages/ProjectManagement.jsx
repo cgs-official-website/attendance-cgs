@@ -326,7 +326,7 @@ export default function ProjectManagement() {
     showConfirm("Remove Team Member", `Are you sure you want to remove ${member.name} from the project?`, async () => {
       try {
         if (getDbType() === "firebase") {
-          await updateDoc(doc(db, "users", member.uid), { projects: [], project: "", tasks: [] });
+          await updateDoc(doc(db, "users", member.uid), { projects: [], project: "", tasks: [], isProjectManager: false });
         } else {
           const users = JSON.parse(localStorage.getItem("att_users"));
           const idx = users.findIndex(u => u.uid === member.uid);
@@ -334,6 +334,7 @@ export default function ProjectManagement() {
             users[idx].projects = [];
             users[idx].project = "";
             users[idx].tasks = [];
+            users[idx].isProjectManager = false;
             localStorage.setItem("att_users", JSON.stringify(users));
             window.dispatchEvent(new Event("local-auth-updated"));
           }
@@ -371,12 +372,18 @@ export default function ProjectManagement() {
         updatedProjects = [...new Set([...nonPmProjects, ...editProjects])];
       }
 
+      const updates = { 
+        designation: editDesignation,
+        projects: updatedProjects,
+        project: updatedProjects[0] || ""
+      };
+      
+      if (updatedProjects.length === 0) {
+        updates.isProjectManager = false;
+      }
+
       if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", memberToEdit.uid), { 
-          designation: editDesignation,
-          projects: updatedProjects,
-          project: updatedProjects[0] || ""
-        });
+        await updateDoc(doc(db, "users", memberToEdit.uid), updates);
       } else {
         const users = JSON.parse(localStorage.getItem("att_users"));
         const idx = users.findIndex(u => u.uid === memberToEdit.uid);
@@ -384,6 +391,9 @@ export default function ProjectManagement() {
           users[idx].designation = editDesignation;
           users[idx].projects = updatedProjects;
           users[idx].project = updatedProjects[0] || "";
+          if (updatedProjects.length === 0) {
+            users[idx].isProjectManager = false;
+          }
           localStorage.setItem("att_users", JSON.stringify(users));
           window.dispatchEvent(new Event("local-auth-updated"));
         }

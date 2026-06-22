@@ -433,10 +433,12 @@ export default function TaskManagement() {
                           <Activity size={12} />
                           <span>
                             {(() => {
-                              const elapsed = Math.floor((now - new Date(task.timerStartedAt).getTime()) / 1000);
-                              const h = Math.floor(elapsed / 3600);
-                              const m = Math.floor((elapsed % 3600) / 60);
-                              const s = elapsed % 60;
+                              const elapsedThisSession = Math.floor((now - new Date(task.timerStartedAt).getTime()) / 1000);
+                              const previousSeconds = Math.floor(calculateTimeSpent(taskReports[task.id] || []) * 3600);
+                              const totalElapsed = elapsedThisSession + previousSeconds;
+                              const h = Math.floor(totalElapsed / 3600);
+                              const m = Math.floor((totalElapsed % 3600) / 60);
+                              const s = totalElapsed % 60;
                               return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
                             })()}
                           </span>

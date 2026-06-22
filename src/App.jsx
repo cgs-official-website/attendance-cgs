@@ -12,6 +12,7 @@ import ChatWidget from "./components/ChatWidget";
 import TeamHub from "./pages/TeamHub";
 import ProjectManagement from "./pages/ProjectManagement";
 import TaskManagement from "./pages/TaskManagement";
+import LandingPage from "./pages/LandingPage";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -60,6 +61,14 @@ export default function App() {
     <div className="flex flex-col min-h-screen w-full">
       <Routes>
         {/* Public Routes */}
+        <Route 
+          path="/" 
+          element={
+            <PublicRoute>
+              <LandingPage />
+            </PublicRoute>
+          } 
+        />
         <Route 
           path="/login" 
           element={
@@ -159,7 +168,7 @@ export default function App() {
               ? currentUser.role === "admin" 
                 ? <Navigate to="/admin" replace /> 
                 : <Navigate to="/dashboard" replace />
-              : <Navigate to="/login" replace />
+              : <Navigate to="/" replace />
           } 
         />
       </Routes>

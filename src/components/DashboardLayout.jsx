@@ -545,6 +545,7 @@ export default function DashboardLayout({ children }) {
       label: "Task Management",
       icon: CheckSquare,
       active: location.pathname === "/task-management",
+      hidden: currentUser?.isProjectManager,
       badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
       onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
     },

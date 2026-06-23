@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext"; // Vite cache bust
 import { useToast } from "../context/ToastContext";
-import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, query, updateDoc, doc, where } from "firebase/firestore";
 import { db, getDbType, createNotification, subscribeToTaskReports } from "../firebase";
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download } from "lucide-react";

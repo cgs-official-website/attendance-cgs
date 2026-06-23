@@ -599,7 +599,7 @@ export default function ProjectManagement() {
     setNewTaskTitle("");
     setNewTaskDuration(1);
     const uProjects = user.projects?.length ? user.projects : (user.project ? [user.project] : []);
-    setNewTaskProject(uProjects.length > 0 ? uProjects[0] : "");
+    setNewTaskProject(uProjects.length > 0 ? uProjects[0] : "General Task");
     setEditingTaskIndex(null);
     setShowTaskModal(true);
   };
@@ -608,7 +608,7 @@ export default function ProjectManagement() {
     e.preventDefault();
     if (!newTaskTitle.trim()) return showToast("Task title is required", "warning");
 
-    let currentTasks = taskTargetUser.tasks || [];
+    let currentTasks = [...(taskTargetUser.tasks || [])];
     
     if (editingTaskIndex !== null) {
       currentTasks[editingTaskIndex] = {
@@ -1085,6 +1085,7 @@ export default function ProjectManagement() {
                         onChange={(e) => setNewTaskProject(e.target.value)}
                         required
                       >
+                        <option value="General Task">General Task</option>
                         {(taskTargetUser?.projects?.length ? taskTargetUser.projects : (taskTargetUser?.project ? [taskTargetUser.project] : [])).map(p => (
                           <option key={p} value={p}>{p}</option>
                         ))}

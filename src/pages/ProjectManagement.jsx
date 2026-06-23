@@ -51,6 +51,10 @@ export default function ProjectManagement() {
   const [selectedMemberForReports, setSelectedMemberForReports] = useState(null);
   const [allTaskReports, setAllTaskReports] = useState({});
 
+  const [memberFilterDate, setMemberFilterDate] = useState("");
+  const [memberFilterMonth, setMemberFilterMonth] = useState("");
+  const [memberFilterProject, setMemberFilterProject] = useState("All");
+
   const pmProjects = currentUser?.projects?.length ? currentUser.projects : (currentUser?.project ? [currentUser.project] : []);
 
   useEffect(() => {
@@ -284,6 +288,184 @@ export default function ProjectManagement() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Project Reports");
     XLSX.writeFile(wb, `Project_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const getFilteredMemberTasks = () => {
+    if (!selectedMemberForReports || !selectedMemberForReports.tasks) return [];
+    
+    return selectedMemberForReports.tasks.map(task => {
+      const reports = allTaskReports[task.id] || [];
+      const filteredReports = reports.filter(r => {
+        if (r.reportText.startsWith("Worked for") || r.reportText.startsWith("Auto-stopped")) return false;
+        
+        const reportDateObj = new Date(r.timestamp);
+        
+        if (memberFilterDate) {
+          if (reportDateObj.toISOString().split('T')[0] !== memberFilterDate) return false;
+        }
+        
+        if (memberFilterMonth) {
+          const reportMonth = reportDateObj.toISOString().substring(0, 7);
+          if (reportMonth !== memberFilterMonth) return false;
+        }
+        
+        return true;
+      });
+
+      return {
+        ...task,
+        filteredReports
+      };
+    }).filter(task => {
+      if (memberFilterProject !== "All" && task.project !== memberFilterProject) return false;
+      if ((memberFilterDate || memberFilterMonth) && task.filteredReports.length === 0) return false;
+      return true;
+    });
+  };
+
+  const handleMemberDownloadPDF = async () => {
+    if (!selectedMemberForReports) return;
+    
+    const filteredTasks = getFilteredMemberTasks();
+    if (filteredTasks.length === 0) {
+      showToast("No data to export with current filters", "warning");
+      return;
+    }
+
+    const doc = new jsPDF();
+    
+    const img = new Image();
+    img.src = logoImg;
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve; 
+    });
+
+    let startY = 20;
+    if (img.complete && img.naturalWidth > 0) {
+      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
+      startY = 40;
+    }
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.setTextColor(79, 70, 229);
+    doc.text(`Reports: ${selectedMemberForReports.name}`, img.complete ? 45 : 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Project Manager:", img.complete ? 45 : 14, 27);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${currentUser.name}`, img.complete ? 75 : 44, 27);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
+    doc.setFont("helvetica", "normal");
+    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
+
+    let filtersApplied = [];
+    if (memberFilterDate) filtersApplied.push(`Date: ${memberFilterDate}`);
+    if (memberFilterMonth) filtersApplied.push(`Month: ${memberFilterMonth}`);
+    if (memberFilterProject !== "All") filtersApplied.push(`Project: ${memberFilterProject}`);
+    if (filtersApplied.length > 0) {
+       doc.setFontSize(9);
+       doc.text(`Filters: ${filtersApplied.join(' | ')}`, img.complete ? 45 : 14, 37);
+       startY = img.complete ? 45 : 45;
+    } else {
+       startY = img.complete ? 42 : 42;
+    }
+
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.5);
+    doc.line(14, startY - 6, 196, startY - 6);
+
+    const tableData = [];
+    filteredTasks.forEach(t => {
+      const status = t.completed ? "Done" : "Active";
+      tableData.push([
+        { content: t.title + (t.project ? ` (${t.project})` : ""), styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } },
+        { content: status, styles: { fillColor: [243, 244, 246], halign: 'center' } },
+        { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246], halign: 'right' } }
+      ]);
+      
+      if (t.filteredReports.length > 0) {
+        t.filteredReports.forEach(r => {
+          tableData.push([
+            { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
+            { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 }, halign: 'right' } }
+          ]);
+        });
+      } else {
+        tableData.push([
+          { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+        ]);
+      }
+    });
+
+    autoTable(doc, {
+      head: [["Task Details", "Status", "Duration"]],
+      body: tableData,
+      startY: startY,
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      columnStyles: { 0: { cellWidth: 115 }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 42 } },
+      theme: 'grid',
+      alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+    
+    doc.save(`Reports_${selectedMemberForReports.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleMemberDownloadExcel = () => {
+    if (!selectedMemberForReports) return;
+    
+    const filteredTasks = getFilteredMemberTasks();
+    if (filteredTasks.length === 0) {
+      showToast("No data to export with current filters", "warning");
+      return;
+    }
+
+    const tableData = [];
+    filteredTasks.forEach(t => {
+      const status = t.completed ? "Done" : "Active";
+      tableData.push({
+        "Task Title": t.title,
+        "Project": t.project || "",
+        "Status": status,
+        "Est. Hours": t.duration || 0,
+        "Update Detail": "--- Task Summary ---",
+        "Update Timestamp": ""
+      });
+      
+      if (t.filteredReports.length > 0) {
+        t.filteredReports.forEach(r => {
+          tableData.push({
+            "Task Title": "",
+            "Project": "",
+            "Status": "",
+            "Est. Hours": "",
+            "Update Detail": r.reportText,
+            "Update Timestamp": new Date(r.timestamp).toLocaleString()
+          });
+        });
+      } else {
+        tableData.push({
+          "Task Title": "",
+          "Project": "",
+          "Status": "",
+          "Est. Hours": "",
+          "Update Detail": "No updates reported yet",
+          "Update Timestamp": ""
+        });
+      }
+    });
+
+    const ws = XLSX.utils.json_to_sheet(tableData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Member Reports");
+    XLSX.writeFile(wb, `Reports_${selectedMemberForReports.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleAddTeamMember = async (e) => {
@@ -1196,12 +1378,17 @@ export default function ProjectManagement() {
       document.body
     )}
 
-      {/* Specific Member Reports Modal */}
       {showMemberReportsModal && selectedMemberForReports && createPortal(
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-4 sm:p-6 animate-fade-in">
           <div className="w-full max-w-[700px] bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
             <button 
-              onClick={() => { setShowMemberReportsModal(false); setSelectedMemberForReports(null); }} 
+              onClick={() => { 
+                setShowMemberReportsModal(false); 
+                setSelectedMemberForReports(null); 
+                setMemberFilterDate(""); 
+                setMemberFilterMonth(""); 
+                setMemberFilterProject("All"); 
+              }} 
               className="absolute top-4 right-4 p-1.5 text-text-mut hover:text-text-main font-bold cursor-pointer bg-bg-base hover:bg-bg-card rounded-[8px] transition-colors z-10"
             >
               <X size={16} />
@@ -1212,6 +1399,57 @@ export default function ProjectManagement() {
                 <FileText size={20} className="text-brand-primary" />
                 Reports: {selectedMemberForReports.name}
               </h3>
+              
+              <div className="w-full mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-text-mut uppercase">Date Filter</label>
+                  <input 
+                    type="date" 
+                    value={memberFilterDate} 
+                    onChange={(e) => { setMemberFilterDate(e.target.value); setMemberFilterMonth(""); }}
+                    className="w-full px-3 py-2 bg-bg-base border border-border-card rounded-[10px] text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-text-mut uppercase">Month Filter</label>
+                  <input 
+                    type="month" 
+                    value={memberFilterMonth} 
+                    onChange={(e) => { setMemberFilterMonth(e.target.value); setMemberFilterDate(""); }}
+                    className="w-full px-3 py-2 bg-bg-base border border-border-card rounded-[10px] text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-text-mut uppercase">Project Filter</label>
+                  <select 
+                    value={memberFilterProject} 
+                    onChange={(e) => setMemberFilterProject(e.target.value)}
+                    className="w-full px-3 py-2 bg-bg-base border border-border-card rounded-[10px] text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  >
+                    <option value="All">All Projects</option>
+                    {Array.from(new Set(selectedMemberForReports.tasks?.map(t => t.project).filter(Boolean))).map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 w-full flex-wrap mt-2">
+                <button 
+                  onClick={handleMemberDownloadPDF}
+                  className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Download size={14} />
+                  <span>Download PDF</span>
+                </button>
+                <button 
+                  onClick={handleMemberDownloadExcel}
+                  className="py-2 px-4 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Download size={14} />
+                  <span>Download Excel</span>
+                </button>
+              </div>
             </div>
             
             <div className="overflow-auto pr-2 custom-scrollbar flex-grow">
@@ -1225,12 +1463,12 @@ export default function ProjectManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                  {(!selectedMemberForReports.tasks || selectedMemberForReports.tasks.length === 0) ? (
+                  {getFilteredMemberTasks().length === 0 ? (
                     <tr>
-                      <td colSpan="3" className="p-6 text-center text-xs text-text-mut">No tasks assigned.</td>
+                      <td colSpan="3" className="p-6 text-center text-xs text-text-mut">No tasks match the selected filters.</td>
                     </tr>
                   ) : (
-                    selectedMemberForReports.tasks.map((task, idx) => (
+                    getFilteredMemberTasks().map((task, idx) => (
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
                           <td className="p-3 text-xs text-text-main">
@@ -1251,17 +1489,17 @@ export default function ProjectManagement() {
                             </div>
                           </td>
                         </tr>
-                        {(!allTaskReports[task.id] || allTaskReports[task.id].length === 0) ? (
+                        {task.filteredReports.length === 0 ? (
                           <tr className="border-b border-border-card">
                             <td colSpan="3" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
-                              No updates reported yet
+                              No updates reported yet for selected filters
                             </td>
                           </tr>
                         ) : (
                           <tr className="border-b border-border-card">
                             <td colSpan="3" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped")).map(r => (
+                                {task.filteredReports.map(r => (
                                   <div key={r.id} className="text-[10px]">
                                     <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
                                     <span className="text-text-main ml-2">{r.reportText}</span>

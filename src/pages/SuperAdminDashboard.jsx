@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus } from "../firebase";
+import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData } from "../firebase";
 import { useToast } from "../context/ToastContext";
 import { Building2, Plus, Users, ShieldAlert, Link, X, CheckSquare, Calendar as CalendarIcon, Download, FileText } from "lucide-react";
 import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 
 export default function SuperAdminDashboard() {
   const [companies, setCompanies] = useState([]);
@@ -27,7 +28,12 @@ export default function SuperAdminDashboard() {
     try {
       await autoMigrateFirebase();
       const data = await getCompanies();
-      setCompanies(data || []);
+      const sorted = (data || []).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+      const withCodes = sorted.map((c, idx) => ({
+        ...c,
+        companyCode: `ZUNAHR${String(idx + 1).padStart(4, '0')}`
+      }));
+      setCompanies(withCodes);
     } catch (err) {
       console.error(err);
       showToast("Failed to fetch companies", "error");
@@ -54,77 +60,149 @@ export default function SuperAdminDashboard() {
     try {
       await updateCompanyStatus(companyId, newStatus);
       showToast(`Company status updated to ${newStatus}`, "success");
-      setCompanies(companies.map(c => c.id === companyId ? { ...c, status: newStatus } : c));
-      setSelectedCompany({ ...selectedCompany, status: newStatus });
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, status: newStatus } : c));
+      setSelectedCompany(prev => ({ ...prev, status: newStatus }));
     } catch (err) {
       showToast("Failed to update status", "error");
     }
   };
 
   const handleGenerateInvoice = () => {
-    if (!selectedCompany) return;
-    
-    const doc = new jsPDF();
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(0, 97, 224);
-    doc.text("INVOICE", 140, 20);
+    try {
+      if (!selectedCompany) return;
+      
+      const doc = new jsPDF();
+      const primaryColor = [0, 97, 224];
+      const secondaryColor = [240, 244, 250];
+      const textColor = [51, 65, 85];
+      const textMutColor = [100, 116, 139];
+      
+      // ---------------- HEADER ----------------
+      doc.setFillColor(...primaryColor);
+      doc.rect(0, 0, 210, 50, 'F');
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(28);
+      doc.setTextColor(255, 255, 255);
+      doc.text("INVOICE", 14, 32);
+      
+      // Company details (Top Right)
+      doc.setFontSize(16);
+      doc.text("Zuna HRMS", 196, 24, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text("123 Tech Park, Innovation Way", 196, 32, { align: "right" });
+      doc.text("billing@zunaglobal.com", 196, 38, { align: "right" });
 
-    doc.setFontSize(14);
-    doc.setTextColor(50, 50, 50);
-    doc.text("Zuna HRMS Solutions", 14, 20);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text("123 Tech Park, Innovation Way", 14, 26);
-    doc.text("billing@zunaglobal.com", 14, 32);
-    
-    doc.setDrawColor(226, 232, 240);
-    doc.line(14, 40, 196, 40);
+      // ---------------- INFO SECTION ----------------
+      // Bill To
+      doc.setTextColor(...textColor);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("BILLED TO", 14, 65);
+      
+      doc.setFontSize(11);
+      doc.text(selectedCompany.name || "Organization", 14, 73);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...textMutColor);
+      doc.text(`Company ID: ${selectedCompany.companyCode || selectedCompany.id}`, 14, 80);
+      doc.text(`Created: ${new Date(selectedCompany.createdAt || Date.now()).toLocaleDateString()}`, 14, 86);
 
-    doc.setFont("helvetica", "bold");
-    doc.text("Bill To:", 14, 50);
-    doc.setFont("helvetica", "normal");
-    doc.text(selectedCompany.name || "N/A", 14, 56);
-    doc.text(`Company ID: ${selectedCompany.id}`, 14, 62);
-    doc.text(`Created: ${new Date(selectedCompany.createdAt).toLocaleDateString()}`, 14, 68);
+      // Invoice Meta
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...textColor);
+      doc.text("Invoice No:", 135, 73);
+      doc.text("Invoice Date:", 135, 80);
+      doc.text("Amount Due:", 135, 87);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...textMutColor);
+      doc.text(`INV-${Math.floor(Math.random() * 100000)}`, 196, 73, { align: "right" });
+      doc.text(new Date().toLocaleDateString(), 196, 80, { align: "right" });
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...primaryColor);
+      doc.text("INR 24,999.00", 196, 87, { align: "right" });
 
-    doc.text(`Invoice Date: ${new Date().toLocaleDateString()}`, 140, 50);
-    doc.text(`Invoice #: INV-${Math.floor(Math.random() * 100000)}`, 140, 56);
+      // ---------------- TABLE ----------------
+      doc.autoTable({
+        startY: 100,
+        head: [['Description', 'Qty', 'Unit Price', 'Amount']],
+        body: [
+          ['Zuna Enterprise Subscription (Monthly)', '1', '24,999.00', '24,999.00'],
+          ['Priority Support Access', '1', 'Included', 'Included'],
+          ['Automated Backups', '1', 'Included', 'Included'],
+        ],
+        theme: 'grid',
+        headStyles: { 
+          fillColor: primaryColor, 
+          textColor: 255, 
+          fontStyle: 'bold',
+          cellPadding: 6
+        },
+        bodyStyles: { 
+          textColor: 80, 
+          fontSize: 10,
+          cellPadding: 6
+        },
+        columnStyles: {
+          0: { cellWidth: 90 },
+          1: { halign: 'center', cellWidth: 20 },
+          2: { halign: 'right', cellWidth: 35 },
+          3: { halign: 'right', cellWidth: 37 }
+        },
+        alternateRowStyles: { fillColor: secondaryColor },
+        margin: { left: 14, right: 14 },
+      });
 
-    // Table Header
-    doc.setFillColor(0, 97, 224);
-    doc.rect(14, 80, 182, 10, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.text("Description", 18, 86);
-    doc.text("Qty", 120, 86);
-    doc.text("Unit Price", 140, 86);
-    doc.text("Amount", 170, 86);
+      // ---------------- TOTALS ----------------
+      const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 15 : 150;
+      
+      // Add a neat summary box
+      doc.setFillColor(248, 250, 252);
+      // x=116, w=80 => spans from 116 to 196
+      doc.rect(116, finalY - 6, 80, 34, 'F');
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...textColor);
+      
+      // Labels
+      doc.text("Subtotal:", 122, finalY + 2);
+      doc.text("Tax (18%):", 122, finalY + 10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Total Due:", 122, finalY + 20);
+      
+      // Values (Aligned Right to 190)
+      doc.setFont("helvetica", "normal");
+      doc.text("21,185.59", 190, finalY + 2, { align: "right" });
+      doc.text("3,813.41", 190, finalY + 10, { align: "right" });
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...primaryColor);
+      doc.setFontSize(12);
+      doc.text("INR 24,999.00", 190, finalY + 20, { align: "right" });
 
-    // Table Row
-    doc.setTextColor(50, 50, 50);
-    doc.setFont("helvetica", "normal");
-    doc.rect(14, 90, 182, 15, "S");
-    doc.text("Zuna Enterprise Subscription (Monthly)", 18, 99);
-    doc.text("1", 122, 99);
-    doc.text("INR 24,999.00", 142, 99);
-    doc.text("INR 24,999.00", 172, 99);
+      // ---------------- FOOTER ----------------
+      const pageHeight = doc.internal.pageSize.height || doc.internal.pageSize.getHeight();
+      doc.setDrawColor(...primaryColor);
+      doc.setLineWidth(0.5);
+      doc.line(14, pageHeight - 20, 196, pageHeight - 20);
+      
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9);
+      doc.setTextColor(...textMutColor);
+      doc.text("Thank you for choosing Zuna HRMS! We appreciate your business.", 105, pageHeight - 12, { align: 'center' });
 
-    // Total
-    doc.setFont("helvetica", "bold");
-    doc.text("Total Due:", 140, 115);
-    doc.text("INR 24,999.00", 172, 115);
-
-    // Footer
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Thank you for your business!", 85, 140);
-
-    doc.save(`Invoice_${selectedCompany.slug}_${new Date().toISOString().split('T')[0]}.pdf`);
-    showToast("Invoice generated and downloaded.", "success");
+      doc.save(`Invoice_${selectedCompany.slug || 'company'}_${new Date().toISOString().split('T')[0]}.pdf`);
+      showToast("Premium Invoice generated successfully.", "success");
+    } catch (err) {
+      console.error("PDF Error:", err);
+      showToast("Failed to generate PDF: " + err.message, "error");
+    }
   };
 
   const handleApproveCompany = async (companyId) => {
@@ -179,13 +257,26 @@ export default function SuperAdminDashboard() {
           </h1>
           <p className="text-text-mut font-medium mt-1">Manage Vendors and Sub-Organizations</p>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="bg-brand-primary hover:bg-brand-hover text-white px-6 py-3 rounded-full font-bold flex items-center gap-2 shadow-lg shadow-brand-primary/20 transition-all"
-        >
-          <Plus size={20} />
-          Provision New Company
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={async () => {
+              const res = await recoverLostData();
+              if (res.success) showToast(res.msg, "success");
+              else showToast(res.msg, "error");
+            }}
+            className="py-2.5 px-5 bg-amber-500/10 text-amber-500 font-bold rounded-[12px] hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-sm flex items-center gap-2 text-sm"
+          >
+            <ShieldAlert size={18} />
+            Recover Data
+          </button>
+          <button 
+            onClick={() => setShowModal(true)}
+            className="py-2.5 px-5 bg-brand-primary text-white font-bold rounded-[12px] hover:bg-brand-hover transition-all cursor-pointer shadow-xl shadow-brand-primary/20 flex items-center gap-2 text-sm"
+          >
+            <Plus size={18} strokeWidth={3} />
+            Provision New Organization
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -213,6 +304,10 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div className="space-y-3 bg-bg-base/50 p-4 rounded-[16px] border border-border-card">
+                <div className="flex items-center gap-2 text-sm text-text-sec">
+                  <ShieldAlert size={16} className="text-brand-primary" />
+                  <span className="font-bold">ID:</span> {company.companyCode || company.id}
+                </div>
                 <div className="flex items-center gap-2 text-sm text-text-sec">
                   <Link size={16} className="text-brand-primary" />
                   <span className="font-bold">Slug:</span> /{company.slug}/login
@@ -406,7 +501,7 @@ export default function SuperAdminDashboard() {
                     >
                       <option value="active">Active</option>
                       <option value="pending">Pending Approval</option>
-                      <option value="suspended">Suspended</option>
+                      <option value="deactive">Deactive</option>
                     </select>
                   </div>
                 </div>

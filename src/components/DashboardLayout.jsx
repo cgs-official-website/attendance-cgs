@@ -145,9 +145,7 @@ export default function DashboardLayout({ children }) {
           document.title = found.name;
           setCompanyName(found.name || "");
           setCompanyLogo(found.logoBase64 || "");
-          if (currentUser.role === "admin") {
-            setCompanyStatus(found.status || "active");
-          }
+          setCompanyStatus(found.status || "active");
         } else {
           document.title = "Zuna | HRMS";
         }
@@ -606,7 +604,7 @@ export default function DashboardLayout({ children }) {
     }
   ];
 
-  if (companyStatus === "pending") {
+  if (companyStatus === "pending" && !isSuperAdmin) {
     return (
       <div className="min-h-screen w-full bg-bg-base flex flex-col items-center justify-center p-6 relative overflow-hidden animate-fade-in text-center">
         <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-10" />
@@ -634,6 +632,32 @@ export default function DashboardLayout({ children }) {
             className="w-full py-3 bg-bg-base hover:bg-border-card text-text-main font-bold text-sm rounded-[12px] border border-border-card transition-all flex items-center justify-center gap-2"
           >
             <LogOut size={16} /> Sign Out For Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (companyStatus === "deactive" && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen w-full bg-bg-base flex flex-col items-center justify-center p-6 relative overflow-hidden animate-fade-in text-center">
+        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-10" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-brand-primary filter blur-[150px] opacity-10 pointer-events-none" />
+        
+        <div className="max-w-[460px] bg-bg-card border border-border-card rounded-[24px] p-10 shadow-2xl relative z-10">
+          <div className="w-20 h-20 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-rose-500/20">
+            <Lock size={36} />
+          </div>
+          <h1 className="text-3xl font-extrabold text-text-main mb-3">Subscription Expired</h1>
+          <h2 className="text-sm font-bold text-rose-500 tracking-wider uppercase mb-6 bg-rose-500/10 inline-block px-3 py-1 rounded-full">Organization Deactivated</h2>
+          <p className="text-sm text-text-sec leading-relaxed mb-8">
+            Your organization's subscription has expired or the workspace has been deactivated. Please contact your organization administrator to recharge the subscription.
+          </p>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-3 bg-bg-base hover:bg-border-card text-text-main font-bold text-sm rounded-[12px] border border-border-card transition-all flex items-center justify-center gap-2"
+          >
+            <LogOut size={16} /> Sign Out
           </button>
         </div>
       </div>

@@ -281,7 +281,7 @@ export const loginUser = async (email, password) => {
           role,
           createdAt: new Date().toISOString()
         };
-        await setDoc(doc(db, "users", user.uid), userData);
+        await setDoc(doc(db, "users", user.uid), userData, { merge: true });
         return userData;
       }
     } catch (error) {
@@ -300,7 +300,7 @@ export const loginUser = async (email, password) => {
             role: "admin",
             createdAt: new Date().toISOString()
           };
-          await setDoc(doc(db, "users", user.uid), userData);
+          await setDoc(doc(db, "users", user.uid), userData, { merge: true });
           return userData;
         } catch (createErr) {
           throw error; // Throw original sign in error if creation fails (e.g. email exists but password was wrong)
@@ -371,8 +371,8 @@ export const onAuthUserChanged = (callback) => {
               createdAt: new Date().toISOString()
             };
             
-            // Auto-sync write to Firestore
-            setDoc(doc(db, "users", firebaseUser.uid), fallbackData)
+            // Auto-sync write to Firestore without overwriting existing critical data like companyId and tasks
+            setDoc(doc(db, "users", firebaseUser.uid), fallbackData, { merge: true })
               .then(() => {
                 console.log("Auto-synchronized missing Firestore user profile document.");
               })
@@ -2502,4 +2502,73 @@ export const assignCompanyToUser = async (userId, companyId) => {
     }
   }
   return true;
+};
+
+export const recoverLostData = async () => {
+  if (dbType !== "firebase") return { success: false, msg: "Not in firebase mode" };
+  
+  try {
+    const companiesSnapshot = await getDocs(collection(db, "companies"));
+    const companies = companiesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const carrezza = companies.find(c => c.name.toLowerCase().includes("carrezza"));
+    
+    if (!carrezza) throw new Error("Carrezza company not found");
+    const targetId = carrezza.id;
+
+    let recoveredCount = 0;
+
+    // 1. Get all users currently in Carrezza
+    const usersSnap = await getDocs(query(collection(db, "users"), where("companyId", "==", targetId)));
+    const carrezzaUserIds = usersSnap.docs.map(d => d.id);
+
+    // 2. Recover Messages based on senderId
+    const msgsSnap = await getDocs(collection(db, "messages"));
+    for (const docSnap of msgsSnap.docs) {
+      const data = docSnap.data();
+      if (data.companyId !== targetId && carrezzaUserIds.includes(data.senderId)) {
+        await updateDoc(doc(db, "messages", docSnap.id), { companyId: targetId });
+        recoveredCount++;
+      }
+    }
+
+    // 3. Recover Leave Requests based on userId
+    const leavesSnap = await getDocs(collection(db, "leave_requests"));
+    for (const docSnap of leavesSnap.docs) {
+      const data = docSnap.data();
+      if (data.companyId !== targetId && carrezzaUserIds.includes(data.userId)) {
+        await updateDoc(doc(db, "leave_requests", docSnap.id), { companyId: targetId });
+        recoveredCount++;
+      }
+    }
+
+    // 4. Recover Attendance Logs based on userId
+    const attSnap = await getDocs(collection(db, "attendance"));
+    for (const docSnap of attSnap.docs) {
+      const data = docSnap.data();
+      if (data.companyId !== targetId && carrezzaUserIds.includes(data.userId)) {
+        await updateDoc(doc(db, "attendance", docSnap.id), { companyId: targetId });
+        recoveredCount++;
+      }
+    }
+
+    // 5. Recover Channels and DM Threads based on missing/Organization companyId
+    const recoverGeneral = async (collectionName) => {
+      const snap = await getDocs(collection(db, collectionName));
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        if (data.companyId === "Organization" || data.companyId === "" || !data.companyId) {
+          await updateDoc(doc(db, collectionName, docSnap.id), { companyId: targetId });
+          recoveredCount++;
+        }
+      }
+    };
+
+    await recoverGeneral("channels");
+    await recoverGeneral("dm_threads");
+
+    return { success: true, msg: `Advanced Recovery Complete! Restored ${recoveredCount} orphaned records to Carrezza.` };
+  } catch (err) {
+    console.error("Recovery failed:", err);
+    return { success: false, msg: err.message };
+  }
 };

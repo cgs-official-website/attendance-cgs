@@ -267,6 +267,7 @@ export default function AdminDashboard() {
     setSearchParams(newParams);
   };
   const [selectedDept, setSelectedDept] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
 
   const loadDirectoryData = async () => {
@@ -375,7 +376,8 @@ export default function AdminDashboard() {
 
   // Get user's current status and details for today
   const getLiveUserStatus = (user) => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const userLog = logs.find((l) => l.userId === user.uid && l.date === todayStr);
 
     if (!userLog) {
@@ -421,7 +423,18 @@ export default function AdminDashboard() {
       u.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = !selectedDept || u.department === selectedDept;
     
-    return matchesSearch && matchesDept;
+    let matchesStatus = true;
+    if (selectedStatus) {
+      const userToday = getLiveUserStatus(u);
+      const isWorking = userToday.status === "checked-in" || userToday.status === "on-break";
+      if (selectedStatus === "active") {
+        matchesStatus = isWorking;
+      } else if (selectedStatus === "offline") {
+        matchesStatus = !isWorking;
+      }
+    }
+    
+    return matchesSearch && matchesDept && matchesStatus;
   });
 
   // Filter leave requests for the queue
@@ -1588,7 +1601,7 @@ export default function AdminDashboard() {
 
             <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm">
               <div>
-                <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">ON LEAVE</span>
+                <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">OFFLINE</span>
                 <span className="text-3xl font-extrabold text-text-main block mt-1.5">3</span>
               </div>
               <span className="bg-slate-200 dark:bg-slate-800 text-text-sec px-2 py-0.5 rounded-full text-[9px] font-bold">12 Pending</span>
@@ -1636,16 +1649,18 @@ export default function AdminDashboard() {
                 <select
                   id="status-filter"
                   className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
                 >
                   <option value="">All Status</option>
                   <option value="active">Active</option>
-                  <option value="on-leave">On Leave</option>
+                  <option value="offline">Offline</option>
                 </select>
               </div>
 
               {/* Action resets */}
               <button 
-                onClick={() => { setSearchQuery(""); setSelectedDept(""); }}
+                onClick={() => { setSearchQuery(""); setSelectedDept(""); setSelectedStatus(""); }}
                 className="py-2.5 px-5 border border-border-card rounded-[12px] hover:bg-bg-base text-xs font-bold text-text-sec cursor-pointer"
               >
                 Clear Filters
@@ -1928,7 +1943,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="mt-4 text-xs font-semibold text-text-sec flex items-center gap-1.5">
                   <span className="text-brand-warning font-bold">2</span>
-                  <span className="text-text-mut font-semibold">on leave currently</span>
+                  <span className="text-text-mut font-semibold">offline currently</span>
                 </div>
               </div>
             </div>

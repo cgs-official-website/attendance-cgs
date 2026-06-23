@@ -54,9 +54,9 @@ export default function LandingPage() {
       {/* Deep Mesh Background */}
       <div className="fixed inset-0 z-0 bg-bg-base pointer-events-none overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
-        <div className={`absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-brand-primary/20' : 'bg-brand-primary/10'}`}></div>
-        <div className={`absolute bottom-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-indigo-600/20' : 'bg-indigo-600/10'}`}></div>
-        <div className={`absolute top-[40%] right-[10%] w-[30vw] h-[30vw] rounded-full blur-[120px] transition-all duration-1000 ${isDark ? 'bg-purple-600/20' : 'bg-purple-600/10'}`}></div>
+        <div className={`absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-brand-primary/20' : 'bg-brand-primary/40'}`}></div>
+        <div className={`absolute bottom-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-indigo-600/20' : 'bg-indigo-400/40'}`}></div>
+        <div className={`absolute top-[40%] right-[10%] w-[30vw] h-[30vw] rounded-full blur-[120px] transition-all duration-1000 ${isDark ? 'bg-purple-600/20' : 'bg-purple-400/40'}`}></div>
       </div>
 
       {/* Navigation */}
@@ -147,10 +147,15 @@ export default function LandingPage() {
               <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary/10 border border-brand-primary/20 text-brand-primary text-xs font-bold uppercase tracking-widest mb-6"
+                transition={{ duration: 0.8, type: "spring", bounce: 0.5 }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary/10 border border-brand-primary/20 text-brand-primary text-xs font-bold uppercase tracking-widest mb-6 shadow-[0_0_20px_rgba(139,92,246,0.15)]"
               >
-                <Zap size={14} className="text-brand-primary" />
+                <motion.div
+                  animate={{ rotate: [0, 15, -15, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Zap size={14} className="text-brand-primary drop-shadow-[0_0_5px_rgba(139,92,246,0.5)]" />
+                </motion.div>
                 The Future of Work is Here
               </motion.div>
 
@@ -161,9 +166,14 @@ export default function LandingPage() {
                 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-text-main mb-6 leading-[1.1]"
               >
                 Unify Your <br/>
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary via-[#a855f7] to-[#6366f1] inline-block pb-2">
+                <motion.span 
+                  animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
+                  style={{ backgroundSize: "200% auto" }}
+                  className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary via-[#a855f7] to-[#6366f1] inline-block pb-2 drop-shadow-sm"
+                >
                   Multi-Vendor Teams
-                </span>
+                </motion.span>
               </motion.h1>
               
               <motion.p 
@@ -214,16 +224,20 @@ export default function LandingPage() {
 
             {/* Right Dashboard Mockup (Floating & 3D) */}
             <motion.div 
-              initial={{ opacity: 0, x: 50, rotateY: 15 }}
-              animate={{ opacity: 1, x: 0, rotateY: -5 }}
-              transition={{ duration: 1, delay: 0.2, type: "spring", stiffness: 50 }}
+              initial={{ opacity: 0, x: 50, rotateY: 25, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, rotateY: -5, scale: 1 }}
+              transition={{ duration: 1.2, delay: 0.2, type: "spring", stiffness: 40 }}
               className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-[600px] perspective-1000"
             >
               {/* Decorative glows behind image */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-brand-primary/40 to-indigo-500/40 rounded-3xl blur-[80px] -z-10"></div>
+              <motion.div 
+                animate={{ scale: [1, 1.05, 1], opacity: [0.5, 0.8, 0.5] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute inset-0 bg-gradient-to-tr from-brand-primary/40 via-purple-500/30 to-indigo-500/40 rounded-3xl blur-[80px] -z-10"
+              ></motion.div>
               
               <motion.div 
-                animate={{ y: [0, -20, 0] }}
+                animate={{ y: [0, -25, 0], rotateX: [0, 2, 0] }}
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                 className="w-full h-full relative z-10"
                 style={{ transformStyle: 'preserve-3d' }}
@@ -233,30 +247,37 @@ export default function LandingPage() {
                   
                   {/* Floating Glass Cards Overlay */}
                   <motion.div 
-                    animate={{ y: [0, 15, 0] }}
+                    animate={{ y: [0, 15, 0], x: [0, -5, 0] }}
                     transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                    className="absolute -left-6 bottom-20 bg-bg-card/80 backdrop-blur-xl border border-border-card p-4 rounded-2xl shadow-2xl flex items-center gap-4"
+                    className="absolute -left-6 bottom-20 bg-bg-card/90 backdrop-blur-2xl border border-border-card p-4 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.2)] flex items-center gap-4"
+                    style={{ transform: "translateZ(30px)" }}
                   >
                     <div className="w-12 h-12 bg-emerald-500/20 text-emerald-500 rounded-xl flex items-center justify-center">
-                      <CheckCircle size={24} />
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        <CheckCircle size={24} />
+                      </motion.div>
                     </div>
                     <div>
-                      <p className="text-xs text-text-mut font-bold uppercase">Attendance Rate</p>
+                      <p className="text-xs text-text-mut font-bold uppercase tracking-wider">Attendance</p>
                       <p className="text-xl font-black text-text-main">98.5%</p>
                     </div>
                   </motion.div>
 
                   <motion.div 
-                    animate={{ y: [0, -10, 0] }}
+                    animate={{ y: [0, -15, 0], x: [0, 5, 0] }}
                     transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                    className="absolute -right-6 top-20 bg-bg-card/80 backdrop-blur-xl border border-border-card p-4 rounded-2xl shadow-2xl flex flex-col gap-2"
+                    className="absolute -right-6 top-20 bg-bg-card/90 backdrop-blur-2xl border border-border-card p-4 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.2)] flex flex-col gap-2"
+                    style={{ transform: "translateZ(40px)" }}
                   >
-                    <p className="text-xs text-text-mut font-bold uppercase">Active Projects</p>
+                    <p className="text-xs text-text-mut font-bold uppercase tracking-wider">Active Projects</p>
                     <div className="flex -space-x-2">
-                      <div className="w-8 h-8 rounded-full bg-brand-primary/20 border border-brand-primary"></div>
-                      <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500"></div>
-                      <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500"></div>
-                      <div className="w-8 h-8 rounded-full bg-bg-base border border-border-card flex items-center justify-center text-[10px] font-bold">+12</div>
+                      <div className="w-8 h-8 rounded-full bg-brand-primary/20 border border-brand-primary/50 shadow-inner"></div>
+                      <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/50 shadow-inner"></div>
+                      <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/50 shadow-inner"></div>
+                      <div className="w-8 h-8 rounded-full bg-bg-base border border-border-card flex items-center justify-center text-[10px] font-black">+12</div>
                     </div>
                   </motion.div>
                 </div>
@@ -288,10 +309,10 @@ export default function LandingPage() {
             {/* Large Card 1 */}
             <motion.div 
               whileHover={{ y: -5 }}
-              className="md:col-span-2 bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-brand-primary/30 transition-colors"
+              className="md:col-span-2 bg-bg-card/60 backdrop-blur-3xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-brand-primary/40 transition-colors shadow-2xl shadow-black/5"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary/10 rounded-full blur-3xl group-hover:bg-brand-primary/20 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-brand-primary mb-6 relative z-10">
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-brand-primary mb-6 relative z-10 shadow-sm">
                 <Clock size={28} />
               </div>
               <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Live GPS Attendance</h3>
@@ -303,9 +324,9 @@ export default function LandingPage() {
             {/* Small Card 1 */}
             <motion.div 
               whileHover={{ y: -5 }}
-              className="bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-purple-500/30 transition-colors"
+              className="bg-bg-card/60 backdrop-blur-3xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-purple-500/40 transition-colors shadow-2xl shadow-black/5"
             >
-              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-purple-500 mb-6 relative z-10">
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-purple-500 mb-6 relative z-10 shadow-sm">
                 <Shield size={28} />
               </div>
               <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Leave Management</h3>
@@ -317,9 +338,9 @@ export default function LandingPage() {
             {/* Small Card 2 */}
             <motion.div 
               whileHover={{ y: -5 }}
-              className="bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-indigo-500/30 transition-colors"
+              className="bg-bg-card/60 backdrop-blur-3xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-indigo-500/40 transition-colors shadow-2xl shadow-black/5"
             >
-              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-indigo-500 mb-6 relative z-10">
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-indigo-500 mb-6 relative z-10 shadow-sm">
                 <Users size={28} />
               </div>
               <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Multi-Vendor</h3>
@@ -331,10 +352,10 @@ export default function LandingPage() {
             {/* Large Card 2 */}
             <motion.div 
               whileHover={{ y: -5 }}
-              className="md:col-span-2 bg-bg-card/40 backdrop-blur-2xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-emerald-500/30 transition-colors"
+              className="md:col-span-2 bg-bg-card/60 backdrop-blur-3xl border border-border-card rounded-[2rem] p-10 relative overflow-hidden group hover:border-emerald-500/40 transition-colors shadow-2xl shadow-black/5"
             >
               <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors"></div>
-              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-emerald-500 mb-6 relative z-10">
+              <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-emerald-500 mb-6 relative z-10 shadow-sm">
                 <Briefcase size={28} />
               </div>
               <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Project & Task Mastery</h3>
@@ -368,8 +389,8 @@ export default function LandingPage() {
             </div>
 
             <div className="mb-8">
-              <span className="text-5xl font-black text-text-main">INR 24,999</span>
-              <span className="text-text-mut font-bold"> / month</span>
+              <span className="text-5xl font-black text-text-main">INR 0</span>
+              <span className="text-text-mut font-bold"> / 30-day trial</span>
             </div>
 
             <ul className="space-y-4 mb-10">

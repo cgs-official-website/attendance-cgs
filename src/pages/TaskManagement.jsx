@@ -208,7 +208,7 @@ export default function TaskManagement() {
         reports.forEach(r => {
           tableData.push([
             { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } },
-            { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 } } }
+            { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 }, halign: 'right' } }
           ]);
         });
       } else {
@@ -229,7 +229,7 @@ export default function TaskManagement() {
       startY: startY,
       styles: { fontSize: 9, font: "helvetica", cellPadding: 8, lineColor: [226, 232, 240], lineWidth: 0.1 },
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left", cellPadding: 10 },
-      columnStyles: { 0: { cellWidth: 110 }, 1: { halign: 'center' }, 2: { halign: 'right' } },
+      columnStyles: { 0: { cellWidth: 105 }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 52 } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
@@ -337,7 +337,7 @@ export default function TaskManagement() {
       reports.forEach(r => {
         tableData.push([
           { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } },
-          { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 } } }
+          { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 }, halign: 'right' } }
         ]);
       });
     } else {
@@ -352,7 +352,7 @@ export default function TaskManagement() {
       startY: startY,
       styles: { fontSize: 9, font: "helvetica", cellPadding: 8, lineColor: [226, 232, 240], lineWidth: 0.1 },
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left", cellPadding: 10 },
-      columnStyles: { 0: { cellWidth: 110 }, 1: { halign: 'center' }, 2: { halign: 'right' } },
+      columnStyles: { 0: { cellWidth: 105 }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 52 } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });

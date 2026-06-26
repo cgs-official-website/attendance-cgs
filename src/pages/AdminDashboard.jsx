@@ -248,7 +248,20 @@ export default function AdminDashboard() {
   const [isEditingAsset, setIsEditingAsset] = useState(false);
   const [selectedAssetId, setSelectedAssetId] = useState(null);
   const [assetFormName, setAssetFormName] = useState("");
-  const [assetFormCategory, setAssetFormCategory] = useState("Laptop");
+  const [assetFormCategory, setAssetFormCategory] = useState(["Laptop"]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryDropdownRef = React.useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setShowCategoryDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const [assetFormSerial, setAssetFormSerial] = useState("");
   const [assetFormStatus, setAssetFormStatus] = useState("Available");
   const [assetFormAssignedUser, setAssetFormAssignedUser] = useState("");
@@ -681,12 +694,13 @@ export default function AdminDashboard() {
     setIsEditingAsset(false);
     setSelectedAssetId(null);
     setAssetFormName("");
-    setAssetFormCategory("Laptop");
+    setAssetFormCategory(["Laptop"]);
     setAssetFormSerial("");
     setAssetFormStatus("Available");
     setAssetFormAssignedUser("");
     setAssetFormAssignedDate(new Date().toISOString().split("T")[0]);
     setAssetFormAssigningAuthority("");
+    setShowCategoryDropdown(false);
     setShowAssetModal(true);
   };
 
@@ -694,12 +708,23 @@ export default function AdminDashboard() {
     setIsEditingAsset(true);
     setSelectedAssetId(asset.id);
     setAssetFormName(asset.name || "");
-    setAssetFormCategory(asset.category || "Laptop");
+    
+    // Support category as both string (existing data) and array (new multi-select model)
+    const rawCat = asset.category;
+    let initialCategories = ["Laptop"];
+    if (Array.isArray(rawCat)) {
+      initialCategories = rawCat;
+    } else if (typeof rawCat === "string" && rawCat.trim() !== "") {
+      initialCategories = rawCat.split(",").map(c => c.trim());
+    }
+    setAssetFormCategory(initialCategories);
+    
     setAssetFormSerial(asset.serialNumber || "");
     setAssetFormStatus(asset.status || "Available");
     setAssetFormAssignedUser(asset.assignedUserId || "");
     setAssetFormAssignedDate(asset.assignedDate || new Date().toISOString().split("T")[0]);
     setAssetFormAssigningAuthority(asset.assigningAuthorityId || "");
+    setShowCategoryDropdown(false);
     setShowAssetModal(true);
   };
 
@@ -707,6 +732,9 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!assetFormName.trim() || !assetFormSerial.trim()) {
       return showToast("Please fill in Asset Name and Serial Number.", "warning");
+    }
+    if (assetFormCategory.length === 0) {
+      return showToast("Please select at least one category.", "warning");
     }
     
     // Find assigned user details if set
@@ -777,7 +805,7 @@ export default function AdminDashboard() {
 
     const tableData = assets.map((a) => ({
       "Asset Name": a.name || "",
-      "Category": a.category || "",
+      "Category": Array.isArray(a.category) ? a.category.join(", ") : (a.category || ""),
       "Serial Number": a.serialNumber || "",
       "Status": a.status || "",
       "Assigned To": a.assignedUserName || "Unassigned",
@@ -897,7 +925,7 @@ export default function AdminDashboard() {
       }
       
       const nameVal = asset.name || "—";
-      const catVal = asset.category || "—";
+      const catVal = Array.isArray(asset.category) ? asset.category.join(", ") : (asset.category || "—");
       const serialVal = asset.serialNumber || "—";
       const statusVal = asset.status || "—";
       const assignedVal = asset.assignedUserName || "Unassigned";
@@ -4467,7 +4495,8 @@ export default function AdminDashboard() {
             (asset.name || "").toLowerCase().includes(assetSearch.toLowerCase()) ||
             (asset.serialNumber || "").toLowerCase().includes(assetSearch.toLowerCase()) ||
             (asset.assignedUserName || "").toLowerCase().includes(assetSearch.toLowerCase());
-          const matchCategory = assetCategoryFilter === "all" || asset.category === assetCategoryFilter;
+          const matchCategory = assetCategoryFilter === "all" || 
+            (Array.isArray(asset.category) ? asset.category.includes(assetCategoryFilter) : asset.category === assetCategoryFilter);
           const matchStatus = assetStatusFilter === "all" || asset.status === assetStatusFilter;
           return matchSearch && matchCategory && matchStatus;
         });
@@ -4615,7 +4644,9 @@ export default function AdminDashboard() {
                                 <div className="font-bold text-xs text-text-main">{asset.name}</div>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="text-xs text-text-sec font-semibold">{asset.category || "Other"}</span>
+                                <span className="text-xs text-text-sec font-semibold">
+                                  {Array.isArray(asset.category) ? asset.category.join(", ") : (asset.category || "Other")}
+                                </span>
                               </td>
                               <td className="px-6 py-4 text-xs font-mono text-text-sec">
                                 {asset.serialNumber}
@@ -4749,26 +4780,47 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1.5 relative" ref={categoryDropdownRef}>
                     <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Category</label>
                     <div className="relative flex items-center">
                       <Layers size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
-                      <select 
-                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
-                        value={assetFormCategory}
-                        onChange={(e) => setAssetFormCategory(e.target.value)}
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm flex items-center justify-between text-left"
                       >
-                        <option value="Laptop">Laptop</option>
-                        <option value="Headset">Headset</option>
-                        <option value="Charger">Charger</option>
-                        <option value="Keyboard">Keyboard</option>
-                        <option value="Mouse">Mouse</option>
-                        <option value="Monitor">Monitor</option>
-                        <option value="Mobile">Mobile</option>
-                        <option value="Other">Other</option>
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                        <span className="truncate">
+                          {assetFormCategory.length === 0 
+                            ? "Select Categories" 
+                            : assetFormCategory.join(", ")}
+                        </span>
+                        <ChevronDown size={14} className="text-text-mut/70 pointer-events-none flex-shrink-0" />
+                      </button>
                     </div>
+                    {showCategoryDropdown && (
+                      <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-bg-card border border-border-card rounded-[14px] shadow-xl p-3 space-y-2.5 max-h-[220px] overflow-y-auto animate-scale-up">
+                        {["Laptop", "Headset", "Charger", "Keyboard", "Mouse", "Monitor", "Mobile", "Other"].map((cat) => {
+                          const isChecked = assetFormCategory.includes(cat);
+                          return (
+                            <label key={cat} className="flex items-center gap-2.5 text-xs font-bold text-text-sec hover:text-text-main cursor-pointer select-none py-0.5 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setAssetFormCategory(prev => prev.filter(c => c !== cat));
+                                  } else {
+                                    setAssetFormCategory(prev => [...prev, cat]);
+                                  }
+                                }}
+                                className="rounded-[4px] border-border-card text-brand-primary focus:ring-brand-primary cursor-pointer w-4 h-4 transition-all accent-brand-primary"
+                              />
+                              <span>{cat}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1.5">

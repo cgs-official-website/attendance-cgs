@@ -821,7 +821,9 @@ export default function UserDashboard() {
                         {asset.status}
                       </span>
                       <h3 className="text-base font-extrabold text-text-main mt-2.5">{asset.name}</h3>
-                      <p className="text-xs text-text-mut font-semibold mt-0.5">{asset.category || "Hardware"}</p>
+                      <p className="text-xs text-text-mut font-semibold mt-0.5">
+                        {Array.isArray(asset.category) ? asset.category.join(", ") : (asset.category || "Hardware")}
+                      </p>
                     </div>
                     <div className="w-10 h-10 rounded-[12px] bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
                       <HardDrive size={20} />

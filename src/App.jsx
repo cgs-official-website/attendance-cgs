@@ -35,7 +35,12 @@ function AdminRoute({ children }) {
     return <Navigate to="/" replace />;
   }
   
-  if (currentUser.role !== "admin") {
+  const isAdminRole = 
+    currentUser.role === "admin" || 
+    currentUser.role === "system admin" || 
+    currentUser.role === "systemadmin";
+  
+  if (!isAdminRole) {
     return <Navigate to="/dashboard" replace />;
   }
   
@@ -65,7 +70,12 @@ function PublicRoute({ children }) {
     if (currentUser.role === "superadmin") {
       return <Navigate to="/superadmin" replace />;
     }
-    if (currentUser.role === "admin") {
+    const isAdminRole = 
+      currentUser.role === "admin" || 
+      currentUser.role === "system admin" || 
+      currentUser.role === "systemadmin";
+      
+    if (isAdminRole) {
       return <Navigate to="/admin" replace />;
     }
     return <Navigate to="/dashboard" replace />;
@@ -132,7 +142,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardLayout>
-                {currentUser?.role === "admin" ? <Navigate to="/admin" replace /> : <UserDashboard />}
+                {(currentUser?.role === "admin" || currentUser?.role === "system admin" || currentUser?.role === "systemadmin") ? <Navigate to="/admin" replace /> : <UserDashboard />}
               </DashboardLayout>
             </ProtectedRoute>
           } 
@@ -142,7 +152,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardLayout>
-                {currentUser?.role === "admin" ? <Navigate to="/admin" replace /> : <History />}
+                {(currentUser?.role === "admin" || currentUser?.role === "system admin" || currentUser?.role === "systemadmin") ? <Navigate to="/admin" replace /> : <History />}
               </DashboardLayout>
             </ProtectedRoute>
           } 
@@ -219,7 +229,7 @@ export default function App() {
             currentUser 
               ? currentUser.role === "superadmin"
                 ? <Navigate to="/superadmin" replace />
-                : currentUser.role === "admin" 
+                : (currentUser.role === "admin" || currentUser.role === "system admin" || currentUser.role === "systemadmin")
                   ? <Navigate to="/admin" replace /> 
                   : <Navigate to="/dashboard" replace />
               : <Navigate to="/" replace />

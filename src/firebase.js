@@ -78,6 +78,7 @@ const localDb = {
     const users = localStorage.getItem("att_users");
     const parsed = users ? JSON.parse(users) : [];
     // Ensure admin user exists
+    let updated = false;
     if (!parsed.some(u => u.email === "admin@teamcarrezza.com")) {
       parsed.push({
         uid: "admin-uid-12345",
@@ -88,6 +89,22 @@ const localDb = {
         role: "admin",
         createdAt: new Date().toISOString()
       });
+      updated = true;
+    }
+    // Ensure system admin user exists
+    if (!parsed.some(u => u.email === "systemadmin@teamcarrezza.com")) {
+      parsed.push({
+        uid: "systemadmin-uid-12345",
+        name: "System Admin",
+        email: "systemadmin@teamcarrezza.com",
+        department: "IT Infrastructure",
+        programType: "Full-time",
+        role: "admin",
+        createdAt: new Date().toISOString()
+      });
+      updated = true;
+    }
+    if (updated) {
       localStorage.setItem("att_users", JSON.stringify(parsed));
     }
     return parsed;

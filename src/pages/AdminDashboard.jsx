@@ -61,7 +61,8 @@ import {
   Hash,
   ChevronDown,
   Layers,
-  Activity
+  Activity,
+  Lock
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -690,6 +691,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const canEditAsset = (asset) => {
+    if (!currentUser) return false;
+    
+    // Super Admin (main admin) can always edit everything
+    if (currentUser.role === "superadmin" || currentUser.email === "admin@teamcarrezza.com" || (currentUser.name || "").toLowerCase().includes("super admin")) {
+      return true;
+    }
+    
+    // If the asset has an assigning authority set:
+    if (asset.assigningAuthorityId) {
+      // Only that system admin can edit it, along with the super admin.
+      return currentUser.uid === asset.assigningAuthorityId;
+    }
+    
+    // If no assigning authority is set, any admin role can edit.
+    return currentUser.role === "admin";
+  };
+
   const handleOpenAddAssetModal = () => {
     setIsEditingAsset(false);
     setSelectedAssetId(null);
@@ -705,6 +724,9 @@ export default function AdminDashboard() {
   };
 
   const handleOpenEditAssetModal = (asset) => {
+    if (!canEditAsset(asset)) {
+      return showToast("You do not have permission to edit this asset's details.", "error");
+    }
     setIsEditingAsset(true);
     setSelectedAssetId(asset.id);
     setAssetFormName(asset.name || "");
@@ -788,6 +810,10 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteAssetClick = (id, name) => {
+    const asset = assets.find(a => a.id === id);
+    if (asset && !canEditAsset(asset)) {
+      return showToast("You do not have permission to delete this asset.", "error");
+    }
     showConfirm("Delete Asset", `Are you sure you want to delete ${name}? This action cannot be undone.`, async () => {
       try {
         await deleteAsset(id);
@@ -1511,8 +1537,8 @@ export default function AdminDashboard() {
     setActionLoading(true);
     try {
       
-      const roleStr = newRole === "Admin" ? "admin" : "employee";
-      const isPm = newRole === "Project Manager" || newRole === "Admin";
+      const roleStr = newRole === "Admin" ? "admin" : (newRole === "System Admin" ? "system admin" : "employee");
+      const isPm = newRole === "Project Manager" || newRole === "Admin" || newRole === "System Admin";
       
       await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr);
       showToast(`Employee ${newName} registered successfully.`, "success");
@@ -1562,6 +1588,7 @@ export default function AdminDashboard() {
     
     let currentRole = "Employee";
     if (user.role === "admin") currentRole = "Admin";
+    else if (user.role === "system admin" || user.role === "systemadmin") currentRole = "System Admin";
     else if (user.isProjectManager) currentRole = "Project Manager";
     setEditRole(currentRole);
     setShowEditModal(true);
@@ -1597,9 +1624,9 @@ export default function AdminDashboard() {
         editTasks,
         editJobType,
         editDesignation,
-        editRole === "Project Manager" || editRole === "Admin",
+        editRole === "Project Manager" || editRole === "Admin" || editRole === "System Admin",
         editEmployeeId,
-        editRole === "Admin" ? "admin" : "employee"
+        editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee")
       );
       
       setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? {
@@ -1617,7 +1644,9 @@ export default function AdminDashboard() {
         projects: editProject.split(',').map(s=>s.trim()).filter(Boolean),
         tasks: editTasks,
         jobType: editJobType,
-        designation: editDesignation
+        designation: editDesignation,
+        role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee"),
+        isProjectManager: editRole === "Project Manager" || editRole === "Admin" || editRole === "System Admin"
       } : u));
       
       showToast("User profile updated successfully.", "success");
@@ -3793,6 +3822,7 @@ export default function AdminDashboard() {
                   <option value="Employee">Employee</option>
                   <option value="Project Manager">Project Manager</option>
                   <option value="Admin">Admin</option>
+                  <option value="System Admin">System Admin</option>
                 </select>
               </div>
 
@@ -4031,6 +4061,7 @@ export default function AdminDashboard() {
                   <option value="Employee">Employee</option>
                   <option value="Project Manager">Project Manager</option>
                   <option value="Admin">Admin</option>
+                  <option value="System Admin">System Admin</option>
                 </select>
               </div>
 
@@ -4675,22 +4706,29 @@ export default function AdminDashboard() {
                                 {asset.assigningAuthorityName || "—"}
                               </td>
                               <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => handleOpenEditAssetModal(asset)}
-                                    className="p-1.5 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-[6px] transition-colors cursor-pointer"
-                                    title="Edit asset"
-                                  >
-                                    <Edit size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteAssetClick(asset.id, asset.name)}
-                                    className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
-                                    title="Delete asset"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
+                                {canEditAsset(asset) ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleOpenEditAssetModal(asset)}
+                                      className="p-1.5 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-[6px] transition-colors cursor-pointer"
+                                      title="Edit asset"
+                                    >
+                                      <Edit size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteAssetClick(asset.id, asset.name)}
+                                      className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
+                                      title="Delete asset"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 text-[10px] text-text-mut font-semibold bg-bg-base px-2.5 py-1 rounded-[8px] border border-border-card/60 w-fit select-none">
+                                    <Lock size={10} className="text-text-mut/80" />
+                                    <span>Locked</span>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );
@@ -4922,7 +4960,10 @@ export default function AdminDashboard() {
                           required
                         >
                           <option value="">Select Authority</option>
-                          {users.filter(u => u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin").map((u) => (
+                          {users.filter(u => 
+                            (u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin") &&
+                            !(u.name || "").toLowerCase().includes("zoho")
+                          ).map((u) => (
                             <option key={u.uid} value={u.uid}>
                               {u.name} ({u.role})
                             </option>
@@ -5039,7 +5080,10 @@ export default function AdminDashboard() {
                         required
                       >
                         <option value="">Select Authority</option>
-                        {users.filter(u => u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin").map((u) => (
+                        {users.filter(u => 
+                          (u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin") &&
+                          !(u.name || "").toLowerCase().includes("zoho")
+                        ).map((u) => (
                           <option key={u.uid} value={u.uid}>
                             {u.name} ({u.role})
                           </option>
@@ -5095,7 +5139,7 @@ export default function AdminDashboard() {
                 </button>
                 <button
                   type="submit"
-                  disabled={assignAssetsLoading || assets.filter(a => a.status === "Available").length === 0}
+                  disabled={assignAssetsLoading || assignAssetsSelectedIds.length === 0 || !assignAssetsTargetUser || !assignAssetsAuthority}
                   className="py-2.5 px-6 bg-gradient-to-r from-brand-primary to-brand-hover text-white text-xs font-bold rounded-[14px] shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/35 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
                 >
                   {assignAssetsLoading ? "Assigning..." : "Assign Asset(s)"}

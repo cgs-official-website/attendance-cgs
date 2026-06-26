@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
-import { db, getDbType, createNotification, addTaskReport, subscribeToTaskReports, startTaskTimer, stopTaskTimer } from "../firebase";
-import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity } from "lucide-react";
+import { 
+  db, 
+  getDbType, 
+  createNotification, 
+  addTaskReport, 
+  subscribeToTaskReports, 
+  startTaskTimer, 
+  stopTaskTimer,
+  subscribeToMyDailyReports,
+  addDailyReport,
+  deleteDailyReport
+} from "../firebase";
+import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity, Plus, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -21,6 +33,17 @@ export default function TaskManagement() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [reportText, setReportText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Daily log states
+  const [activeSubTab, setActiveSubTab] = useState("tasks"); // "tasks" | "daily-logs"
+  const [dailyReports, setDailyReports] = useState([]);
+  const [showAddLogModal, setShowAddLogModal] = useState(false);
+  
+  const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0]);
+  const [logHours, setLogHours] = useState(8);
+  const [logTasksCompleted, setLogTasksCompleted] = useState("");
+  const [logIssuesFaced, setLogIssuesFaced] = useState("");
+  const [logStatus, setLogStatus] = useState("Completed");
 
   // For storing fetched reports per task ID
   const [taskReports, setTaskReports] = useState({});
@@ -71,6 +94,78 @@ export default function TaskManagement() {
       unsubs.forEach(fn => fn());
     };
   }, [tasks.length]);
+
+  // Subscribe to my daily reports
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsubscribe = subscribeToMyDailyReports(currentUser.uid, (data) => {
+      setDailyReports(data || []);
+    });
+    return unsubscribe;
+  }, [currentUser?.uid]);
+
+  const getDayOfWeek = (dateString) => {
+    if (!dateString) return "";
+    const dateParts = dateString.split("-");
+    const date = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return days[date.getUTCDay()];
+  };
+
+  const handleSaveDailyLog = async (e) => {
+    e.preventDefault();
+    if (!logTasksCompleted.trim()) {
+      return showToast("Tasks Completed is required.", "warning");
+    }
+
+    setSubmitting(true);
+    try {
+      const pmId = tasks[0]?.assignedBy || "";
+      await addDailyReport({
+        userId: currentUser.uid,
+        userName: currentUser.name,
+        companyId: currentUser.companyId,
+        pmId,
+        date: logDate,
+        day: getDayOfWeek(logDate),
+        hours: Number(logHours),
+        tasksCompleted: logTasksCompleted,
+        issuesFaced: logIssuesFaced,
+        status: logStatus
+      });
+
+      if (pmId) {
+        await createNotification(
+          pmId,
+          "New Daily Activity Log",
+          `${currentUser.name} submitted a daily activity log for ${logDate}.`,
+          "info",
+          "/project-management"
+        );
+      }
+
+      showToast("Daily log submitted successfully!", "success");
+      setShowAddLogModal(false);
+      setLogDate(new Date().toISOString().split("T")[0]);
+      setLogHours(8);
+      setLogTasksCompleted("");
+      setLogIssuesFaced("");
+      setLogStatus("Completed");
+    } catch (err) {
+      showToast("Failed to submit daily log.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteDailyLog = async (id) => {
+    try {
+      await deleteDailyReport(id);
+      showToast("Daily log deleted.", "success");
+    } catch (err) {
+      showToast("Failed to delete log.", "error");
+    }
+  };
 
   const handleMarkComplete = async (taskIdx, isComplete) => {
     let updatedTasks = [...tasks];
@@ -362,169 +457,380 @@ export default function TaskManagement() {
 
   return (
     <div className="animate-fade-in pb-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-black text-text-main tracking-tight">Task Management</h1>
+          <h1 className="text-2xl font-black text-text-main tracking-tight">Task & Activity Management</h1>
           <p className="text-sm text-text-mut font-medium mt-1">
             Your current projects: <span className="font-bold text-brand-primary">{(currentUser.projects && currentUser.projects.length > 0) ? currentUser.projects.join(', ') : (currentUser.project || "Unassigned")}</span>
           </p>
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center p-10"><span className="text-text-mut">Loading tasks...</span></div>
-      ) : tasks.length === 0 ? (
-        <div className="bg-bg-card border border-border-card rounded-[20px] p-10 text-center flex flex-col items-center">
-          <div className="w-16 h-16 bg-brand-primary/10 rounded-full flex items-center justify-center mb-4">
-            <CheckCircle size={32} className="text-brand-primary" />
-          </div>
-          <h3 className="text-lg font-bold text-text-main">No Tasks Assigned</h3>
-          <p className="text-xs text-text-sec max-w-sm mt-2">
-            You currently have no tasks assigned to you for this project. Check back later or contact your Project Manager.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Active Tasks Column */}
-          <div className="space-y-4">
-            <h2 className="font-extrabold text-sm text-text-main uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-brand-warning animate-pulse"></span>
-              Active Tasks ({activeTasks.length})
-            </h2>
-            
-            {activeTasks.length === 0 ? (
-              <div className="p-6 border border-dashed border-border-card rounded-[16px] text-center text-text-mut text-xs">
-                No active tasks.
+      {/* Tabs */}
+      <div className="flex border-b border-border-card mb-6">
+        <button
+          onClick={() => setActiveSubTab("tasks")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "tasks"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          My Tasks
+        </button>
+        <button
+          onClick={() => setActiveSubTab("daily-logs")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "daily-logs"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          Daily Activity Log
+        </button>
+      </div>
+
+      {activeSubTab === "tasks" ? (
+        <>
+          {loading ? (
+            <div className="flex justify-center p-10"><span className="text-text-mut">Loading tasks...</span></div>
+          ) : tasks.length === 0 ? (
+            <div className="bg-bg-card border border-border-card rounded-[20px] p-10 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-brand-primary/10 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle size={32} className="text-brand-primary" />
               </div>
-            ) : (
-              activeTasks.map((task) => {
-                const taskIdx = tasks.findIndex(t => t.id === task.id);
-                return (
-                  <div key={task.id} className="bg-bg-card border border-border-card rounded-[16px] p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-primary/60 group-hover:bg-brand-primary transition-colors"></div>
-                    
-                    <div className="flex justify-between items-start mb-1">
-                      <h3 className="font-bold text-text-main pr-4">{task.title}</h3>
-                      <button 
-                        onClick={() => handleMarkComplete(taskIdx, true)}
-                        className="flex-shrink-0 w-6 h-6 rounded-full border-2 border-border-card flex items-center justify-center text-transparent hover:border-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10 transition-all cursor-pointer"
-                        title="Mark as completed"
-                      >
-                        <CheckCircle size={14} />
-                      </button>
-                    </div>
-                    {task.project && (
-                      <div className="mb-3">
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-[4px] bg-brand-primary/10 text-brand-primary uppercase tracking-wider">{task.project}</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center gap-4 text-[10px] font-semibold text-text-sec mb-4">
-                      <div className="flex items-center gap-1 bg-bg-base px-2 py-1 rounded-[6px]">
-                        <Clock size={12} className="text-brand-primary" />
-                        <span>Est: {task.duration || 0}h | Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageSquare size={12} />
-                        <span>{taskReports[task.id]?.length || 0} Updates</span>
-                      </div>
-                      {task.timerStartedAt && (
-                        <div className="flex items-center gap-1 bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-[6px] animate-pulse">
-                          <Activity size={12} />
-                          <span>
-                            {(() => {
-                              const elapsedThisSession = Math.floor((now - new Date(task.timerStartedAt).getTime()) / 1000);
-                              const previousSeconds = Math.floor(calculateTimeSpent(taskReports[task.id] || []) * 3600);
-                              const totalElapsed = elapsedThisSession + previousSeconds;
-                              const h = Math.floor(totalElapsed / 3600);
-                              const m = Math.floor((totalElapsed % 3600) / 60);
-                              const s = totalElapsed % 60;
-                              return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
-                            })()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="pt-4 border-t border-border-card/50 flex justify-between items-center">
-                      <div className="flex gap-2">
-                        {!task.timerStartedAt ? (
-                          <button 
-                            onClick={() => startTaskTimer(currentUser.uid, task.id)}
-                            className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                          >
-                            <Play size={12} />
-                            <span>Start</span>
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
-                            className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                          >
-                            <Square size={12} fill="currentColor" />
-                            <span>Stop Timer</span>
-                          </button>
-                        )}
-                      </div>
-                      <button 
-                        onClick={() => handleOpenReportModal(task)}
-                        className="py-1.5 px-3 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                      >
-                        <Send size={12} />
-                        <span>Manual Update</span>
-                      </button>
-                    </div>
+              <h3 className="text-lg font-bold text-text-main">No Tasks Assigned</h3>
+              <p className="text-xs text-text-sec max-w-sm mt-2">
+                You currently have no tasks assigned to you for this project. Check back later or contact your Project Manager.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Active Tasks Column */}
+              <div className="space-y-4">
+                <h2 className="font-extrabold text-sm text-text-main uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-brand-warning animate-pulse"></span>
+                  Active Tasks ({activeTasks.length})
+                </h2>
+                
+                {activeTasks.length === 0 ? (
+                  <div className="p-6 border border-dashed border-border-card rounded-[16px] text-center text-text-mut text-xs">
+                    No active tasks.
                   </div>
-                );
-              })
-            )}
+                ) : (
+                  activeTasks.map((task) => {
+                    const taskIdx = tasks.findIndex(t => t.id === task.id);
+                    return (
+                      <div key={task.id} className="bg-bg-card border border-border-card rounded-[16px] p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group text-left">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-primary/60 group-hover:bg-brand-primary transition-colors"></div>
+                        
+                        <div className="flex justify-between items-start mb-1 text-left">
+                          <h3 className="font-bold text-text-main pr-4">{task.title}</h3>
+                          <button 
+                            onClick={() => handleMarkComplete(taskIdx, true)}
+                            className="flex-shrink-0 w-6 h-6 rounded-full border-2 border-border-card flex items-center justify-center text-transparent hover:border-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                            title="Mark as completed"
+                          >
+                            <CheckCircle size={14} />
+                          </button>
+                        </div>
+                        {task.project && (
+                          <div className="mb-3 text-left">
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-[4px] bg-brand-primary/10 text-brand-primary uppercase tracking-wider">{task.project}</span>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-4 text-[10px] font-semibold text-text-sec mb-4">
+                          <div className="flex items-center gap-1 bg-bg-base px-2 py-1 rounded-[6px]">
+                            <Clock size={12} className="text-brand-primary" />
+                            <span>Est: {task.duration || 0}h | Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MessageSquare size={12} />
+                            <span>{taskReports[task.id]?.length || 0} Updates</span>
+                          </div>
+                          {task.timerStartedAt && (
+                            <div className="flex items-center gap-1 bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-[6px] animate-pulse">
+                              <Activity size={12} />
+                              <span>
+                                {(() => {
+                                  const elapsedThisSession = Math.floor((now - new Date(task.timerStartedAt).getTime()) / 1000);
+                                  const previousSeconds = Math.floor(calculateTimeSpent(taskReports[task.id] || []) * 3600);
+                                  const totalElapsed = elapsedThisSession + previousSeconds;
+                                  const h = Math.floor(totalElapsed / 3600);
+                                  const m = Math.floor((totalElapsed % 3600) / 60);
+                                  const s = totalElapsed % 60;
+                                  return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
+                                })()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="pt-4 border-t border-border-card/50 flex justify-between items-center">
+                          <div className="flex gap-2">
+                            {!task.timerStartedAt ? (
+                              <button 
+                                onClick={() => startTaskTimer(currentUser.uid, task.id)}
+                                className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <Play size={12} />
+                                <span>Start</span>
+                              </button>
+                            ) : (
+                              <button 
+                                onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
+                                className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <Square size={12} fill="currentColor" />
+                                <span>Stop Timer</span>
+                              </button>
+                            )}
+                          </div>
+                          <button 
+                            onClick={() => handleOpenReportModal(task)}
+                            className="py-1.5 px-3 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <Send size={12} />
+                            <span>Manual Update</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Completed Tasks Column */}
+              <div className="space-y-4">
+                <h2 className="font-extrabold text-sm text-text-main uppercase tracking-wider flex items-center gap-2 opacity-80">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Completed Tasks ({completedTasks.length})
+                </h2>
+                
+                {completedTasks.length === 0 ? (
+                  <div className="p-6 border border-dashed border-border-card rounded-[16px] text-center text-text-mut text-xs">
+                    No completed tasks yet.
+                  </div>
+                ) : (
+                  completedTasks.map((task) => {
+                    const taskIdx = tasks.findIndex(t => t.id === task.id);
+                    return (
+                      <div key={task.id} className="bg-bg-base/30 border border-border-card rounded-[16px] p-4 relative overflow-hidden opacity-70 hover:opacity-100 transition-opacity text-left">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <h3 className="font-bold text-text-sec line-through">{task.title}</h3>
+                              {task.project && <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-[4px] bg-bg-card border border-border-card text-text-mut uppercase">{task.project}</span>}
+                              <p className="text-[10px] text-text-mut mt-1">
+                                Est: {task.duration || 0}h | <span className="text-brand-primary font-bold">Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
+                              </p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => handleMarkComplete(taskIdx, false)}
+                            className="text-[10px] font-bold text-brand-primary hover:underline cursor-pointer"
+                          >
+                            Re-open
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tabular History directly on page */}
+          <div className="mt-12 bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl relative overflow-hidden flex flex-col">
+            <div className="flex flex-col sm:flex-row items-center justify-between mb-5 border-b border-border-card pb-5 gap-3 flex-shrink-0 relative mt-2 text-left">
+              <h3 className="font-bold text-xl text-text-main flex items-center gap-2 whitespace-nowrap">
+                <FileText size={20} className="text-brand-primary" />
+                My Task History
+              </h3>
+              <div className="flex items-center justify-end gap-3 w-full sm:w-auto flex-wrap">
+                <button 
+                  onClick={handleDownloadPDF}
+                  className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Download size={14} />
+                  <span>Download PDF</span>
+                </button>
+                <button 
+                  onClick={handleDownloadExcel}
+                  className="py-2 px-4 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Download size={14} />
+                  <span>Download Excel</span>
+                </button>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto w-full custom-scrollbar text-left">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                    <th className="p-3 font-bold w-1/4">Employee</th>
+                    <th className="p-3 font-bold w-1/2">Task Title</th>
+                    <th className="p-3 font-bold text-center w-auto">Status</th>
+                    <th className="p-3 font-bold text-right whitespace-nowrap">Est. / Rem.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found.</td>
+                    </tr>
+                  ) : (
+                    tasks.map((task, idx) => (
+                      <React.Fragment key={task.id || idx}>
+                        <tr className="border-b border-border-card/50">
+                          <td className="p-3 text-xs font-bold text-text-main">{currentUser.name}</td>
+                          <td className="p-3 text-xs text-text-main">
+                            <div>{task.title}</div>
+                            {task.project && <div className="text-[9px] text-brand-primary font-bold mt-0.5">{task.project}</div>}
+                          </td>
+                          <td className="p-3 text-xs text-center">
+                            {task.completed ? (
+                              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
+                            ) : (
+                              <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-xs text-right">
+                            <div className="font-bold text-text-main">{task.duration || 0}h</div>
+                            <div className="text-[10px] text-brand-primary font-bold">
+                              {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h rem
+                            </div>
+                          </td>
+                        </tr>
+                        {(!taskReports[task.id] || taskReports[task.id].length === 0) ? (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="4" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
+                              No updates reported yet
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr className="border-b border-border-card">
+                            <td colSpan="4" className="p-3 bg-bg-base/30">
+                              <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
+                                {taskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped")).map(r => (
+                                  <div key={r.id} className="text-[10px]">
+                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
+                                    <span className="text-text-main ml-2">{r.reportText}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-6 text-left">
+          {/* Header block for Daily Log */}
+          <div className="flex justify-between items-center flex-wrap gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-text-main">Daily Activity Log</h2>
+              <p className="text-xs text-text-sec mt-1">Submit your daily updates and view supervisor feedback.</p>
+            </div>
+            <button
+              onClick={() => {
+                setLogDate(new Date().toISOString().split("T")[0]);
+                setShowAddLogModal(true);
+              }}
+              className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Add Daily Log</span>
+            </button>
           </div>
 
-          {/* Completed Tasks Column */}
-          <div className="space-y-4">
-            <h2 className="font-extrabold text-sm text-text-main uppercase tracking-wider flex items-center gap-2 opacity-80">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Completed Tasks ({completedTasks.length})
-            </h2>
-            
-            {completedTasks.length === 0 ? (
-              <div className="p-6 border border-dashed border-border-card rounded-[16px] text-center text-text-mut text-xs">
-                No completed tasks yet.
+          {/* Daily Logs Table */}
+          <div className="bg-bg-card border border-border-card rounded-[24px] overflow-hidden shadow-sm text-left">
+            {dailyReports.length === 0 ? (
+              <div className="py-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center mx-auto mb-3">
+                  <FileText size={22} />
+                </div>
+                <p className="text-sm font-bold text-text-main">No daily logs submitted</p>
+                <p className="text-xs text-text-mut mt-1">You haven't logged any daily activities yet. Click "Add Daily Log" above.</p>
               </div>
             ) : (
-              completedTasks.map((task) => {
-                const taskIdx = tasks.findIndex(t => t.id === task.id);
-                return (
-                  <div key={task.id} className="bg-bg-base/30 border border-border-card rounded-[16px] p-4 relative overflow-hidden opacity-70 hover:opacity-100 transition-opacity">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-start gap-3">
-                        <CheckCircle size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <h3 className="font-bold text-text-sec line-through">{task.title}</h3>
-                          {task.project && <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-[4px] bg-bg-card border border-border-card text-text-mut uppercase">{task.project}</span>}
-                          <p className="text-[10px] text-text-mut mt-1">
-                            Est: {task.duration || 0}h | <span className="text-brand-primary font-bold">Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
-                          </p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => handleMarkComplete(taskIdx, false)}
-                        className="text-[10px] font-bold text-brand-primary hover:underline cursor-pointer"
-                      >
-                        Re-open
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              <div className="overflow-x-auto w-full custom-scrollbar">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border-card bg-bg-base/30 text-[10px] uppercase font-bold tracking-wider text-text-mut">
+                      <th className="px-6 py-4 w-12 text-center">#</th>
+                      <th className="px-6 py-4 w-28 text-left">Date</th>
+                      <th className="px-6 py-4 w-28 text-left">Day</th>
+                      <th className="px-6 py-4 w-20 text-center">Hours</th>
+                      <th className="px-6 py-4 text-left">Tasks Completed</th>
+                      <th className="px-6 py-4 text-left">Issues Faced</th>
+                      <th className="px-6 py-4 text-left">Supervisor Remarks</th>
+                      <th className="px-6 py-4 w-28 text-center">Status</th>
+                      <th className="px-6 py-4 w-16 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyReports.map((report, idx) => {
+                      let statusBadge = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
+                      if (report.status === "Completed") statusBadge = "bg-green-500/10 text-green-500 border border-green-500/20";
+                      if (report.status === "On Hold") statusBadge = "bg-red-500/10 text-red-500 border border-red-500/20";
+
+                      return (
+                        <tr key={report.id || idx} className="border-b border-border-card hover:bg-bg-base/20 transition-colors">
+                          <td className="px-6 py-4 font-bold text-center text-text-sec">{idx + 1}</td>
+                          <td className="px-6 py-4 font-bold text-text-main whitespace-nowrap">{report.date}</td>
+                          <td className="px-6 py-4 text-text-sec whitespace-nowrap">{report.day || getDayOfWeek(report.date)}</td>
+                          <td className="px-6 py-4 font-extrabold text-center text-text-main">{report.hours} h</td>
+                          <td className="px-6 py-4 text-text-sec max-w-xs break-words whitespace-pre-wrap">{report.tasksCompleted}</td>
+                          <td className="px-6 py-4 text-text-mut max-w-xs break-words whitespace-pre-wrap">{report.issuesFaced || <span className="italic text-text-mut/40">—</span>}</td>
+                          <td className="px-6 py-4 max-w-xs break-words">
+                            {report.supervisorRemarks ? (
+                              <span className="text-brand-primary font-bold">{report.supervisorRemarks}</span>
+                            ) : (
+                              <span className="text-text-mut/40 italic">No remarks yet</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge}`}>
+                              {report.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              onClick={() => handleDeleteDailyLog(report.id)}
+                              className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
+                              title="Delete log"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
       )}
 
+      {/* MODALS RENDERED IN PORTALS */}
+
       {/* Hourly Report Modal */}
-      {showReportModal && selectedTask && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showReportModal && selectedTask && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
           <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4 flex-shrink-0">
               <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
@@ -588,100 +894,118 @@ export default function TaskManagement() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Tabular History directly on page */}
-      <div className="mt-12 bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl relative overflow-hidden flex flex-col">
-            
-            <div className="flex flex-col sm:flex-row items-center justify-between mb-5 border-b border-border-card pb-5 gap-3 flex-shrink-0 relative mt-2">
-              <h3 className="font-bold text-xl text-text-main flex items-center gap-2 whitespace-nowrap">
+      {/* Add Daily Activity Log Modal */}
+      {showAddLogModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[480px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4 flex-shrink-0">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
                 <FileText size={20} className="text-brand-primary" />
-                My Task History
+                <span>Add Daily Activity Log</span>
               </h3>
-              <div className="flex items-center justify-end gap-3 w-full sm:w-auto flex-wrap">
-                <button 
-                  onClick={handleDownloadPDF}
-                  className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <Download size={14} />
-                  <span>Download PDF</span>
-                </button>
-                <button 
-                  onClick={handleDownloadExcel}
-                  className="py-2 px-4 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <Download size={14} />
-                  <span>Download Excel</span>
-                </button>
-              </div>
+              <button onClick={() => setShowAddLogModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer">
+                <X size={18} />
+              </button>
             </div>
             
-            <div className="overflow-x-auto w-full custom-scrollbar">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
-                    <th className="p-3 font-bold w-1/4">Employee</th>
-                    <th className="p-3 font-bold w-1/2">Task Title</th>
-                    <th className="p-3 font-bold text-center w-auto">Status</th>
-                    <th className="p-3 font-bold text-right whitespace-nowrap">Est. / Rem.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.length === 0 ? (
-                    <tr>
-                      <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found.</td>
-                    </tr>
-                  ) : (
-                    tasks.map((task, idx) => (
-                      <React.Fragment key={task.id || idx}>
-                        <tr className="border-b border-border-card/50">
-                          <td className="p-3 text-xs font-bold text-text-main">{currentUser.name}</td>
-                          <td className="p-3 text-xs text-text-main text-center">
-                            <div>{task.title}</div>
-                            {task.project && <div className="text-[9px] text-brand-primary font-bold mt-0.5">{task.project}</div>}
-                          </td>
-                          <td className="p-3 text-xs text-center">
-                            {task.completed ? (
-                              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-[6px]">Done</span>
-                            ) : (
-                              <span className="text-brand-primary font-bold bg-brand-primary/10 px-2 py-0.5 rounded-[6px]">Active</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-xs text-right">
-                            <div className="font-bold text-text-main">{task.duration || 0}h</div>
-                            <div className="text-[10px] text-brand-primary font-bold">
-                              {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h rem
-                            </div>
-                          </td>
-                        </tr>
-                        {(!taskReports[task.id] || taskReports[task.id].length === 0) ? (
-                          <tr className="border-b border-border-card">
-                            <td colSpan="4" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
-                              No updates reported yet
-                            </td>
-                          </tr>
-                        ) : (
-                          <tr className="border-b border-border-card">
-                            <td colSpan="4" className="p-3 bg-bg-base/30">
-                              <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {taskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped")).map(r => (
-                                  <div key={r.id} className="text-[10px]">
-                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
-                                    <span className="text-text-main ml-2">{r.reportText}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                  </React.Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            <form onSubmit={handleSaveDailyLog} className="flex-grow overflow-y-auto pr-1 space-y-4 pb-2 custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec">Date</label>
+                  <input 
+                    type="date"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec">Day (Auto)</label>
+                  <input 
+                    type="text"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-xs text-text-mut outline-none font-bold select-none"
+                    value={getDayOfWeek(logDate)}
+                    disabled
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec">Hours Worked</label>
+                  <input 
+                    type="number"
+                    min="0.5"
+                    max="24"
+                    step="0.5"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={logHours}
+                    onChange={(e) => setLogHours(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec">Status</label>
+                  <select 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                    value={logStatus}
+                    onChange={(e) => setLogStatus(e.target.value)}
+                  >
+                    <option value="Completed">Completed</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="On Hold">On Hold</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Tasks Completed *</label>
+                <textarea 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[100px] resize-none"
+                  placeholder="Summarize the tasks you completed today..."
+                  value={logTasksCompleted}
+                  onChange={(e) => setLogTasksCompleted(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Issues Faced (Optional)</label>
+                <textarea 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[80px] resize-none"
+                  placeholder="Describe any blockers or issues faced today..."
+                  value={logIssuesFaced}
+                  onChange={(e) => setLogIssuesFaced(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLogModal(false)}
+                  className="py-2.5 px-4 bg-bg-base hover:bg-border-card text-text-sec text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? "Submitting..." : "Save Log"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }

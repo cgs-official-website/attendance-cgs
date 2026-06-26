@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertCircle, X } from 'lucide-react';
 
 const ModalContext = createContext();
@@ -49,7 +50,7 @@ export const ModalProvider = ({ children }) => {
   return (
     <ModalContext.Provider value={{ showConfirm, closeModal }}>
       {children}
-      {modalState.isOpen && (
+      {modalState.isOpen && createPortal(
         <div className="fixed inset-0 bg-slate-950/60 dark:bg-black/80 backdrop-blur-[12px] flex items-center justify-center z-[9999] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-start gap-4">
@@ -84,7 +85,8 @@ export const ModalProvider = ({ children }) => {
               <X size={20} />
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </ModalContext.Provider>
   );

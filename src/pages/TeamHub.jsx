@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
@@ -219,7 +220,7 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
             {renderMessageText(msg.text)}
           </div>
         )}
-        {/* {msg.fileData && <FileCard file={msg.fileData} />} */}
+        {msg.fileData && <FileCard file={msg.fileData} />}
       </div>
 
       {/* Message actions */}
@@ -246,6 +247,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
   const fileRef = useRef(null);
   const textRef = useRef(null);
   const { showToast } = useToast();
+  const { currentUser } = useAuth();
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -264,7 +266,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
     try {
       let fileData = null;
       if (pendingFile) {
-        fileData = await uploadFileToFirebase(pendingFile);
+        fileData = await uploadFileToFirebase(pendingFile, currentUser?.companyId || "", "files");
       }
       await onSend(text.trim(), fileData);
       setText("");
@@ -288,7 +290,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
 
   return (
     <div className="px-4 pt-3 pb-20 md:pb-6 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
-      {/* pendingFile && (
+      {pendingFile && (
         <div className={`mb-2 flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-[8px] text-xs font-semibold text-brand-primary ${uploading ? "animate-pulse" : ""}`}>
           {uploading ? (
             <RefreshCw size={14} className="animate-spin text-brand-primary" />
@@ -307,9 +309,9 @@ function MessageInput({ onSend, placeholder, disabled }) {
             </button>
           )}
         </div>
-      ) */}
+      )}
       <div className="flex items-end gap-2 bg-bg-base rounded-[12px] border border-border-card px-3 py-2 focus-within:border-brand-primary/50 transition-colors">
-        {/* <button
+        <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           className="flex-shrink-0 p-1 text-text-mut hover:text-brand-primary transition-colors cursor-pointer"
@@ -317,7 +319,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
         >
           <Paperclip size={16} />
         </button>
-        <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} /> */}
+        <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} />
         <textarea
           ref={textRef}
           value={text}
@@ -389,7 +391,7 @@ function CreateChannelModal({ onClose, onCreated }) {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      const ch = await createChannel(name.trim(), desc.trim(), currentUser.uid, currentUser.name);
+      const ch = await createChannel(name.trim(), desc.trim(), currentUser.uid, currentUser.name, currentUser.companyId);
       showToast(`#${ch.displayName || ch.name} created!`, "success");
       onCreated(ch);
       onClose();
@@ -400,7 +402,7 @@ function CreateChannelModal({ onClose, onCreated }) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[100] p-4 animate-fade-in">
       <motion.div
         initial={{ scale: 0.92, opacity: 0 }}
@@ -460,7 +462,8 @@ function CreateChannelModal({ onClose, onCreated }) {
           </div>
         </form>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -472,7 +475,7 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
     (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
   );
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[100] p-4 animate-fade-in">
       <motion.div
         initial={{ scale: 0.92, opacity: 0 }}
@@ -514,7 +517,8 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
           ))}
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -687,7 +691,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
       </div>
 
       {/* Delete Message Modal */}
-      {messageToDelete && (
+      {messageToDelete && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-bg-card border border-border-card rounded-[16px] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
             <div className="p-4 border-b border-border-card bg-bg-base/50">
@@ -717,7 +721,8 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -899,17 +904,15 @@ export default function TeamHub() {
         <div className="flex-1 overflow-y-auto py-2">
           {sidebarTab === "channels" ? (
             <>
-              {/* Admin: Create channel button */}
-              {isAdmin && (
-                <div className="px-3 mb-1">
-                  <button
-                    onClick={() => setShowCreateCh(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-xs font-bold text-brand-primary hover:bg-brand-primary/8 transition-colors cursor-pointer border border-dashed border-brand-primary/30"
-                  >
-                    <Plus size={13} /> Create Channel
-                  </button>
-                </div>
-              )}
+              {/* Create channel button for all employees */}
+              <div className="px-3 mb-1">
+                <button
+                  onClick={() => setShowCreateCh(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-xs font-bold text-brand-primary hover:bg-brand-primary/8 transition-colors cursor-pointer border border-dashed border-brand-primary/30"
+                >
+                  <Plus size={13} /> Create Channel
+                </button>
+              </div>
 
               {/* Joined channels */}
               {myChannels.length > 0 && (
@@ -956,7 +959,7 @@ export default function TeamHub() {
                 <div className="text-center py-8 px-4">
                   <Hash size={24} className="mx-auto text-text-mut mb-2" />
                   <p className="text-xs text-text-mut font-semibold">No channels yet.</p>
-                  {isAdmin && <p className="text-[10px] text-text-mut mt-1">Create the first channel above!</p>}
+                  <p className="text-[10px] text-text-mut mt-1">Create the first channel above!</p>
                 </div>
               )}
             </>
@@ -1069,7 +1072,7 @@ export default function TeamHub() {
                     {activeThread.memberIds?.length || 0} members
                   </span>
                 )}
-                {activeThread.type === "channel" && isAdmin && (
+                {activeThread.type === "channel" && (
                   <button
                     onClick={() => setShowAddMember(true)}
                     className="p-1.5 rounded-full hover:bg-bg-base text-brand-primary border border-brand-primary/20 hover:border-brand-primary transition-all cursor-pointer flex items-center justify-center"
@@ -1221,7 +1224,7 @@ function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
     (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
   );
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[100] p-4 animate-fade-in">
       <motion.div
         initial={{ scale: 0.92, opacity: 0 }}
@@ -1272,6 +1275,7 @@ function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
           ))}
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

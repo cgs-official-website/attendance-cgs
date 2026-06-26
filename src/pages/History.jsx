@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -115,7 +116,8 @@ export default function History() {
         regDate,
         regCheckIn,
         regCheckOut,
-        regReason
+        regReason,
+        currentUser.companyId || ""
       );
       showToast("Regularization request raised successfully.", "success");
       setRegDate("");
@@ -704,8 +706,8 @@ export default function History() {
       })()}
 
       {/* Regularization Modal */}
-      {showRegModal && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showRegModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[460px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up text-left relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
@@ -781,8 +783,10 @@ export default function History() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
+

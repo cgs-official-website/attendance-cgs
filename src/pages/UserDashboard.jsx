@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -14,7 +15,8 @@ import {
   subscribeToLeaveRequests,
   getAllRegisteredUsers,
   stopTaskTimer,
-  getLocalDateString
+  getLocalDateString,
+  subscribeToAssets
 } from "../firebase";
 import {
   Play,
@@ -43,7 +45,8 @@ import {
   Cake,
   Newspaper,
   Check,
-  Activity
+  Activity,
+  HardDrive
 } from "lucide-react";
 import CustomDateRangePicker from "../components/CustomDateRangePicker";
 
@@ -83,6 +86,7 @@ export default function UserDashboard() {
   };
 
   const [userLogs, setUserLogs] = useState([]);
+  const [myAssets, setMyAssets] = useState([]);
   const [todayLog, setTodayLog] = useState(null);
   const [gpsLocation, setGpsLocation] = useState(null);
   const [gpsError, setGpsError] = useState(null);
@@ -282,14 +286,18 @@ export default function UserDashboard() {
       setBirthdays(upcomingBirthdays);
     }).catch(err => console.warn("Failed to fetch team members:", err));
 
+    const unsubscribeAssets = subscribeToAssets(currentUser.companyId, (list) => {
+      setMyAssets(list.filter(a => a.assignedUserId === currentUser.uid));
+    });
 
     return () => {
       unsubscribe();
       unsubscribePaid();
       unsubscribeLeaves();
+      unsubscribeAssets();
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [currentUser.uid, currentUser.department]);
+  }, [currentUser.uid, currentUser.department, currentUser.companyId]);
 
   // Handle countdown timer when user is on break
   useEffect(() => {
@@ -769,6 +777,74 @@ export default function UserDashboard() {
             <div className="h-[320px] rounded-[24px] skeleton" />
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (activeTab === "assets") {
+    return (
+      <div className="space-y-6 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
+        {/* Breadcrumb & Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-1.5 text-xs text-text-mut font-semibold mb-2">
+            <span>Dashboard</span>
+            <span>&gt;</span>
+            <span className="text-brand-primary">My Assets</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">My Assets</h1>
+          <p className="text-sm text-text-sec mt-1">View organizational hardware and equipment assigned to you.</p>
+        </div>
+
+        {myAssets.length === 0 ? (
+          <div className="bg-bg-card border border-border-card rounded-[24px] p-12 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center mx-auto mb-4">
+              <HardDrive size={22} />
+            </div>
+            <h3 className="text-sm font-bold text-text-main">No assigned assets</h3>
+            <p className="text-xs text-text-mut mt-1">There are currently no devices or equipment assigned to your profile.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {myAssets.map((asset) => {
+              let statusColor = "bg-green-500/10 text-green-500 border border-green-500/20";
+              if (asset.status === "Assigned") {
+                statusColor = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
+              } else if (asset.status === "Under Repair") {
+                statusColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+              }
+
+              return (
+                <div key={asset.id} className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden">
+                  <div className="flex justify-between items-start gap-4 mb-4">
+                    <div>
+                      <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full ${statusColor}`}>
+                        {asset.status}
+                      </span>
+                      <h3 className="text-base font-extrabold text-text-main mt-2.5">{asset.name}</h3>
+                      <p className="text-xs text-text-mut font-semibold mt-0.5">{asset.category || "Hardware"}</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-[12px] bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
+                      <HardDrive size={20} />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-border-card pt-4 mt-auto space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-text-mut font-semibold">Serial Number</span>
+                      <span className="text-text-sec font-mono font-bold">{asset.serialNumber}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-text-mut font-semibold">Date Assigned</span>
+                      <span className="text-text-sec font-bold">
+                        {asset.updatedAt ? new Date(asset.updatedAt).toLocaleDateString() : asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -1836,8 +1912,8 @@ export default function UserDashboard() {
       </div>
 
       {/* Glassmorphic Checkout Confirmation Modal */}
-      {showCheckoutConfirm && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showCheckoutConfirm && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[440px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main">Confirm check out</h3>
@@ -1868,11 +1944,12 @@ export default function UserDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* Paid Leave Detail Modal */}
-      {selectedPaidLeaveDetail && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {selectedPaidLeaveDetail && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 lg:p-8 shadow-xl animate-scale-up text-left relative overflow-hidden">
             {/* Glowing top effect */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-brand-primary" />
@@ -1933,9 +2010,11 @@ export default function UserDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
   );
 }
+

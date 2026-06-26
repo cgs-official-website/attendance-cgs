@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -22,7 +23,11 @@ import {
   getAllMessagesAdmin,
   getAllDmThreadsAdmin,
   deleteChatMessage,
-  subscribeToChannels
+  subscribeToChannels,
+  subscribeToAssets,
+  addAsset,
+  updateAsset,
+  deleteAsset
 } from "../firebase";
 import { 
   Shield, 
@@ -49,7 +54,9 @@ import {
   AlertTriangle,
   MessageSquare,
   Mail,
-  Paperclip
+  Paperclip,
+  Plus,
+  HardDrive
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -158,7 +165,7 @@ export default function AdminDashboard() {
   const [newProject, setNewProject] = useState("");
   const [newJobType, setNewJobType] = useState("Full-time");
   const [newDesignation, setNewDesignation] = useState("");
-  const [newIsProjectManager, setNewIsProjectManager] = useState(false);
+  const [newRole, setNewRole] = useState("Employee");
 
   // Edit Form Fields
   const [editName, setEditName] = useState("");
@@ -175,7 +182,7 @@ export default function AdminDashboard() {
   const [editProject, setEditProject] = useState("");
   const [editJobType, setEditJobType] = useState("Full-time");
   const [editDesignation, setEditDesignation] = useState("");
-  const [editIsProjectManager, setEditIsProjectManager] = useState(false);
+  const [editRole, setEditRole] = useState("Employee");
   const [editTasks, setEditTasks] = useState([]);
   const [editEmployeeId, setEditEmployeeId] = useState("");
 
@@ -192,7 +199,8 @@ export default function AdminDashboard() {
   const [managerCommentInput, setManagerCommentInput] = useState("");
 
   // Regularization Requests state
-  const [approvalsSubTab, setApprovalsSubTab] = useState("leaves");
+  const approvalsSubTab = searchParams.get("sub") || "leaves";
+  const setApprovalsSubTab = (sub) => setSearchParams({ tab: "logs", sub });
   const [regularizationRequests, setRegularizationRequests] = useState([]);
   const [allRegularizationRequests, setAllRegularizationRequests] = useState([]);
   const [selectedRegRequestId, setSelectedRegRequestId] = useState(null);
@@ -222,6 +230,24 @@ export default function AdminDashboard() {
   // Delete Paid Leave confirmation popup states
   const [showDeletePaidLeaveConfirm, setShowDeletePaidLeaveConfirm] = useState(false);
   const [selectedPaidLeave, setSelectedPaidLeave] = useState(null);
+
+  // Asset Management States
+  const [assets, setAssets] = useState([]);
+  const [assetSearch, setAssetSearch] = useState("");
+  const [assetCategoryFilter, setAssetCategoryFilter] = useState("all");
+  const [assetStatusFilter, setAssetStatusFilter] = useState("all");
+  const [assetsPage, setAssetsPage] = useState(1);
+
+  // Asset Form States
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [isEditingAsset, setIsEditingAsset] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState(null);
+  const [assetFormName, setAssetFormName] = useState("");
+  const [assetFormCategory, setAssetFormCategory] = useState("Laptop");
+  const [assetFormSerial, setAssetFormSerial] = useState("");
+  const [assetFormStatus, setAssetFormStatus] = useState("Available");
+  const [assetFormAssignedUser, setAssetFormAssignedUser] = useState("");
+  const [assetLoading, setAssetLoading] = useState(false);
 
   // Chat Monitor states
   const [chatMessages, setChatMessages]       = useState([]);
@@ -312,12 +338,18 @@ export default function AdminDashboard() {
       setPaidLeaves(data || []);
     });
 
+    // Subscribe to assets
+    const unsubscribeAssets = subscribeToAssets(currentUser.companyId, (data) => {
+      setAssets(data || []);
+    });
+
     return () => {
       unsubscribe();
       unsubscribeLeaves();
       unsubscribeRegs();
       unsubscribeRules();
       unsubscribePaidLeaves();
+      unsubscribeAssets();
     };
   }, [currentUser.role]);
 
@@ -566,6 +598,240 @@ export default function AdminDashboard() {
     } catch (err) {
       showToast(err.message || "Failed to reject regularization request.", "error");
     }
+  };
+
+  // Asset Management Handlers
+  const handleOpenAddAssetModal = () => {
+    setIsEditingAsset(false);
+    setSelectedAssetId(null);
+    setAssetFormName("");
+    setAssetFormCategory("Laptop");
+    setAssetFormSerial("");
+    setAssetFormStatus("Available");
+    setAssetFormAssignedUser("");
+    setShowAssetModal(true);
+  };
+
+  const handleOpenEditAssetModal = (asset) => {
+    setIsEditingAsset(true);
+    setSelectedAssetId(asset.id);
+    setAssetFormName(asset.name || "");
+    setAssetFormCategory(asset.category || "Laptop");
+    setAssetFormSerial(asset.serialNumber || "");
+    setAssetFormStatus(asset.status || "Available");
+    setAssetFormAssignedUser(asset.assignedUserId || "");
+    setShowAssetModal(true);
+  };
+
+  const handleSaveAsset = async (e) => {
+    e.preventDefault();
+    if (!assetFormName.trim() || !assetFormSerial.trim()) {
+      return showToast("Please fill in Asset Name and Serial Number.", "warning");
+    }
+    
+    // Find assigned user details if set
+    let assignedUserName = "";
+    if (assetFormAssignedUser) {
+      const foundUser = users.find(u => u.uid === assetFormAssignedUser);
+      if (foundUser) {
+        assignedUserName = foundUser.name;
+      }
+    }
+
+    const assetData = {
+      name: assetFormName.trim(),
+      category: assetFormCategory,
+      serialNumber: assetFormSerial.trim(),
+      status: assetFormStatus,
+      assignedUserId: assetFormAssignedUser || null,
+      assignedUserName: assignedUserName || null,
+      companyId: currentUser.companyId
+    };
+
+    setAssetLoading(true);
+    try {
+      if (isEditingAsset) {
+        await updateAsset(selectedAssetId, assetData);
+        showToast("Asset updated successfully.", "success");
+      } else {
+        await addAsset(assetData);
+        showToast("Asset added successfully.", "success");
+      }
+      setShowAssetModal(false);
+    } catch (err) {
+      showToast(err.message || "Failed to save asset.", "error");
+    } finally {
+      setAssetLoading(false);
+    }
+  };
+
+  const handleDeleteAssetClick = (id, name) => {
+    showConfirm("Delete Asset", `Are you sure you want to delete ${name}? This action cannot be undone.`, async () => {
+      try {
+        await deleteAsset(id);
+        showToast("Asset deleted successfully.", "success");
+      } catch (err) {
+        showToast(err.message || "Failed to delete asset.", "error");
+      }
+    });
+  };
+
+  const handleExportAssetsExcel = () => {
+    if (assets.length === 0) {
+      return showToast("No assets to export.", "warning");
+    }
+
+    const tableData = assets.map((a) => ({
+      "Asset Name": a.name || "",
+      "Category": a.category || "",
+      "Serial Number": a.serialNumber || "",
+      "Status": a.status || "",
+      "Assigned To": a.assignedUserName || "Unassigned",
+      "Assigned User ID": a.assignedUserId || "N/A",
+      "Date Registered": a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""
+    }));
+
+    const headers = Object.keys(tableData[0]);
+    const aoaData = [headers, ...tableData.map(item => headers.map(h => item[h]))];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoaData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Assets Inventory");
+
+    const max_len = {};
+    aoaData.forEach(row => {
+      row.forEach((cell, idx) => {
+        const cellLen = cell ? String(cell).length : 5;
+        max_len[idx] = Math.max(max_len[idx] || 0, cellLen);
+      });
+    });
+    ws["!cols"] = Object.keys(max_len).map((colIdx) => ({ wch: max_len[colIdx] + 3 }));
+
+    XLSX.writeFile(wb, `Organization_Assets_Report_${new Date().toISOString().split("T")[0]}.xlsx`);
+    showToast("Excel assets registry generated successfully.", "success");
+  };
+
+  const handleExportAssetsPDF = async () => {
+    if (assets.length === 0) {
+      return showToast("No assets to export.", "warning");
+    }
+
+    const doc = new jsPDF("l", "mm", "a4");
+    
+    let logoLoaded = false;
+    try {
+      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
+      doc.addImage(logoBase64, "PNG", 14, 10, 15, 15);
+      logoLoaded = true;
+    } catch (e) {
+      console.warn("Failed to load company logo image for PDF:", e);
+    }
+
+    if (!logoLoaded) {
+      doc.setFillColor(0, 97, 224);
+      doc.circle(21.5, 17.5, 7.5, "F");
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.8);
+      doc.line(18.5, 17.5, 20.5, 19.5);
+      doc.line(20.5, 19.5, 24.5, 14.5);
+    }
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(0, 97, 224);
+    doc.text("Organization Assets Report", 34, 16);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Scope: Active Hardware & Devices Inventory`, 34, 22);
+    
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 200, 16);
+    doc.text(`Total Count: ${assets.length} item(s)`, 200, 22);
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, 28, 280, 28);
+    
+    const headers = ["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Registered"];
+    const colWidths = [60, 35, 45, 30, 50, 40];
+    
+    let currentY = 38;
+    
+    doc.setFillColor(0, 97, 224);
+    doc.rect(14, currentY - 5, 266, 7, "F");
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 255, 255);
+    
+    let xOffset = 14;
+    headers.forEach((h, idx) => {
+      doc.text(h, xOffset + 2, currentY - 0.5);
+      xOffset += colWidths[idx];
+    });
+    
+    currentY += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(15, 23, 42);
+    
+    assets.forEach((asset, index) => {
+      if (currentY > 185) {
+        doc.addPage();
+        currentY = 25;
+        
+        doc.setFillColor(0, 97, 224);
+        doc.rect(14, currentY - 5, 266, 7, "F");
+        
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(255, 255, 255);
+        
+        xOffset = 14;
+        headers.forEach((h, idx) => {
+          doc.text(h, xOffset + 2, currentY - 0.5);
+          xOffset += colWidths[idx];
+        });
+        currentY += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(15, 23, 42);
+      }
+      
+      if (index % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(14, currentY - 4.5, 266, 6, "F");
+      }
+      
+      const nameVal = asset.name || "—";
+      const catVal = asset.category || "—";
+      const serialVal = asset.serialNumber || "—";
+      const statusVal = asset.status || "—";
+      const assignedVal = asset.assignedUserName || "Unassigned";
+      const dateVal = asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : "—";
+      
+      xOffset = 14;
+      
+      doc.text(nameVal.substring(0, 32), xOffset + 2, currentY);
+      xOffset += colWidths[0];
+      
+      doc.text(catVal, xOffset + 2, currentY);
+      xOffset += colWidths[1];
+      
+      doc.text(serialVal.substring(0, 24), xOffset + 2, currentY);
+      xOffset += colWidths[2];
+      
+      doc.text(statusVal, xOffset + 2, currentY);
+      xOffset += colWidths[3];
+      
+      doc.text(assignedVal.substring(0, 26), xOffset + 2, currentY);
+      xOffset += colWidths[4];
+      
+      doc.text(dateVal, xOffset + 2, currentY);
+      
+      currentY += 6;
+    });
+    
+    doc.save(`Assets_Inventory_Report_${new Date().toISOString().split("T")[0]}.pdf`);
+    showToast("PDF report downloaded successfully.", "success");
   };
 
   // Notice Board / Rules & Leaves Handlers
@@ -1117,7 +1383,11 @@ export default function AdminDashboard() {
 
     setActionLoading(true);
     try {
-      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, newIsProjectManager);
+      
+      const roleStr = newRole === "Admin" ? "admin" : "employee";
+      const isPm = newRole === "Project Manager" || newRole === "Admin";
+      
+      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr);
       showToast(`Employee ${newName} registered successfully.`, "success");
       setShowAddModal(false);
       
@@ -1132,6 +1402,7 @@ export default function AdminDashboard() {
       setNewDob("");
       setNewJoiningDate("");
       setNewProject("");
+      setNewRole("Employee");
       setNewJobType("Full-time");
       setNewDesignation("");
       
@@ -1161,7 +1432,11 @@ export default function AdminDashboard() {
     setEditDesignation(user.designation || "");
     setEditTasks(user.tasks || []);
     setEditEmployeeId(user.employeeId || "");
-    setEditIsProjectManager(user.isProjectManager || false);
+    
+    let currentRole = "Employee";
+    if (user.role === "admin") currentRole = "Admin";
+    else if (user.isProjectManager) currentRole = "Project Manager";
+    setEditRole(currentRole);
     setShowEditModal(true);
   };
 
@@ -1195,8 +1470,9 @@ export default function AdminDashboard() {
         editTasks,
         editJobType,
         editDesignation,
-        editIsProjectManager,
-        editEmployeeId
+        editRole === "Project Manager" || editRole === "Admin",
+        editEmployeeId,
+        editRole === "Admin" ? "admin" : "employee"
       );
       
       setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? {
@@ -3119,8 +3395,8 @@ export default function AdminDashboard() {
       {/* ------------------ MODALS ------------------ */}
 
       {/* Employee Detail Modal */}
-      {showDetailModal && selectedUser && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showDetailModal && selectedUser && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[600px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main">Employee Details</h3>
@@ -3218,12 +3494,13 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Add New Employee Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main">Add New Employee</h3>
@@ -3379,20 +3656,17 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 mt-2 bg-brand-primary/5 p-3 rounded-[12px] border border-brand-primary/10">
-                <input 
-                  type="checkbox" 
-                  id="new-pm-checkbox"
-                  className="w-4 h-4 accent-brand-primary cursor-pointer"
-                  checked={newIsProjectManager}
-                  onChange={(e) => setNewIsProjectManager(e.target.checked)}
-                />
-                <label htmlFor="new-pm-checkbox" className="text-xs font-bold text-brand-primary cursor-pointer select-none">
-                  Make Project Manager
-                </label>
-                <p className="text-[10px] text-text-mut ml-2 leading-tight">
-                  Grants access to Project Management panel
-                </p>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Role</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                >
+                  <option value="Employee">Employee</option>
+                  <option value="Project Manager">Project Manager</option>
+                  <option value="Admin">Admin</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -3478,8 +3752,8 @@ export default function AdminDashboard() {
       )}
 
       {/* Edit User Modal */}
-      {showEditModal && selectedUser && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showEditModal && selectedUser && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main">Edit User Profile</h3>
@@ -3620,20 +3894,17 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 mt-2 bg-brand-primary/5 p-3 rounded-[12px] border border-brand-primary/10">
-                <input 
-                  type="checkbox" 
-                  id="edit-pm-checkbox"
-                  className="w-4 h-4 accent-brand-primary cursor-pointer"
-                  checked={editIsProjectManager}
-                  onChange={(e) => setEditIsProjectManager(e.target.checked)}
-                />
-                <label htmlFor="edit-pm-checkbox" className="text-xs font-bold text-brand-primary cursor-pointer select-none">
-                  Make Project Manager
-                </label>
-                <p className="text-[10px] text-text-mut ml-2 leading-tight">
-                  Grants access to Project Management panel
-                </p>
+              <div className="flex flex-col gap-1 mt-2">
+                <label className="text-xs font-bold text-text-sec">Role</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                >
+                  <option value="Employee">Employee</option>
+                  <option value="Project Manager">Project Manager</option>
+                  <option value="Admin">Admin</option>
+                </select>
               </div>
 
               <div className="flex flex-col gap-1 bg-bg-base/30 p-3 rounded-[12px] border border-border-card mb-4">
@@ -3770,8 +4041,8 @@ export default function AdminDashboard() {
       )}
 
       {/* Delete User Confirm Modal */}
-      {showDeleteConfirm && selectedUser && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showDeleteConfirm && selectedUser && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[440px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-brand-danger">Delete User Profile</h3>
@@ -3811,8 +4082,8 @@ export default function AdminDashboard() {
       )}
 
       {/* Delete Paid Leave Confirm Modal */}
-      {showDeletePaidLeaveConfirm && selectedPaidLeave && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in text-left">
+      {showDeletePaidLeaveConfirm && selectedPaidLeave && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
           <div className="w-full max-w-[440px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-brand-danger">Delete Paid Leave</h3>
@@ -4089,6 +4360,355 @@ export default function AdminDashboard() {
         );
       })()}
 
+      {/* ------------------ VIEW 7: ASSET MANAGEMENT ------------------ */}
+      {activeTab === "assets" && (() => {
+        // Filter assets by search query, status, and category
+        const filteredAssets = assets.filter((asset) => {
+          const matchSearch =
+            (asset.name || "").toLowerCase().includes(assetSearch.toLowerCase()) ||
+            (asset.serialNumber || "").toLowerCase().includes(assetSearch.toLowerCase()) ||
+            (asset.assignedUserName || "").toLowerCase().includes(assetSearch.toLowerCase());
+          const matchCategory = assetCategoryFilter === "all" || asset.category === assetCategoryFilter;
+          const matchStatus = assetStatusFilter === "all" || asset.status === assetStatusFilter;
+          return matchSearch && matchCategory && matchStatus;
+        });
+
+        // Pagination for assets
+        const assetsPerPage = 10;
+        const assetsStartIndex = (assetsPage - 1) * assetsPerPage;
+        const paginatedAssets = filteredAssets.slice(assetsStartIndex, assetsStartIndex + assetsPerPage);
+        const assetsTotalPages = Math.ceil(filteredAssets.length / assetsPerPage) || 1;
+
+        return (
+          <div className="animate-fade-in space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2 text-left">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Asset Management</h1>
+                <p className="text-sm text-text-sec mt-1">Register, track, and assign organization devices (laptops, headsets, chargers, etc.)</p>
+              </div>
+              <div className="flex gap-2 self-start sm:self-center">
+                <button 
+                  onClick={handleExportAssetsExcel} 
+                  className="flex items-center gap-1.5 py-2.5 px-4 border border-emerald-500/30 text-xs font-bold rounded-[12px] bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer"
+                >
+                  <Download size={14} /> 
+                  <span>Excel</span>
+                </button>
+                <button 
+                  onClick={handleExportAssetsPDF} 
+                  className="flex items-center gap-1.5 py-2.5 px-4 border border-red-500/30 text-xs font-bold rounded-[12px] bg-red-500/5 hover:bg-red-500/10 text-red-600 dark:text-red-400 transition-colors cursor-pointer"
+                >
+                  <FileText size={14} /> 
+                  <span>PDF</span>
+                </button>
+                <button
+                  onClick={handleOpenAddAssetModal}
+                  className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>Add Asset</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filters bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut font-semibold" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search assets name, serial, employee..."
+                  className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all"
+                  value={assetSearch}
+                  onChange={(e) => {
+                    setAssetSearch(e.target.value);
+                    setAssetsPage(1);
+                  }}
+                />
+              </div>
+
+              <div>
+                <select
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetCategoryFilter}
+                  onChange={(e) => {
+                    setAssetCategoryFilter(e.target.value);
+                    setAssetsPage(1);
+                  }}
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Laptop">Laptops</option>
+                  <option value="Headset">Headsets</option>
+                  <option value="Charger">Chargers</option>
+                  <option value="Keyboard">Keyboards</option>
+                  <option value="Mouse">Mice</option>
+                  <option value="Monitor">Monitors</option>
+                  <option value="Mobile">Mobiles</option>
+                  <option value="Other">Others</option>
+                </select>
+              </div>
+
+              <div>
+                <select
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetStatusFilter}
+                  onChange={(e) => {
+                    setAssetStatusFilter(e.target.value);
+                    setAssetsPage(1);
+                  }}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Available">Available</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Under Repair">Under Repair</option>
+                  <option value="Retired">Retired</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Assets Table */}
+            <div className="bg-bg-card border border-border-card rounded-[24px] overflow-hidden shadow-sm text-left">
+              {filteredAssets.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="w-12 h-12 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center mx-auto mb-3">
+                    <HardDrive size={22} />
+                  </div>
+                  <p className="text-sm font-bold text-text-main">No assets found</p>
+                  <p className="text-xs text-text-mut mt-1">Try resetting your search filters or add a new device.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border-card bg-bg-base/30">
+                          {["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Registered", "Actions"].map((h) => (
+                            <th
+                              key={h}
+                              className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider px-6 py-4 text-left whitespace-nowrap"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedAssets.map((asset) => {
+                          let statusColor = "bg-green-500/10 text-green-500 border border-green-500/20";
+                          if (asset.status === "Assigned") {
+                            statusColor = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
+                          } else if (asset.status === "Under Repair") {
+                            statusColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+                          } else if (asset.status === "Retired") {
+                            statusColor = "bg-red-500/10 text-red-500 border border-red-500/20";
+                          }
+
+                          return (
+                            <tr key={asset.id} className="border-b border-border-card hover:bg-bg-base/20 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="font-bold text-xs text-text-main">{asset.name}</div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="text-xs text-text-sec font-semibold">{asset.category || "Other"}</span>
+                              </td>
+                              <td className="px-6 py-4 text-xs font-mono text-text-sec">
+                                {asset.serialNumber}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${statusColor}`}>
+                                  {asset.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                {asset.assignedUserId ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-[9px] font-bold">
+                                      {(asset.assignedUserName || "?").charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className="text-xs font-semibold text-text-main whitespace-nowrap">{asset.assignedUserName}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-text-mut italic">Unassigned</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-text-mut whitespace-nowrap">
+                                {asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : "—"}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleOpenEditAssetModal(asset)}
+                                    className="p-1.5 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-[6px] transition-colors cursor-pointer"
+                                    title="Edit asset"
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAssetClick(asset.id, asset.name)}
+                                    className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
+                                    title="Delete asset"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {filteredAssets.length > assetsPerPage && (
+                    <div className="p-4 border-t border-border-card flex items-center justify-between flex-wrap gap-3">
+                      <span className="text-xs text-text-mut font-semibold">
+                        Showing {assetsStartIndex + 1} to {Math.min(filteredAssets.length, assetsStartIndex + assetsPerPage)} of {filteredAssets.length} entries
+                      </span>
+                      <div className="flex gap-1.5">
+                        <button
+                          disabled={assetsPage === 1}
+                          onClick={() => setAssetsPage(p => p - 1)}
+                          className="px-3 py-1.5 bg-bg-base border border-border-card rounded-[8px] text-xs font-bold text-text-sec hover:text-text-main transition-colors disabled:opacity-40 cursor-pointer"
+                        >
+                          Prev
+                        </button>
+                        <button
+                          disabled={assetsPage === assetsTotalPages}
+                          onClick={() => setAssetsPage(p => p + 1)}
+                          className="px-3 py-1.5 bg-bg-base border border-border-card rounded-[8px] text-xs font-bold text-text-sec hover:text-text-main transition-colors disabled:opacity-40 cursor-pointer"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Asset Add/Edit Modal */}
+      {showAssetModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main">
+                {isEditingAsset ? "Edit Asset" : "Add New Asset"}
+              </h3>
+              <button 
+                onClick={() => setShowAssetModal(false)} 
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveAsset} className="flex flex-col space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Asset Name</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                  value={assetFormName}
+                  onChange={(e) => setAssetFormName(e.target.value)}
+                  placeholder="e.g. MacBook Pro 16"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Category</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetFormCategory}
+                  onChange={(e) => setAssetFormCategory(e.target.value)}
+                >
+                  <option value="Laptop">Laptop</option>
+                  <option value="Headset">Headset</option>
+                  <option value="Charger">Charger</option>
+                  <option value="Keyboard">Keyboard</option>
+                  <option value="Mouse">Mouse</option>
+                  <option value="Monitor">Monitor</option>
+                  <option value="Mobile">Mobile</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Serial Number / ID</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                  value={assetFormSerial}
+                  onChange={(e) => setAssetFormSerial(e.target.value)}
+                  placeholder="e.g. SN-98124-A"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Status</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetFormStatus}
+                  onChange={(e) => setAssetFormStatus(e.target.value)}
+                >
+                  <option value="Available">Available</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Under Repair">Under Repair</option>
+                  <option value="Retired">Retired</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Assign to Employee</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetFormAssignedUser}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAssetFormAssignedUser(val);
+                    if (val) {
+                      setAssetFormStatus("Assigned");
+                    } else if (assetFormStatus === "Assigned") {
+                      setAssetFormStatus("Available");
+                    }
+                  }}
+                >
+                  <option value="">Unassigned / Available</option>
+                  {users.map((u) => (
+                    <option key={u.uid} value={u.uid}>
+                      {u.name} ({u.department || "No Dept"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card">
+                <button
+                  type="button"
+                  onClick={() => setShowAssetModal(false)}
+                  className="py-2.5 px-4 bg-bg-base hover:bg-border-card text-text-sec text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assetLoading}
+                  className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {assetLoading ? "Saving..." : "Save Asset"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }
+

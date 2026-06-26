@@ -3,9 +3,16 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext"; // Vite cache bust
 import { useToast } from "../context/ToastContext";
 import { collection, onSnapshot, query, updateDoc, doc, where } from "firebase/firestore";
-import { db, getDbType, createNotification, subscribeToTaskReports } from "../firebase";
+import { 
+  db, 
+  getDbType, 
+  createNotification, 
+  subscribeToTaskReports,
+  subscribeToDailyReports,
+  updateDailyReport
+} from "../firebase";
 import { useModal } from "../context/ModalContext";
-import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download } from "lucide-react";
+import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -54,6 +61,18 @@ export default function ProjectManagement() {
   const [memberFilterDate, setMemberFilterDate] = useState("");
   const [memberFilterMonth, setMemberFilterMonth] = useState("");
   const [memberFilterProject, setMemberFilterProject] = useState("All");
+
+  // Daily Activity Log States
+  const [activeSubTab, setActiveSubTab] = useState("team"); // "team" | "daily-logs"
+  const [dailyReports, setDailyReports] = useState([]);
+  const [logFilterEmployee, setLogFilterEmployee] = useState("All");
+  const [logFilterMonth, setLogFilterMonth] = useState("All");
+  const [logFilterStatus, setLogFilterStatus] = useState("All");
+  const [showRemarksModal, setShowRemarksModal] = useState(false);
+  const [selectedReportForRemarks, setSelectedReportForRemarks] = useState(null);
+  const [remarksText, setRemarksText] = useState("");
+  const [remarksStatus, setRemarksStatus] = useState("Completed");
+  const [logCurrentPage, setLogCurrentPage] = useState(1);
 
   const pmProjects = currentUser?.projects?.length ? currentUser.projects : (currentUser?.project ? [currentUser.project] : []);
 
@@ -136,6 +155,15 @@ export default function ProjectManagement() {
       };
     }
   }, [teamMembers]);
+
+  // Subscribe to all daily reports
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsubscribe = subscribeToDailyReports(currentUser.companyId, (data) => {
+      setDailyReports(data || []);
+    });
+    return unsubscribe;
+  }, [currentUser]);
 
   const calculateTimeSpent = (reports) => {
     if (!reports || reports.length === 0) return 0;
@@ -288,6 +316,186 @@ export default function ProjectManagement() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Project Reports");
     XLSX.writeFile(wb, `Project_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleDownloadDailyLogsPDF = async () => {
+    const filteredReports = dailyReports.filter(r => {
+      const isManaged = currentUser.role === "admin" || teamMembers.some(member => member.uid === r.userId);
+      if (!isManaged) return false;
+
+      const matchEmployee = logFilterEmployee === "All" || r.userId === logFilterEmployee;
+      const matchMonth = logFilterMonth === "All" || new Date(r.date).getMonth() === parseInt(logFilterMonth, 10);
+      const matchStatus = logFilterStatus === "All" || r.status === logFilterStatus;
+
+      return matchEmployee && matchMonth && matchStatus;
+    });
+
+    if (filteredReports.length === 0) {
+      return showToast("No daily logs to export.", "warning");
+    }
+
+    const doc = new jsPDF("l", "mm", "a4");
+
+    doc.setFillColor(30, 78, 121); // #1e4e79
+    doc.rect(14, 10, 269, 15, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("DAILY REPORT LOG", 148.5, 20, { align: "center" });
+
+    doc.setFillColor(170, 198, 226); // #aac6e2
+    doc.rect(14, 25, 269, 8, "F");
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text("Log each intern's daily activity below | All fields required | Rows auto-highlight based on status", 148.5, 30.2, { align: "center" });
+
+    const bodyData = filteredReports.map((report, idx) => [
+      idx + 1,
+      report.userName || "—",
+      report.date || "—",
+      report.day || "—",
+      `${report.hours || 0} h`,
+      report.tasksCompleted || "—",
+      report.issuesFaced || "—",
+      report.supervisorRemarks || "—",
+      report.status || "—"
+    ]);
+
+    autoTable(doc, {
+      startY: 37,
+      head: [["#", "Candidate Name", "Date", "Day (Auto)", "Hours", "Tasks Completed", "Issues Faced", "Supervisor Remarks", "Status"]],
+      body: bodyData,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3, font: "helvetica", overflow: "linebreak" },
+      headStyles: { fillColor: [42, 75, 124], textColor: [255, 255, 255], fontStyle: "bold" },
+      columnStyles: {
+        0: { cellWidth: 10, halign: "center" },
+        1: { cellWidth: 35 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 15, halign: "center" },
+        5: { cellWidth: 55 },
+        6: { cellWidth: 42 },
+        7: { cellWidth: 42 },
+        8: { cellWidth: 30, halign: "center" }
+      },
+      didParseCell: (data) => {
+        if (data.row.index >= 0) {
+          const statusVal = data.row.cells[8].text[0];
+          const setRowColors = (fillColor, textColor) => {
+            Object.values(data.row.cells).forEach(cell => {
+              cell.styles.fillColor = fillColor;
+              cell.styles.textColor = textColor;
+            });
+          };
+
+          if (statusVal === "Completed") {
+            setRowColors([212, 237, 218], [21, 87, 36]);
+          } else if (statusVal === "On Hold") {
+            setRowColors([248, 215, 218], [114, 28, 36]);
+          } else if (statusVal === "In Progress") {
+            setRowColors([255, 243, 205], [133, 100, 4]);
+          }
+        }
+      }
+    });
+
+    const fileName = `Daily_Report_Log_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(fileName);
+    showToast("PDF report generated successfully.", "success");
+  };
+
+  const handleDownloadDailyLogsExcel = () => {
+    const filteredReports = dailyReports.filter(r => {
+      const isManaged = currentUser.role === "admin" || teamMembers.some(member => member.uid === r.userId);
+      if (!isManaged) return false;
+
+      const matchEmployee = logFilterEmployee === "All" || r.userId === logFilterEmployee;
+      const matchMonth = logFilterMonth === "All" || new Date(r.date).getMonth() === parseInt(logFilterMonth, 10);
+      const matchStatus = logFilterStatus === "All" || r.status === logFilterStatus;
+
+      return matchEmployee && matchMonth && matchStatus;
+    });
+
+    if (filteredReports.length === 0) {
+      return showToast("No daily logs to export.", "warning");
+    }
+
+    const titleRow = ["DAILY REPORT LOG"];
+    const subtitleRow = ["Log each intern's daily activity below | All fields required | Rows auto-highlight based on status"];
+    const emptyRow = [];
+    const headerRow = ["#", "Candidate Name", "Date", "Day (Auto)", "Hours", "Tasks Completed", "Issues Faced", "Supervisor Remarks", "Status"];
+
+    const aoaData = [
+      titleRow,
+      subtitleRow,
+      emptyRow,
+      headerRow,
+      ...filteredReports.map((report, idx) => [
+        idx + 1,
+        report.userName || "",
+        report.date || "",
+        report.day || "",
+        report.hours || 0,
+        report.tasksCompleted || "",
+        report.issuesFaced || "",
+        report.supervisorRemarks || "",
+        report.status || ""
+      ])
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoaData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Daily Report Log");
+
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 22 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 8 },
+      { wch: 40 },
+      { wch: 30 },
+      { wch: 30 },
+      { wch: 15 }
+    ];
+
+    ws["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
+    ];
+
+    const fileName = `Daily_Report_Log_${new Date().toISOString().split("T")[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    showToast("Excel spreadsheet generated successfully.", "success");
+  };
+
+  const handleSaveRemarks = async (e) => {
+    e.preventDefault();
+    if (!selectedReportForRemarks) return;
+
+    try {
+      await updateDailyReport(selectedReportForRemarks.id, {
+        supervisorRemarks: remarksText,
+        status: remarksStatus
+      });
+      
+      await createNotification(
+        selectedReportForRemarks.userId,
+        "Daily Log Reviewed",
+        `Your daily activity log for ${selectedReportForRemarks.date} was reviewed. Remarks: "${remarksText}".`,
+        remarksStatus === "Completed" ? "success" : "info",
+        "/task-management"
+      );
+
+      showToast("Supervisor remarks updated successfully!", "success");
+      setShowRemarksModal(false);
+      setSelectedReportForRemarks(null);
+      setRemarksText("");
+    } catch (err) {
+      showToast("Failed to save remarks.", "error");
+    }
   };
 
   const getFilteredMemberTasks = () => {
@@ -705,9 +913,29 @@ export default function ProjectManagement() {
     setCurrentPage(1);
   }, [searchQuery, filterProject, filterDesignation]);
 
+  useEffect(() => {
+    setLogCurrentPage(1);
+  }, [logFilterEmployee, logFilterMonth, logFilterStatus]);
+
   const totalPages = Math.ceil(filteredTeam.length / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedTeam = filteredTeam.slice(startIndex, startIndex + itemsPerPage);
+
+  const filteredReports = dailyReports.filter(r => {
+    const isManaged = currentUser?.role === "admin" || teamMembers.some(member => member.uid === r.userId);
+    if (!isManaged) return false;
+
+    const matchEmployee = logFilterEmployee === "All" || r.userId === logFilterEmployee;
+    const matchMonth = logFilterMonth === "All" || new Date(r.date).getMonth() === parseInt(logFilterMonth, 10);
+    const matchStatus = logFilterStatus === "All" || r.status === logFilterStatus;
+
+    return matchEmployee && matchMonth && matchStatus;
+  });
+
+  const logsPerPage = 10;
+  const logTotalPages = Math.ceil(filteredReports.length / logsPerPage) || 1;
+  const logStartIndex = (logCurrentPage - 1) * logsPerPage;
+  const paginatedLogs = filteredReports.slice(logStartIndex, logStartIndex + logsPerPage);
 
   const availableUsersToAdd = currentUser?.role === "admin"
     ? allUsers.filter(u => u.uid !== currentUser?.uid && u.role !== "admin")
@@ -759,7 +987,32 @@ export default function ProjectManagement() {
         </div>
       </div>
 
-      <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
+      {/* Tabs Switcher */}
+      <div className="flex border-b border-border-card mb-6">
+        <button
+          onClick={() => setActiveSubTab("team")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "team"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          My Team
+        </button>
+        <button
+          onClick={() => setActiveSubTab("daily-logs")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "daily-logs"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          Daily Activity Logs
+        </button>
+      </div>
+
+      {activeSubTab === "team" ? (
+        <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
         <div className="p-4 border-b border-border-card bg-bg-base/30 flex flex-col sm:flex-row items-center gap-4">
           <div className="relative w-full sm:max-w-md">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut" />
@@ -964,10 +1217,186 @@ export default function ProjectManagement() {
           </div>
         )}
       </div>
+      ) : (
+        <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
+          <div className="p-4 border-b border-border-card bg-bg-base/30 flex flex-col md:flex-row items-center gap-4">
+            <div className="relative w-full md:max-w-[200px]">
+              <select
+                value={logFilterEmployee}
+                onChange={(e) => setLogFilterEmployee(e.target.value)}
+                className="w-full px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+              >
+                <option value="All">All Employees</option>
+                {teamMembers.map(m => (
+                  <option key={m.uid} value={m.uid}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="relative w-full md:max-w-[180px] mt-2 md:mt-0">
+              <select
+                value={logFilterMonth}
+                onChange={(e) => setLogFilterMonth(e.target.value)}
+                className="w-full px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+              >
+                <option value="All">All Months</option>
+                <option value="0">January</option>
+                <option value="1">February</option>
+                <option value="2">March</option>
+                <option value="3">April</option>
+                <option value="4">May</option>
+                <option value="5">June</option>
+                <option value="6">July</option>
+                <option value="7">August</option>
+                <option value="8">September</option>
+                <option value="9">October</option>
+                <option value="10">November</option>
+                <option value="11">December</option>
+              </select>
+            </div>
+            <div className="relative w-full md:max-w-[180px] mt-2 md:mt-0">
+              <select
+                value={logFilterStatus}
+                onChange={(e) => setLogFilterStatus(e.target.value)}
+                className="w-full px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Completed">Completed</option>
+                <option value="In Progress">In Progress</option>
+                <option value="On Hold">On Hold</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 w-full md:w-auto md:ml-auto mt-2 md:mt-0 justify-end">
+              <button
+                onClick={handleDownloadDailyLogsExcel}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3.5 rounded-[10px] flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer w-full sm:w-auto"
+              >
+                <Download size={14} />
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={handleDownloadDailyLogsPDF}
+                className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2 px-3.5 rounded-[10px] flex items-center justify-center gap-1.5 transition-all shadow-md shadow-brand-primary/10 cursor-pointer w-full sm:w-auto"
+              >
+                <Download size={14} />
+                <span>Export PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                  <th className="p-4 font-bold text-center">#</th>
+                  <th className="p-4 font-bold">Candidate Name</th>
+                  <th className="p-4 font-bold">Date</th>
+                  <th className="p-4 font-bold">Day</th>
+                  <th className="p-4 font-bold text-center">Hours</th>
+                  <th className="p-4 font-bold">Tasks Completed</th>
+                  <th className="p-4 font-bold">Issues Faced</th>
+                  <th className="p-4 font-bold">Supervisor Remarks</th>
+                  <th className="p-4 font-bold text-center">Status</th>
+                  <th className="p-4 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredReports.length === 0 ? (
+                  <tr>
+                    <td colSpan="10" className="p-10 text-center text-text-mut text-sm">
+                      No daily logs found matching selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedLogs.map((report, idx) => {
+                    let statusBadge = "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+                    if (report.status === "On Hold") {
+                      statusBadge = "bg-red-500/10 text-red-500 border border-red-500/20";
+                    } else if (report.status === "In Progress") {
+                      statusBadge = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+                    }
+                    return (
+                      <tr key={report.id} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors text-xs text-text-sec">
+                        <td className="p-4 text-center font-bold text-text-mut">{logStartIndex + idx + 1}</td>
+                        <td className="p-4 font-bold text-text-main">{report.userName}</td>
+                        <td className="p-4 whitespace-nowrap">{report.date}</td>
+                        <td className="p-4 whitespace-nowrap">{report.day}</td>
+                        <td className="p-4 text-center whitespace-nowrap font-semibold text-text-main">{report.hours} h</td>
+                        <td className="p-4 max-w-[200px] truncate" title={report.tasksCompleted}>{report.tasksCompleted}</td>
+                        <td className="p-4 max-w-[150px] truncate" title={report.issuesFaced}>
+                          {report.issuesFaced ? report.issuesFaced : <span className="text-text-mut/40 italic">None</span>}
+                        </td>
+                        <td className="p-4 max-w-[150px] truncate" title={report.supervisorRemarks}>
+                          {report.supervisorRemarks ? report.supervisorRemarks : <span className="text-text-mut/40 italic">No remarks yet</span>}
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge}`}>
+                            {report.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => {
+                              setSelectedReportForRemarks(report);
+                              setRemarksText(report.supervisorRemarks || "");
+                              setRemarksStatus(report.status || "Completed");
+                              setShowRemarksModal(true);
+                            }}
+                            className="py-1 px-2.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[6px] text-[10px] font-bold transition-all cursor-pointer"
+                          >
+                            Review
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {logTotalPages > 1 && (
+            <div className="flex justify-between items-center pt-4 border-t border-border-card text-xs flex-wrap gap-4 px-4 pb-4">
+              <span className="text-text-mut font-semibold">
+                Showing {logStartIndex + 1} to {Math.min(logStartIndex + logsPerPage, filteredReports.length)} of {filteredReports.length} entries
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setLogCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={logCurrentPage === 1}
+                  className="px-3 py-1.5 bg-bg-card border border-border-card rounded-[8px] hover:bg-bg-base hover:text-brand-primary font-bold disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  Prev
+                </button>
+                {Array.from({ length: logTotalPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setLogCurrentPage(i + 1)}
+                    className={`w-7 h-7 rounded-[8px] font-bold transition-colors cursor-pointer ${
+                      logCurrentPage === i + 1 
+                        ? "bg-brand-primary text-white" 
+                        : "bg-bg-card border border-border-card text-text-sec hover:bg-bg-base hover:text-brand-primary"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setLogCurrentPage(p => Math.min(logTotalPages, p + 1))}
+                  disabled={logCurrentPage === logTotalPages}
+                  className="px-3 py-1.5 bg-bg-card border border-border-card rounded-[8px] hover:bg-bg-base hover:text-brand-primary font-bold disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Team Member Modal */}
       {showAddTeamModal && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
@@ -1049,7 +1478,7 @@ export default function ProjectManagement() {
 
       {/* Manage Tasks Modal */}
       {showTaskModal && taskTargetUser && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[600px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4 flex-shrink-0">
               <h3 className="font-bold text-lg text-text-main">
@@ -1195,7 +1624,7 @@ export default function ProjectManagement() {
 
       {/* Edit Team Member Modal */}
       {showEditMemberModal && memberToEdit && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
               <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
@@ -1276,7 +1705,7 @@ export default function ProjectManagement() {
 
       {/* Project Reports Modal */}
       {showReportsModal && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-4 sm:p-6 animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-4 sm:p-6 animate-fade-in">
           <div className="w-full max-w-[800px] bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
             <button 
               onClick={() => setShowReportsModal(false)} 
@@ -1380,7 +1809,7 @@ export default function ProjectManagement() {
     )}
 
       {showMemberReportsModal && selectedMemberForReports && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-4 sm:p-6 animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-4 sm:p-6 animate-fade-in">
           <div className="w-full max-w-[700px] bg-bg-card border border-border-card rounded-[24px] p-5 sm:p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
             <button 
               onClick={() => { 
@@ -1522,6 +1951,94 @@ export default function ProjectManagement() {
       document.body
     )}
 
+      {/* Supervisor Remarks Modal */}
+      {showRemarksModal && selectedReportForRemarks && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[480px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4 flex-shrink-0">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <FileText size={20} className="text-brand-primary" />
+                <span>Review Daily Activity Log</span>
+              </h3>
+              <button onClick={() => { setShowRemarksModal(false); setSelectedReportForRemarks(null); }} className="text-text-mut hover:text-text-main font-bold cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveRemarks} className="flex-grow overflow-y-auto pr-1 space-y-4 pb-2 custom-scrollbar">
+              <div className="bg-bg-base/50 p-4 rounded-[16px] border border-border-card space-y-2 text-xs">
+                <div>
+                  <span className="font-bold text-text-sec uppercase block">Employee Name:</span>
+                  <span className="text-text-main font-semibold">{selectedReportForRemarks.userName}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="font-bold text-text-sec uppercase block">Date:</span>
+                    <span className="text-text-main font-semibold">{selectedReportForRemarks.date} ({selectedReportForRemarks.day})</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-text-sec uppercase block">Hours Worked:</span>
+                    <span className="text-text-main font-semibold">{selectedReportForRemarks.hours} h</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="font-bold text-text-sec uppercase block">Tasks Completed:</span>
+                  <p className="text-text-main font-semibold mt-1 p-2 bg-bg-card border border-border-card/50 rounded-[8px] whitespace-pre-line">{selectedReportForRemarks.tasksCompleted}</p>
+                </div>
+                {selectedReportForRemarks.issuesFaced && (
+                  <div>
+                    <span className="font-bold text-brand-danger uppercase block">Issues Faced:</span>
+                    <p className="text-text-main font-semibold mt-1 p-2 bg-bg-card border border-border-card/50 rounded-[8px] whitespace-pre-line">{selectedReportForRemarks.issuesFaced}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Status</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                  value={remarksStatus}
+                  onChange={(e) => setRemarksStatus(e.target.value)}
+                >
+                  <option value="Completed">Completed</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="On Hold">On Hold</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Supervisor Remarks *</label>
+                <textarea 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[100px] resize-none"
+                  placeholder="Provide supervisor remarks or feedback..."
+                  value={remarksText}
+                  onChange={(e) => setRemarksText(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setShowRemarksModal(false); setSelectedReportForRemarks(null); }}
+                  className="py-2.5 px-4 bg-bg-base hover:bg-border-card text-text-sec text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors cursor-pointer"
+                >
+                  Save Remarks
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }
+

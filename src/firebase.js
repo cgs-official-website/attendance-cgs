@@ -2143,7 +2143,7 @@ export const getAllDmThreadsAdmin = async (companyId = "") => {
  * @param {File} file
  * @returns {Promise<{ id: string, name: string, url: string, mimeType: string, size: number }>}
  */
-export const uploadFileToFirebase = async (file) => {
+export const uploadFileToFirebase = async (file, companyId = "", folderType = "files") => {
   let fileToUpload = file;
   if (file.type && file.type.startsWith('image/')) {
     try {
@@ -2157,6 +2157,17 @@ export const uploadFileToFirebase = async (file) => {
     } catch (error) {
       console.warn("Image compression failed, uploading original file:", error);
     }
+  }
+
+  // Try Cloudinary first
+  try {
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+    if (cloudName && uploadPreset) {
+      return await uploadFileToCloudinary(fileToUpload, companyId, folderType);
+    }
+  } catch (cloudinaryError) {
+    console.warn("Cloudinary upload failed, falling back to other storage:", cloudinaryError);
   }
 
   if (isB2Configured()) {
@@ -2570,5 +2581,251 @@ export const recoverLostData = async () => {
   } catch (err) {
     console.error("Recovery failed:", err);
     return { success: false, msg: err.message };
+  }
+};
+
+// ----------------------------------------------------
+// DAILY ACTIVITY REPORT LOG APIs
+// ----------------------------------------------------
+
+export const subscribeToDailyReports = (companyId, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "daily_reports");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = localStorage.getItem("att_daily_reports")
+        ? JSON.parse(localStorage.getItem("att_daily_reports"))
+        : [];
+      if (companyId) list = list.filter(l => l.companyId === companyId);
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      callback(list);
+    };
+    noticeListeners.add(handler);
+    handler();
+    return () => {
+      noticeListeners.delete(handler);
+    };
+  }
+};
+
+export const subscribeToMyDailyReports = (userId, callback) => {
+  if (dbType === "firebase") {
+    const qRef = query(collection(db, "daily_reports"), where("userId", "==", userId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = localStorage.getItem("att_daily_reports")
+        ? JSON.parse(localStorage.getItem("att_daily_reports"))
+        : [];
+      list = list.filter(l => l.userId === userId);
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      callback(list);
+    };
+    noticeListeners.add(handler);
+    handler();
+    return () => {
+      noticeListeners.delete(handler);
+    };
+  }
+};
+
+export const addDailyReport = async (reportData) => {
+  const newReport = {
+    id: dbType === "firebase" ? "" : "daily-" + Math.random().toString(36).substr(2, 9),
+    createdAt: new Date().toISOString(),
+    supervisorRemarks: "",
+    ...reportData
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "daily_reports"), newReport);
+    await updateDoc(docRef, { id: docRef.id });
+  } else {
+    const current = localStorage.getItem("att_daily_reports")
+      ? JSON.parse(localStorage.getItem("att_daily_reports"))
+      : [];
+    current.push(newReport);
+    localStorage.setItem("att_daily_reports", JSON.stringify(current));
+    notifyNoticeListeners();
+  }
+};
+
+export const updateDailyReport = async (id, updates) => {
+  const dataToUpdate = {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = doc(db, "daily_reports", id);
+    await updateDoc(docRef, dataToUpdate);
+  } else {
+    const current = localStorage.getItem("att_daily_reports")
+      ? JSON.parse(localStorage.getItem("att_daily_reports"))
+      : [];
+    const index = current.findIndex(r => r.id === id);
+    if (index !== -1) {
+      current[index] = { ...current[index], ...dataToUpdate };
+      localStorage.setItem("att_daily_reports", JSON.stringify(current));
+      notifyNoticeListeners();
+    }
+  }
+};
+
+export const deleteDailyReport = async (id) => {
+  if (dbType === "firebase") {
+    await deleteDoc(doc(db, "daily_reports", id));
+  } else {
+    const current = localStorage.getItem("att_daily_reports")
+      ? JSON.parse(localStorage.getItem("att_daily_reports"))
+      : [];
+    const filtered = current.filter(r => r.id !== id);
+    localStorage.setItem("att_daily_reports", JSON.stringify(filtered));
+    notifyNoticeListeners();
+  }
+};
+
+export const getCompanyNameById = async (companyId) => {
+  if (!companyId) return "General";
+  try {
+    const companies = await getCompanies();
+    const company = companies.find(c => c.id === companyId);
+    return company ? company.name : "General";
+  } catch (error) {
+    console.error("Error getting company name:", error);
+    return "General";
+  }
+};
+
+export const uploadFileToCloudinary = async (file, companyId = "", folderType = "files") => {
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dcfsh85uq";
+  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "hrms_preset";
+  
+  let orgName = "General";
+  if (companyId) {
+    orgName = await getCompanyNameById(companyId);
+  }
+  
+  const cleanOrgName = orgName.replace(/[^a-zA-Z0-9\s-_]/g, "").trim();
+  const folderPath = `HRMS/${cleanOrgName}/${folderType}`;
+  
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+  formData.append("folder", folderPath);
+  
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+    method: "POST",
+    body: formData
+  });
+  
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Cloudinary upload failed: ${errText}`);
+  }
+  
+  const data = await response.json();
+  
+  return {
+    id: data.public_id,
+    name: file.name || data.original_filename || "file",
+    url: data.secure_url,
+    mimeType: file.type || `${data.resource_type}/${data.format}`,
+    size: file.size || data.bytes
+  };
+};
+
+// ----------------------------------------------------
+// ASSET MANAGEMENT APIs
+// ----------------------------------------------------
+
+export const subscribeToAssets = (companyId, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "assets");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = localStorage.getItem("att_assets")
+        ? JSON.parse(localStorage.getItem("att_assets"))
+        : [];
+      if (companyId) list = list.filter(l => l.companyId === companyId);
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      callback(list);
+    };
+    noticeListeners.add(handler);
+    handler();
+    return () => {
+      noticeListeners.delete(handler);
+    };
+  }
+};
+
+export const addAsset = async (assetData) => {
+  const newAsset = {
+    id: dbType === "firebase" ? "" : "asset-" + Math.random().toString(36).substr(2, 9),
+    createdAt: new Date().toISOString(),
+    ...assetData
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "assets"), newAsset);
+    await updateDoc(docRef, { id: docRef.id });
+  } else {
+    const current = localStorage.getItem("att_assets")
+      ? JSON.parse(localStorage.getItem("att_assets"))
+      : [];
+    current.push(newAsset);
+    localStorage.setItem("att_assets", JSON.stringify(current));
+    notifyNoticeListeners();
+  }
+};
+
+export const updateAsset = async (id, updates) => {
+  const dataToUpdate = {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = doc(db, "assets", id);
+    await updateDoc(docRef, dataToUpdate);
+  } else {
+    const current = localStorage.getItem("att_assets")
+      ? JSON.parse(localStorage.getItem("att_assets"))
+      : [];
+    const index = current.findIndex(a => a.id === id);
+    if (index !== -1) {
+      current[index] = { ...current[index], ...dataToUpdate };
+      localStorage.setItem("att_assets", JSON.stringify(current));
+      notifyNoticeListeners();
+    }
+  }
+};
+
+export const deleteAsset = async (id) => {
+  if (dbType === "firebase") {
+    await deleteDoc(doc(db, "assets", id));
+  } else {
+    const current = localStorage.getItem("att_assets")
+      ? JSON.parse(localStorage.getItem("att_assets"))
+      : [];
+    const filtered = current.filter(a => a.id !== id);
+    localStorage.setItem("att_assets", JSON.stringify(filtered));
+    notifyNoticeListeners();
   }
 };

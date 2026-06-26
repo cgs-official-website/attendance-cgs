@@ -165,7 +165,7 @@ export default function Profile() {
       try {
         setLoading(true);
         showToast("Uploading profile picture to cloud...", "info");
-        const fileData = await uploadFileToFirebase(file);
+        const fileData = await uploadFileToFirebase(file, currentUser?.companyId || "", "profiles");
         setAvatar(fileData.url);
         showToast("Profile picture uploaded to cloud. Click 'Save Settings' to save.", "success");
       } catch (err) {

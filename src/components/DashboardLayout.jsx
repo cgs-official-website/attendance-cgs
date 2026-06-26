@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -43,7 +44,8 @@ import {
   markNotificationRead,
   createNotification,
   updateTaskWarningSent,
-  getCompanies
+  getCompanies,
+  subscribeToRegularizationRequests
 } from "../firebase";
 
 const DashboardSkeleton = () => (
@@ -130,6 +132,7 @@ export default function DashboardLayout({ children }) {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rules, setRules] = useState("");
   const [leaveRequestsList, setLeaveRequestsList] = useState([]);
+  const [regularizationRequestsList, setRegularizationRequestsList] = useState([]);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [newUpdatesCount, setNewUpdatesCount] = useState(0);
   const [systemNotifications, setSystemNotifications] = useState([]);
@@ -225,9 +228,18 @@ export default function DashboardLayout({ children }) {
       }
     });
 
+    let unsubscribeRegs = () => {};
+    if (currentUser.role === "admin") {
+      unsubscribeRegs = subscribeToRegularizationRequests(currentUser.companyId, (data) => {
+        const pending = (data || []).filter(r => r.status === "pending");
+        setRegularizationRequestsList(pending);
+      });
+    }
+
     return () => {
       unsubscribeRules();
       unsubscribeLeaves();
+      unsubscribeRegs();
     };
   }, [currentUser]);
 
@@ -509,12 +521,20 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/admin?tab=users"); setIsMobileOpen(false); }
     },
     {
-      label: "Leave Approval",
+      label: "Leave Approvals",
       icon: Calendar,
-      active: location.pathname === "/admin" && activeTabParam === "logs",
+      active: location.pathname === "/admin" && activeTabParam === "logs" && (searchParams.get("sub") || "leaves") === "leaves",
       hidden: !isAdmin,
-      badge: newUpdatesCount > 0 ? newUpdatesCount : null,
-      onClick: () => { navigate("/admin?tab=logs"); setIsMobileOpen(false); }
+      badge: leaveRequestsList.length > 0 ? leaveRequestsList.length : null,
+      onClick: () => { navigate("/admin?tab=logs&sub=leaves"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Regularization Approvals",
+      icon: Clock,
+      active: location.pathname === "/admin" && activeTabParam === "logs" && searchParams.get("sub") === "regularization",
+      hidden: !isAdmin,
+      badge: regularizationRequestsList.length > 0 ? regularizationRequestsList.length : null,
+      onClick: () => { navigate("/admin?tab=logs&sub=regularization"); setIsMobileOpen(false); }
     },
     {
       label: "Notice Board",
@@ -534,6 +554,12 @@ export default function DashboardLayout({ children }) {
       icon: Monitor,
       active: location.pathname === "/admin" && activeTabParam === "chat",
       onClick: () => { navigate("/admin?tab=chat"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Asset Management",
+      icon: HardDrive,
+      active: location.pathname === "/admin" && activeTabParam === "assets",
+      onClick: () => { navigate("/admin?tab=assets"); setIsMobileOpen(false); }
     },
     {
       label: "Project Management",
@@ -589,6 +615,12 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/task-management",
       badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
       onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
+    },
+    {
+      label: "My Assets",
+      icon: HardDrive,
+      active: location.pathname === "/dashboard" && searchParams.get("tab") === "assets",
+      onClick: () => { navigate("/dashboard?tab=assets"); setIsMobileOpen(false); }
     },
     {
       label: "My History",
@@ -1101,8 +1133,8 @@ export default function DashboardLayout({ children }) {
       </div>
 
       {/* Quick Check-In Modal */}
-      {showQuickCheckModal && currentUser && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showQuickCheckModal && currentUser && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[400px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up text-center relative overflow-hidden">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
@@ -1176,17 +1208,18 @@ export default function DashboardLayout({ children }) {
               <button
                 onClick={() => setShowQuickCheckModal(false)}
                 disabled={loadingAction}
-                className="w-full py-2.5 px-4 border border-border-card text-text-sec font-semibold rounded-[12px] hover:bg-bg-base transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 border border-border-card text-text-sec font-semibold rounded-[12px] hover:bg-bg-base transition-all cursor-pointer mt-3"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* Help / Attendance Rules Modal */}
-      {showRulesModal && (
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[1000] p-6 animate-fade-in">
+      {showRulesModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
           <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 lg:p-8 shadow-xl animate-scale-up relative overflow-hidden text-left">
             {/* Header */}
             <div className="flex justify-between items-center mb-5 pb-4 border-b border-border-card">
@@ -1215,7 +1248,6 @@ export default function DashboardLayout({ children }) {
               )}
             </div>
 
-            {/* Footer */}
             <button
               onClick={() => setShowRulesModal(false)}
               className="w-full py-2.5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
@@ -1223,8 +1255,10 @@ export default function DashboardLayout({ children }) {
               Understand & Close
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
 }
+

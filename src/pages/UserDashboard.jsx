@@ -836,9 +836,15 @@ export default function UserDashboard() {
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-text-mut font-semibold">Date Assigned</span>
                       <span className="text-text-sec font-bold">
-                        {asset.updatedAt ? new Date(asset.updatedAt).toLocaleDateString() : asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : "—"}
+                        {asset.assignedDate ? new Date(asset.assignedDate).toLocaleDateString() : "—"}
                       </span>
                     </div>
+                    {asset.assigningAuthorityName && (
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-text-mut font-semibold">Assigning Authority</span>
+                        <span className="text-text-sec font-bold">{asset.assigningAuthorityName}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

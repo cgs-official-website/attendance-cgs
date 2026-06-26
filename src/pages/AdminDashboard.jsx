@@ -56,7 +56,12 @@ import {
   Mail,
   Paperclip,
   Plus,
-  HardDrive
+  HardDrive,
+  Laptop,
+  Hash,
+  ChevronDown,
+  Layers,
+  Activity
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -247,7 +252,17 @@ export default function AdminDashboard() {
   const [assetFormSerial, setAssetFormSerial] = useState("");
   const [assetFormStatus, setAssetFormStatus] = useState("Available");
   const [assetFormAssignedUser, setAssetFormAssignedUser] = useState("");
+  const [assetFormAssignedDate, setAssetFormAssignedDate] = useState("");
+  const [assetFormAssigningAuthority, setAssetFormAssigningAuthority] = useState("");
   const [assetLoading, setAssetLoading] = useState(false);
+
+  // Bulk Assign Assets Modal States
+  const [showAssignAssetsModal, setShowAssignAssetsModal] = useState(false);
+  const [assignAssetsTargetUser, setAssignAssetsTargetUser] = useState("");
+  const [assignAssetsDate, setAssignAssetsDate] = useState(new Date().toISOString().split("T")[0]);
+  const [assignAssetsAuthority, setAssignAssetsAuthority] = useState("");
+  const [assignAssetsSelectedIds, setAssignAssetsSelectedIds] = useState([]);
+  const [assignAssetsLoading, setAssignAssetsLoading] = useState(false);
 
   // Chat Monitor states
   const [chatMessages, setChatMessages]       = useState([]);
@@ -601,6 +616,67 @@ export default function AdminDashboard() {
   };
 
   // Asset Management Handlers
+  const handleOpenAssignAssetsModal = () => {
+    setAssignAssetsTargetUser("");
+    setAssignAssetsSelectedIds([]);
+    setAssignAssetsDate(new Date().toISOString().split("T")[0]);
+    const currentIsAuth = currentUser && (currentUser.role === "admin" || currentUser.role === "superadmin");
+    setAssignAssetsAuthority(currentIsAuth ? currentUser.uid : "");
+    setShowAssignAssetsModal(true);
+  };
+
+  const handleAssignAssetsSubmit = async (e) => {
+    e.preventDefault();
+    if (!assignAssetsTargetUser) {
+      return showToast("Please select an employee.", "warning");
+    }
+    if (assignAssetsSelectedIds.length === 0) {
+      return showToast("Please select at least one asset to assign.", "warning");
+    }
+    if (!assignAssetsAuthority) {
+      return showToast("Please select the assigning authority.", "warning");
+    }
+
+    const targetUser = users.find(u => u.uid === assignAssetsTargetUser);
+    if (!targetUser) return;
+
+    let authorityName = "";
+    const foundAuth = users.find(u => u.uid === assignAssetsAuthority);
+    if (foundAuth) {
+      authorityName = foundAuth.name;
+    } else if (currentUser && currentUser.uid === assignAssetsAuthority) {
+      authorityName = currentUser.name;
+    }
+
+    setAssignAssetsLoading(true);
+    try {
+      for (const assetId of assignAssetsSelectedIds) {
+        const originalAsset = assets.find(a => a.id === assetId);
+        if (originalAsset) {
+          const updatedAssetData = {
+            ...originalAsset,
+            status: "Assigned",
+            assignedUserId: targetUser.uid,
+            assignedUserName: targetUser.name,
+            assignedDate: assignAssetsDate,
+            assigningAuthorityId: assignAssetsAuthority,
+            assigningAuthorityName: authorityName
+          };
+          await updateAsset(assetId, updatedAssetData);
+        }
+      }
+      showToast(`Successfully assigned ${assignAssetsSelectedIds.length} asset(s) to ${targetUser.name}.`, "success");
+      setShowAssignAssetsModal(false);
+      setAssignAssetsTargetUser("");
+      setAssignAssetsSelectedIds([]);
+      setAssignAssetsAuthority("");
+    } catch (err) {
+      showToast(err.message || "Failed to assign assets.", "error");
+    } finally {
+      setAssignAssetsLoading(false);
+    }
+  };
+
   const handleOpenAddAssetModal = () => {
     setIsEditingAsset(false);
     setSelectedAssetId(null);
@@ -609,6 +685,8 @@ export default function AdminDashboard() {
     setAssetFormSerial("");
     setAssetFormStatus("Available");
     setAssetFormAssignedUser("");
+    setAssetFormAssignedDate(new Date().toISOString().split("T")[0]);
+    setAssetFormAssigningAuthority("");
     setShowAssetModal(true);
   };
 
@@ -620,6 +698,8 @@ export default function AdminDashboard() {
     setAssetFormSerial(asset.serialNumber || "");
     setAssetFormStatus(asset.status || "Available");
     setAssetFormAssignedUser(asset.assignedUserId || "");
+    setAssetFormAssignedDate(asset.assignedDate || new Date().toISOString().split("T")[0]);
+    setAssetFormAssigningAuthority(asset.assigningAuthorityId || "");
     setShowAssetModal(true);
   };
 
@@ -638,6 +718,17 @@ export default function AdminDashboard() {
       }
     }
 
+    // Find assigning authority details if set
+    let authorityName = "";
+    if (assetFormAssigningAuthority) {
+      const foundAuth = users.find(u => u.uid === assetFormAssigningAuthority);
+      if (foundAuth) {
+        authorityName = foundAuth.name;
+      } else if (currentUser && currentUser.uid === assetFormAssigningAuthority) {
+        authorityName = currentUser.name;
+      }
+    }
+
     const assetData = {
       name: assetFormName.trim(),
       category: assetFormCategory,
@@ -645,6 +736,9 @@ export default function AdminDashboard() {
       status: assetFormStatus,
       assignedUserId: assetFormAssignedUser || null,
       assignedUserName: assignedUserName || null,
+      assignedDate: (assetFormStatus === "Assigned" || assetFormAssignedUser) ? assetFormAssignedDate : null,
+      assigningAuthorityId: (assetFormStatus === "Assigned" || assetFormAssignedUser) ? assetFormAssigningAuthority : null,
+      assigningAuthorityName: (assetFormStatus === "Assigned" || assetFormAssignedUser) ? authorityName : null,
       companyId: currentUser.companyId
     };
 
@@ -687,7 +781,8 @@ export default function AdminDashboard() {
       "Serial Number": a.serialNumber || "",
       "Status": a.status || "",
       "Assigned To": a.assignedUserName || "Unassigned",
-      "Assigned User ID": a.assignedUserId || "N/A",
+      "Date Assigned": a.assignedDate || "N/A",
+      "Assigning Authority": a.assigningAuthorityName || "N/A",
       "Date Registered": a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""
     }));
 
@@ -752,8 +847,8 @@ export default function AdminDashboard() {
     doc.setDrawColor(226, 232, 240);
     doc.line(14, 28, 280, 28);
     
-    const headers = ["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Registered"];
-    const colWidths = [60, 35, 45, 30, 50, 40];
+    const headers = ["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Assigned", "Authority"];
+    const colWidths = [45, 30, 40, 25, 45, 35, 45];
     
     let currentY = 38;
     
@@ -806,26 +901,30 @@ export default function AdminDashboard() {
       const serialVal = asset.serialNumber || "—";
       const statusVal = asset.status || "—";
       const assignedVal = asset.assignedUserName || "Unassigned";
-      const dateVal = asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : "—";
+      const dateVal = asset.assignedDate ? new Date(asset.assignedDate).toLocaleDateString() : "—";
+      const authVal = asset.assigningAuthorityName || "—";
       
       xOffset = 14;
       
-      doc.text(nameVal.substring(0, 32), xOffset + 2, currentY);
+      doc.text(nameVal.substring(0, 24), xOffset + 2, currentY);
       xOffset += colWidths[0];
       
       doc.text(catVal, xOffset + 2, currentY);
       xOffset += colWidths[1];
       
-      doc.text(serialVal.substring(0, 24), xOffset + 2, currentY);
+      doc.text(serialVal.substring(0, 20), xOffset + 2, currentY);
       xOffset += colWidths[2];
       
       doc.text(statusVal, xOffset + 2, currentY);
       xOffset += colWidths[3];
       
-      doc.text(assignedVal.substring(0, 26), xOffset + 2, currentY);
+      doc.text(assignedVal.substring(0, 24), xOffset + 2, currentY);
       xOffset += colWidths[4];
       
       doc.text(dateVal, xOffset + 2, currentY);
+      xOffset += colWidths[5];
+      
+      doc.text(authVal.substring(0, 24), xOffset + 2, currentY);
       
       currentY += 6;
     });
@@ -4402,6 +4501,13 @@ export default function AdminDashboard() {
                   <span>PDF</span>
                 </button>
                 <button
+                  onClick={handleOpenAssignAssetsModal}
+                  className="py-2.5 px-4 bg-bg-card border border-border-card text-text-sec hover:text-text-main text-xs font-bold rounded-[12px] transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <UserPlus size={16} />
+                  <span>Assign Assets</span>
+                </button>
+                <button
                   onClick={handleOpenAddAssetModal}
                   className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
@@ -4482,7 +4588,7 @@ export default function AdminDashboard() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border-card bg-bg-base/30">
-                          {["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Registered", "Actions"].map((h) => (
+                          {["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Assigned", "Authority", "Actions"].map((h) => (
                             <th
                               key={h}
                               className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider px-6 py-4 text-left whitespace-nowrap"
@@ -4531,8 +4637,11 @@ export default function AdminDashboard() {
                                   <span className="text-xs text-text-mut italic">Unassigned</span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-xs text-text-mut whitespace-nowrap">
-                                {asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : "—"}
+                              <td className="px-6 py-4 text-xs text-text-sec whitespace-nowrap font-semibold">
+                                {asset.assignedDate ? new Date(asset.assignedDate).toLocaleDateString() : "—"}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-text-sec whitespace-nowrap font-semibold">
+                                {asset.assigningAuthorityName || "—"}
                               </td>
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
@@ -4592,114 +4701,352 @@ export default function AdminDashboard() {
       {/* Asset Add/Edit Modal */}
       {showAssetModal && createPortal(
         <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
-          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
-              <h3 className="font-bold text-lg text-text-main">
-                {isEditingAsset ? "Edit Asset" : "Add New Asset"}
-              </h3>
+          <div className="w-full max-w-[550px] bg-bg-card border border-border-card/85 rounded-[24px] p-6 shadow-2xl shadow-brand-primary/5 animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Top Premium Gradient Line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-primary via-purple-500 to-brand-hover" />
+            
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-card flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-[14px] bg-gradient-to-tr from-brand-primary/20 to-brand-hover/10 text-brand-primary flex items-center justify-center border border-brand-primary/10">
+                  <Laptop size={20} className="animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-text-main tracking-tight">
+                    {isEditingAsset ? "Edit Asset Registry" : "Add New Asset"}
+                  </h3>
+                  <p className="text-[10px] text-text-mut font-bold uppercase tracking-wider">Asset Configuration Panel</p>
+                </div>
+              </div>
               <button 
                 onClick={() => setShowAssetModal(false)} 
-                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-base border border-border-card text-text-mut hover:text-text-main hover:border-brand-primary/40 hover:rotate-90 transition-all duration-300 cursor-pointer"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
             
-            <form onSubmit={handleSaveAsset} className="flex flex-col space-y-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-text-sec">Asset Name</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={assetFormName}
-                  onChange={(e) => setAssetFormName(e.target.value)}
-                  placeholder="e.g. MacBook Pro 16"
-                  required
-                />
+            <form onSubmit={handleSaveAsset} className="flex-1 overflow-y-auto pr-1 space-y-5 py-1">
+              {/* Asset Specs Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-4">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Laptop size={12} />
+                  <span>Asset Specifications</span>
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Asset Name</label>
+                  <div className="relative flex items-center">
+                    <Laptop size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                    <input 
+                      type="text" 
+                      className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-semibold shadow-sm" 
+                      value={assetFormName}
+                      onChange={(e) => setAssetFormName(e.target.value)}
+                      placeholder="e.g. Dell Latitude 5420"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Category</label>
+                    <div className="relative flex items-center">
+                      <Layers size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assetFormCategory}
+                        onChange={(e) => setAssetFormCategory(e.target.value)}
+                      >
+                        <option value="Laptop">Laptop</option>
+                        <option value="Headset">Headset</option>
+                        <option value="Charger">Charger</option>
+                        <option value="Keyboard">Keyboard</option>
+                        <option value="Mouse">Mouse</option>
+                        <option value="Monitor">Monitor</option>
+                        <option value="Mobile">Mobile</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Serial Number / ID</label>
+                    <div className="relative flex items-center">
+                      <Hash size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <input 
+                        type="text" 
+                        className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-mono font-semibold shadow-sm" 
+                        value={assetFormSerial}
+                        onChange={(e) => setAssetFormSerial(e.target.value)}
+                        placeholder="e.g. SN-Dell-98A"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-text-sec">Category</label>
-                <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
-                  value={assetFormCategory}
-                  onChange={(e) => setAssetFormCategory(e.target.value)}
-                >
-                  <option value="Laptop">Laptop</option>
-                  <option value="Headset">Headset</option>
-                  <option value="Charger">Charger</option>
-                  <option value="Keyboard">Keyboard</option>
-                  <option value="Mouse">Mouse</option>
-                  <option value="Monitor">Monitor</option>
-                  <option value="Mobile">Mobile</option>
-                  <option value="Other">Other</option>
-                </select>
+              {/* Assignment Details Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-4">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <UserPlus size={12} />
+                  <span>Assignment Details</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Status</label>
+                    <div className="relative flex items-center">
+                      <Activity size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assetFormStatus}
+                        onChange={(e) => setAssetFormStatus(e.target.value)}
+                      >
+                        <option value="Available">Available</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="Under Repair">Under Repair</option>
+                        <option value="Retired">Retired</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assign to Employee</label>
+                    <div className="relative flex items-center">
+                      <Users size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assetFormAssignedUser}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAssetFormAssignedUser(val);
+                          if (val) {
+                            setAssetFormStatus("Assigned");
+                          } else if (assetFormStatus === "Assigned") {
+                            setAssetFormStatus("Available");
+                          }
+                        }}
+                      >
+                        <option value="">Unassigned / Available</option>
+                        {users.map((u) => (
+                          <option key={u.uid} value={u.uid}>
+                            {u.name} ({u.department || "No Dept"})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                {(assetFormStatus === "Assigned" || assetFormAssignedUser) && (
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border-card/60 animate-fade-in">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Date of Assigning</label>
+                      <div className="relative flex items-center">
+                        <Calendar size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                        <input 
+                          type="date" 
+                          className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-semibold shadow-sm" 
+                          value={assetFormAssignedDate}
+                          onChange={(e) => setAssetFormAssignedDate(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assigning Authority</label>
+                      <div className="relative flex items-center">
+                        <Shield size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                        <select 
+                          className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                          value={assetFormAssigningAuthority}
+                          onChange={(e) => setAssetFormAssigningAuthority(e.target.value)}
+                          required
+                        >
+                          <option value="">Select Authority</option>
+                          {users.filter(u => u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin").map((u) => (
+                            <option key={u.uid} value={u.uid}>
+                              {u.name} ({u.role})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-text-sec">Serial Number / ID</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={assetFormSerial}
-                  onChange={(e) => setAssetFormSerial(e.target.value)}
-                  placeholder="e.g. SN-98124-A"
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-text-sec">Status</label>
-                <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
-                  value={assetFormStatus}
-                  onChange={(e) => setAssetFormStatus(e.target.value)}
-                >
-                  <option value="Available">Available</option>
-                  <option value="Assigned">Assigned</option>
-                  <option value="Under Repair">Under Repair</option>
-                  <option value="Retired">Retired</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-text-sec">Assign to Employee</label>
-                <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
-                  value={assetFormAssignedUser}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setAssetFormAssignedUser(val);
-                    if (val) {
-                      setAssetFormStatus("Assigned");
-                    } else if (assetFormStatus === "Assigned") {
-                      setAssetFormStatus("Available");
-                    }
-                  }}
-                >
-                  <option value="">Unassigned / Available</option>
-                  {users.map((u) => (
-                    <option key={u.uid} value={u.uid}>
-                      {u.name} ({u.department || "No Dept"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex gap-3 justify-end pt-4 border-t border-border-card">
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAssetModal(false)}
-                  className="py-2.5 px-4 bg-bg-base hover:bg-border-card text-text-sec text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                  className="py-2.5 px-5 text-xs font-bold text-text-sec hover:text-text-main hover:bg-bg-base rounded-[14px] transition-all cursor-pointer border border-transparent hover:border-border-card"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={assetLoading}
-                  className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                  className="py-2.5 px-6 bg-gradient-to-r from-brand-primary to-brand-hover text-white text-xs font-bold rounded-[14px] shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/35 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
                 >
                   {assetLoading ? "Saving..." : "Save Asset"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Bulk Assign Assets Modal */}
+      {showAssignAssetsModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[550px] bg-bg-card border border-border-card/85 rounded-[24px] p-6 shadow-2xl shadow-brand-primary/5 animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Top Premium Gradient Line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-primary via-purple-500 to-brand-hover" />
+            
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-card flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-[14px] bg-gradient-to-tr from-brand-primary/20 to-brand-hover/10 text-brand-primary flex items-center justify-center border border-brand-primary/10">
+                  <UserPlus size={20} className="animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-text-main tracking-tight">
+                    Assign Assets to Employee
+                  </h3>
+                  <p className="text-[10px] text-text-mut font-bold uppercase tracking-wider">Bulk Asset Assignment Panel</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAssignAssetsModal(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-base border border-border-card text-text-mut hover:text-text-main hover:border-brand-primary/40 hover:rotate-90 transition-all duration-300 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAssignAssetsSubmit} className="flex-1 overflow-y-auto pr-1 space-y-5 py-1">
+              {/* Assignment Specs Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-4">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <UserPlus size={12} />
+                  <span>Assignment Parameters</span>
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assign to Employee</label>
+                  <div className="relative flex items-center">
+                    <Users size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                    <select 
+                      className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                      value={assignAssetsTargetUser}
+                      onChange={(e) => setAssignAssetsTargetUser(e.target.value)}
+                      required
+                    >
+                      <option value="">Select Employee</option>
+                      {users.map((u) => (
+                        <option key={u.uid} value={u.uid}>
+                          {u.name} ({u.department || "No Dept"})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Date of Assigning</label>
+                    <div className="relative flex items-center">
+                      <Calendar size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <input 
+                        type="date" 
+                        className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-semibold shadow-sm" 
+                        value={assignAssetsDate}
+                        onChange={(e) => setAssignAssetsDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assigning Authority</label>
+                    <div className="relative flex items-center">
+                      <Shield size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assignAssetsAuthority}
+                        onChange={(e) => setAssignAssetsAuthority(e.target.value)}
+                        required
+                      >
+                        <option value="">Select Authority</option>
+                        {users.filter(u => u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin").map((u) => (
+                          <option key={u.uid} value={u.uid}>
+                            {u.name} ({u.role})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Checklist Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-3">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Laptop size={12} />
+                  <span>Select Available Asset(s)</span>
+                </div>
+                <div className="border border-border-card/80 rounded-[14px] bg-bg-card max-h-[160px] overflow-y-auto p-4 space-y-3 shadow-inner">
+                  {assets.filter(a => a.status === "Available").length === 0 ? (
+                    <div className="text-xs text-text-mut text-center py-6 font-semibold">No available assets in inventory.</div>
+                  ) : (
+                    assets.filter(a => a.status === "Available").map((asset) => (
+                      <label key={asset.id} className="flex items-center gap-3.5 text-xs font-bold text-text-sec hover:text-text-main cursor-pointer select-none transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={assignAssetsSelectedIds.includes(asset.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAssignAssetsSelectedIds(prev => [...prev, asset.id]);
+                            } else {
+                              setAssignAssetsSelectedIds(prev => prev.filter(id => id !== asset.id));
+                            }
+                          }}
+                          className="rounded-[6px] border-border-card text-brand-primary focus:ring-brand-primary cursor-pointer w-4.5 h-4.5 transition-all accent-brand-primary mr-1"
+                        />
+                        <span className="flex items-center gap-2">
+                          <span className="text-text-main">{asset.name}</span>
+                          <span className="text-[10px] text-text-mut font-mono font-semibold bg-bg-base px-2 py-0.5 rounded-[6px] border border-border-card/50">(SN: {asset.serialNumber})</span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignAssetsModal(false)}
+                  className="py-2.5 px-5 text-xs font-bold text-text-sec hover:text-text-main hover:bg-bg-base rounded-[14px] transition-all cursor-pointer border border-transparent hover:border-border-card"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assignAssetsLoading || assets.filter(a => a.status === "Available").length === 0}
+                  className="py-2.5 px-6 bg-gradient-to-r from-brand-primary to-brand-hover text-white text-xs font-bold rounded-[14px] shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/35 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
+                >
+                  {assignAssetsLoading ? "Assigning..." : "Assign Asset(s)"}
                 </button>
               </div>
             </form>

@@ -590,6 +590,7 @@ export default function AdminDashboard() {
       showToast(`Leave request approved for ${name}.`, "success");
       setManagerCommentInput("");
       setSelectedRequestId(null);
+      loadDirectoryData();
     } catch (err) {
       showToast(err.message || "Failed to approve leave request.", "error");
     }
@@ -601,6 +602,7 @@ export default function AdminDashboard() {
       showToast(`Leave request rejected for ${name}.`, "error");
       setManagerCommentInput("");
       setSelectedRequestId(null);
+      loadDirectoryData();
     } catch (err) {
       showToast(err.message || "Failed to reject leave request.", "error");
     }
@@ -1013,7 +1015,7 @@ export default function AdminDashboard() {
     }
     setActionLoading(true);
     try {
-      await uploadPaidLeave(leaveTitle, leaveStartDate, leaveEndDate, leaveDesc, leaveStatus);
+      await uploadPaidLeave(leaveTitle, leaveStartDate, leaveEndDate, leaveDesc, leaveStatus, currentUser.companyId);
       showToast(`Paid leave "${leaveTitle}" published successfully.`, "success");
       setLeaveTitle("");
       setLeaveStartDate("");
@@ -1540,7 +1542,7 @@ export default function AdminDashboard() {
       const roleStr = newRole === "Admin" ? "admin" : (newRole === "System Admin" ? "system admin" : "employee");
       const isPm = newRole === "Project Manager" || newRole === "Admin" || newRole === "System Admin";
       
-      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr);
+      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr, currentUser.companyId);
       showToast(`Employee ${newName} registered successfully.`, "success");
       setShowAddModal(false);
       
@@ -3905,7 +3907,8 @@ export default function AdminDashboard() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit User Modal */}
@@ -4195,7 +4198,8 @@ export default function AdminDashboard() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete User Confirm Modal */}
@@ -4236,7 +4240,8 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Paid Leave Confirm Modal */}
@@ -4277,7 +4282,8 @@ export default function AdminDashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── CHAT MONITOR TAB ─── */}

@@ -169,8 +169,8 @@ export const getDbType = () => dbType;
 /**
  * Register a new user
  */
-export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "") => {
-  const role = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : "user";
+export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "") => {
+  const finalRole = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : role;
   
   if (dbType === "firebase") {
     let userCredential;
@@ -192,8 +192,8 @@ export const registerUser = async (name, department, programType, email, passwor
     }
     
     // Resolve companySlug to companyId AFTER auth is established
-    let finalCompanyId = "";
-    if (companySlug) {
+    let finalCompanyId = companyId || "";
+    if (!finalCompanyId && companySlug) {
       try {
         const company = await getCompanyBySlug(companySlug);
         if (company) {
@@ -211,7 +211,7 @@ export const registerUser = async (name, department, programType, email, passwor
       department,
       programType,
       email: email.toLowerCase(),
-      role,
+      role: finalRole,
       shiftStart,
       shiftEnd,
       annualLeaves: Number(annualLeaves),
@@ -244,7 +244,7 @@ export const registerUser = async (name, department, programType, email, passwor
       department,
       programType,
       email: email.toLowerCase(),
-      role,
+      role: finalRole,
       shiftStart,
       shiftEnd,
       annualLeaves: Number(annualLeaves),
@@ -1870,18 +1870,56 @@ export const sendChatMessage = async (threadId, threadType, senderId, senderName
     companyId: companyId || ""
   };
 
+  let createdMsg;
   if (dbType === "firebase") {
     const docRef = await addDoc(collection(db, "messages"), msg);
     await updateDoc(docRef, { id: docRef.id });
-    return { ...msg, id: docRef.id };
+    createdMsg = { ...msg, id: docRef.id };
   } else {
     const messages = getLocalMessages();
     messages.push(msg);
     saveLocalMessages(messages);
     notifyMessageListeners(threadId);
     notifyAllMessagesListeners();
-    return msg;
+    createdMsg = msg;
   }
+
+  // Trigger system notification
+  if (threadType === "dm") {
+    try {
+      let otherId = null;
+      if (dbType === "firebase") {
+        const threadSnap = await getDoc(doc(db, "dm_threads", threadId));
+        if (threadSnap.exists()) {
+          otherId = threadSnap.data().participantIds.find(id => id !== senderId);
+        }
+      } else {
+        const thread = getLocalDmThreads().find(t => t.id === threadId);
+        if (thread) otherId = thread.participantIds.find(id => id !== senderId);
+      }
+      if (otherId) {
+        createNotification(otherId, "New Message", `New message from ${senderName}`, "message", "/attendance/team-hub").catch(() => {});
+      }
+    } catch(e) {}
+  } else if (threadType === "channel") {
+    try {
+      let memberIds = [];
+      if (dbType === "firebase") {
+        const chSnap = await getDoc(doc(db, "channels", threadId));
+        if (chSnap.exists()) memberIds = chSnap.data().memberIds || [];
+      } else {
+        const ch = getLocalChannels().find(c => c.id === threadId);
+        if (ch) memberIds = ch.memberIds || [];
+      }
+      memberIds.forEach(mId => {
+        if (mId !== senderId) {
+          createNotification(mId, "New Channel Message", `New message in channel by ${senderName}`, "message", "/attendance/team-hub").catch(() => {});
+        }
+      });
+    } catch(e) {}
+  }
+
+  return createdMsg;
 };
 
 /**

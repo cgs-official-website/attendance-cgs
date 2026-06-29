@@ -839,7 +839,8 @@ export default function TeamHub() {
     try {
       const thread = await getOrCreateDmThread(
         currentUser.uid, targetUser.uid,
-        currentUser.name, targetUser.name
+        currentUser.name, targetUser.name,
+        currentUser.companyId
       );
       const otherId = thread.participantIds.find(id => id !== currentUser.uid);
       const otherName = thread.participantNames?.[otherId] || targetUser.name;
@@ -974,7 +975,13 @@ export default function TeamHub() {
                   <Plus size={13} /> New Direct Message
                 </button>
               </div>
-              {dmThreads.map(thread => {
+              {[...dmThreads].sort((a, b) => {
+                const aMsgs = allMessages.filter(m => m.threadId === a.id);
+                const bMsgs = allMessages.filter(m => m.threadId === b.id);
+                const aTime = aMsgs.length > 0 ? new Date(aMsgs[aMsgs.length - 1].timestamp).getTime() : 0;
+                const bTime = bMsgs.length > 0 ? new Date(bMsgs[bMsgs.length - 1].timestamp).getTime() : 0;
+                return bTime - aTime;
+              }).map(thread => {
                 const otherId = thread.participantIds.find(id => id !== currentUser.uid);
                 const otherName = thread.participantNames?.[otherId] || "Unknown";
                 const otherUser = allUsers.find(u => u.uid === otherId);

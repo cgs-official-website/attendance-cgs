@@ -478,7 +478,9 @@ export default function UserDashboard() {
   };
   const handleApplyLeave = async (e) => {
     e.preventDefault();
-    if (!leaveType || !startDate || !endDate || !leaveReason) {
+    const finalEndDate = endDate || startDate;
+
+    if (!leaveType || !startDate || !finalEndDate || !leaveReason) {
       return showToast("Please fill in all leave request fields.", "warning");
     }
 
@@ -487,7 +489,7 @@ export default function UserDashboard() {
 
     const startD = new Date(startDate);
     startD.setHours(0, 0, 0, 0);
-    const endD = new Date(endDate);
+    const endD = new Date(finalEndDate);
     endD.setHours(0, 0, 0, 0);
 
     const todayDateObj = new Date(todayString);
@@ -537,10 +539,11 @@ export default function UserDashboard() {
         leaveType,
         durationStr,
         startDate,
-        endDate,
+        finalEndDate,
         leaveReason,
         null,
-        isEmergency
+        isEmergency,
+        currentUser.companyId
       );
       showToast("Leave request submitted successfully.", "success");
       setLeaveType("Annual Leave");

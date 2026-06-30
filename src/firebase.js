@@ -1737,6 +1737,15 @@ const saveLocalDmThreads = (threads) => {
   localStorage.setItem("att_dm_threads", JSON.stringify(threads));
 };
 
+const getLocalCompanies = () => {
+  const raw = localStorage.getItem("att_companies");
+  return raw ? JSON.parse(raw) : [];
+};
+
+const saveLocalCompanies = (companies) => {
+  localStorage.setItem("att_companies", JSON.stringify(companies));
+};
+
 // Seed on load
 if (dbType === "local") {
   getLocalChannels();
@@ -2506,6 +2515,31 @@ export const getCompanies = async () => {
     return snap.docs.map(d => d.data());
   } else {
     return getLocalCompanies();
+  }
+};
+
+export const listenToCompany = (companyId, callback) => {
+  let actualCompanyId = companyId;
+  if (typeof companyId === 'object' && companyId !== null) {
+    actualCompanyId = companyId.id;
+  }
+  if (!actualCompanyId || typeof actualCompanyId !== 'string') return () => {};
+  
+  if (dbType === "firebase") {
+    return onSnapshot(doc(db, "companies", actualCompanyId), (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data());
+      }
+    });
+  } else {
+    const interval = setInterval(() => {
+      const companies = getLocalCompanies();
+      const found = companies.find(c => c.id === actualCompanyId);
+      if (found) {
+        callback(found);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
   }
 };
 

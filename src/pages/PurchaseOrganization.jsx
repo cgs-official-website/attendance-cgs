@@ -52,13 +52,17 @@ export default function PurchaseOrganization() {
       const slug = orgName.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-');
 
       // 3. Create the Company with metadata and pending status
-      const companyId = await createCompany(orgName, slug, userObj.uid, {
+      const company = await createCompany({
+        name: orgName,
+        slug,
+        adminId: userObj.uid,
         serviceType,
         orgSize,
         ceoName,
         gstNumber,
         status: "pending"
       });
+      const companyId = company.id;
 
       // 4. Update the Admin User to belong to this new company
       await assignCompanyToUser(userObj.uid, companyId);

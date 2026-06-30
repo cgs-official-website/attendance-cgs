@@ -29,10 +29,13 @@ export default function Profile() {
   const [orgLoading, setOrgLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Gracefully handle corrupted companyId object
+  const actualCompanyId = typeof currentUser?.companyId === 'object' ? currentUser.companyId?.id : currentUser?.companyId;
+
   React.useEffect(() => {
-    if (isAdmin && currentUser?.companyId) {
+    if (isAdmin && actualCompanyId) {
       getCompanies().then(comps => {
-        const found = comps.find(c => c.id === currentUser.companyId);
+        const found = comps.find(c => c.id === actualCompanyId);
         if (found) {
           setAdminCompany(found);
           setOrgName(found.name || "");
@@ -40,7 +43,7 @@ export default function Profile() {
         }
       }).catch(console.error);
     }
-  }, [isAdmin, currentUser]);
+  }, [isAdmin, currentUser, actualCompanyId]);
 
   const handleDeleteWorkspace = async () => {
     if (!currentUser?.companyId) return;

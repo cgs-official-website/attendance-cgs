@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData } from "../firebase";
+import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData, deleteCompany } from "../firebase";
 import { useToast } from "../context/ToastContext";
-import { Building2, Plus, Users, ShieldAlert, Link, X, CheckSquare, Calendar as CalendarIcon, Download, FileText } from "lucide-react";
+import { useModal } from "../context/ModalContext";
+import { Building2, Plus, Users, ShieldAlert, Link, X, CheckSquare, Calendar as CalendarIcon, Download, FileText, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
@@ -10,6 +11,7 @@ export default function SuperAdminDashboard() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
+  const { showConfirm } = useModal();
   
   const [showModal, setShowModal] = useState(false);
   const [newCompany, setNewCompany] = useState({ name: "", slug: "", adminEmail: "", adminPassword: "", adminName: "" });
@@ -19,6 +21,10 @@ export default function SuperAdminDashboard() {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [companyStats, setCompanyStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  const totalOrgs = companies.length;
+  const pendingCount = companies.filter(c => c.status === "pending").length;
+  const activeCount = companies.filter(c => c.status === "active").length;
 
   useEffect(() => {
     fetchCompanies();
@@ -59,12 +65,30 @@ export default function SuperAdminDashboard() {
   const handleStatusChange = async (companyId, newStatus) => {
     try {
       await updateCompanyStatus(companyId, newStatus);
-      showToast(`Company status updated to ${newStatus}`, "success");
-      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, status: newStatus } : c));
-      setSelectedCompany(prev => ({ ...prev, status: newStatus }));
-    } catch (err) {
+      showToast(`Status updated to ${newStatus}`, "success");
+      fetchCompanies();
+      setSelectedCompany(prev => ({...prev, status: newStatus}));
+    } catch (error) {
       showToast("Failed to update status", "error");
     }
+  };
+
+  const handleDeleteCompany = (companyId) => {
+    showConfirm(
+      "Delete Organization", 
+      "Are you sure you want to permanently delete this organization? This action cannot be undone.", 
+      async () => {
+        try {
+          await deleteCompany(companyId);
+          showToast("Organization deleted successfully", "success");
+          setSelectedCompany(null);
+          fetchCompanies();
+        } catch (error) {
+          showToast("Failed to delete organization", "error");
+        }
+      },
+      { confirmText: "Delete", cancelText: "Cancel" }
+    );
   };
 
   const handleGenerateInvoice = () => {
@@ -223,7 +247,12 @@ export default function SuperAdminDashboard() {
     setSubmitting(true);
     try {
       // 1. Create company first to get ID
-      const companyId = await createCompany(newCompany.name, newCompany.slug, "pending");
+      const company = await createCompany({
+        name: newCompany.name,
+        slug: newCompany.slug,
+        status: "pending"
+      });
+      const companyId = company.id;
       
       // 2. Register Admin for this company
       const adminUser = await registerUser(
@@ -233,7 +262,7 @@ export default function SuperAdminDashboard() {
         newCompany.adminEmail, 
         newCompany.adminPassword,
         "09:00", "18:00", 25, 10, 6, "", "", [], [], "Full-time", "Company Admin", false, "ADMIN-01",
-        companyId
+        "", "admin", companyId
       );
       
       showToast("Company & Admin provisioned successfully!", "success");
@@ -279,6 +308,39 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-bg-card border border-border-card rounded-[20px] p-6 shadow-sm flex items-center justify-between relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-r from-brand-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="relative z-10">
+            <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">TOTAL ORGANIZATIONS</span>
+            <span className="text-3xl font-extrabold text-text-main block mt-1.5">{totalOrgs}</span>
+          </div>
+          <div className="w-12 h-12 rounded-[14px] bg-brand-primary/10 text-brand-primary flex items-center justify-center relative z-10">
+            <Building2 size={24} />
+          </div>
+        </div>
+        <div className="bg-bg-card border border-border-card rounded-[20px] p-6 shadow-sm flex items-center justify-between relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="relative z-10">
+            <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">PENDING APPROVAL</span>
+            <span className="text-3xl font-extrabold text-text-main block mt-1.5">{pendingCount}</span>
+          </div>
+          <div className="w-12 h-12 rounded-[14px] bg-amber-500/10 text-amber-500 flex items-center justify-center relative z-10">
+            <ShieldAlert size={24} />
+          </div>
+        </div>
+        <div className="bg-bg-card border border-border-card rounded-[20px] p-6 shadow-sm flex items-center justify-between relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="relative z-10">
+            <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">ACTIVE PLATFORMS</span>
+            <span className="text-3xl font-extrabold text-text-main block mt-1.5">{activeCount}</span>
+          </div>
+          <div className="w-12 h-12 rounded-[14px] bg-emerald-500/10 text-emerald-500 flex items-center justify-center relative z-10">
+            <CheckSquare size={24} />
+          </div>
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex justify-center p-12 text-text-mut">Loading companies...</div>
       ) : (
@@ -291,14 +353,21 @@ export default function SuperAdminDashboard() {
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-primary to-purple-500"></div>
               
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-brand-primary/10 rounded-[12px] flex items-center justify-center text-brand-primary shrink-0">
-                    <Building2 size={24} />
+                  <div className="w-14 h-14 bg-brand-primary/5 rounded-[14px] flex items-center justify-center text-brand-primary shrink-0 overflow-hidden shadow-inner border border-brand-primary/10">
+                    {company.logoBase64 ? (
+                      <img src={company.logoBase64} alt="Logo" className="w-full h-full object-contain bg-white p-1" onError={(e) => e.target.style.display='none'} />
+                    ) : (
+                      <span className="text-xl font-black">{company.name ? company.name.charAt(0).toUpperCase() : <Building2 size={24} />}</span>
+                    )}
                   </div>
-                  <h2 className="font-bold text-lg text-text-main leading-tight">{company.name}</h2>
+                  <div>
+                    <h2 className="font-bold text-lg text-text-main leading-tight line-clamp-1" title={company.name}>{company.name}</h2>
+                    <p className="text-xs text-text-mut mt-1 font-medium">{company.serviceType || "Enterprise Workspace"}</p>
+                  </div>
                 </div>
-                <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${company.status === "pending" ? "text-amber-500 bg-amber-500/10" : "text-emerald-500 bg-emerald-500/10"}`}>
+                <span className={`shrink-0 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm border ${company.status === "pending" ? "text-amber-500 bg-amber-500/10 border-amber-500/20" : "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"}`}>
                   {company.status}
                 </span>
               </div>
@@ -504,6 +573,16 @@ export default function SuperAdminDashboard() {
                       <option value="deactive">Deactive</option>
                     </select>
                   </div>
+                </div>
+                
+                <div className="mt-6 pt-4 border-t border-red-500/10">
+                  <button 
+                    onClick={() => handleDeleteCompany(selectedCompany.id)}
+                    className="w-full py-2.5 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 font-bold rounded-[12px] transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+                  >
+                    <Trash2 size={16} />
+                    Delete Organization
+                  </button>
                 </div>
               </div>
             </div>

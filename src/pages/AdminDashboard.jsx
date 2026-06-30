@@ -578,7 +578,7 @@ export default function AdminDashboard() {
         }
       }
     });
-    return count || 5; // Fallback to 5 for visual fidelity in mockup
+    return count;
   };
 
   const lateArrivalsCount = getLateArrivalsCount();
@@ -2014,7 +2014,7 @@ export default function AdminDashboard() {
                 <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">TOTAL EMPLOYEES</span>
                 <span className="text-3xl font-extrabold text-text-main block mt-1.5">{totalRegistered}</span>
               </div>
-              <span className="bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full text-[9px] font-bold">+12 this month</span>
+              <span className="bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full text-[9px] font-bold">Total</span>
             </div>
 
             <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm">
@@ -2022,7 +2022,7 @@ export default function AdminDashboard() {
                 <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">PRESENT TODAY</span>
                 <span className="text-3xl font-extrabold text-text-main block mt-1.5">{presentCount}</span>
               </div>
-              <span className="bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full text-[9px] font-bold">94% Active</span>
+              <span className="bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full text-[9px] font-bold">{Math.round((presentCount / (totalRegistered || 1)) * 100)}% Active</span>
             </div>
 
             <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm">
@@ -2030,15 +2030,15 @@ export default function AdminDashboard() {
                 <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">LATE ARRIVALS</span>
                 <span className="text-3xl font-extrabold text-text-main block mt-1.5">{lateArrivalsCount}</span>
               </div>
-              <span className="bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full text-[9px] font-bold">5% Late</span>
+              <span className="bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full text-[9px] font-bold">{Math.round((lateArrivalsCount / (presentCount || 1)) * 100)}% Late</span>
             </div>
 
             <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm">
               <div>
                 <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">OFFLINE</span>
-                <span className="text-3xl font-extrabold text-text-main block mt-1.5">3</span>
+                <span className="text-3xl font-extrabold text-text-main block mt-1.5">{absentCount}</span>
               </div>
-              <span className="bg-slate-200 dark:bg-slate-800 text-text-sec px-2 py-0.5 rounded-full text-[9px] font-bold">12 Pending</span>
+              <span className="bg-slate-200 dark:bg-slate-800 text-text-sec px-2 py-0.5 rounded-full text-[9px] font-bold">{Math.round((absentCount / (totalRegistered || 1)) * 100)}% Offline</span>
             </div>
           </div>
 

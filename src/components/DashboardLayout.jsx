@@ -29,7 +29,9 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   Briefcase,
   CheckSquare,
   RefreshCw,
-  Lock
+  Lock,
+  Info,
+  Building2
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -45,6 +47,7 @@ import {
   createNotification,
   updateTaskWarningSent,
   getCompanies,
+  listenToCompany,
   subscribeToRegularizationRequests
 } from "../firebase";
 
@@ -136,29 +139,33 @@ export default function DashboardLayout({ children }) {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const [newUpdatesCount, setNewUpdatesCount] = useState(0);
   const [systemNotifications, setSystemNotifications] = useState([]);
-  const [companyStatus, setCompanyStatus] = useState("active");
+  const [companyStatus, setCompanyStatus] = useState("loading");
   const [companyName, setCompanyName] = useState("");
   const [companyLogo, setCompanyLogo] = useState("");
 
   useEffect(() => {
+    let unsubscribe = () => {};
+
     if (currentUser?.companyId) {
-      getCompanies().then(comps => {
-        const found = comps.find(c => c.id === currentUser.companyId);
-        if (found) {
-          document.title = found.name;
-          setCompanyName(found.name || "");
-          setCompanyLogo(found.logoBase64 || "");
-          setCompanyStatus(found.status || "active");
+      unsubscribe = listenToCompany(currentUser.companyId, (companyData) => {
+        if (companyData) {
+          document.title = companyData.name;
+          setCompanyName(companyData.name || "");
+          setCompanyLogo(companyData.logoBase64 || "");
+          setCompanyStatus(companyData.status || "active");
         } else {
           document.title = "Zuna | HRMS";
+          setCompanyStatus("active");
         }
-      }).catch(console.error);
-    } else {
+      });
+    } else if (currentUser) {
       document.title = "Zuna | HRMS";
+      setCompanyStatus(isSuperAdmin ? "active" : "no_workspace");
     }
     
     return () => {
       document.title = "Zuna | HRMS";
+      unsubscribe();
     };
   }, [currentUser]);
 
@@ -385,6 +392,13 @@ export default function DashboardLayout({ children }) {
     if (notif.link) {
       navigate(notif.link);
       setShowNotifications(false);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const unreadSystem = systemNotifications.filter(n => !n.read);
+    for (const notif of unreadSystem) {
+      await markNotificationRead(notif.id);
     }
   };
 
@@ -636,6 +650,37 @@ export default function DashboardLayout({ children }) {
     }
   ];
 
+  if (companyStatus === "no_workspace" && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen w-full bg-bg-base flex flex-col items-center justify-center p-6 relative overflow-hidden animate-fade-in text-center">
+        <div className="max-w-[460px] bg-bg-card border border-border-card rounded-[24px] p-10 shadow-2xl relative z-10">
+          <div className="w-20 h-20 bg-gray-500/10 text-gray-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-gray-500/20">
+            <Building2 size={36} />
+          </div>
+          <h1 className="text-3xl font-extrabold text-text-main mb-3">No Workspace Found</h1>
+          <p className="text-sm text-text-sec leading-relaxed mb-8">
+            Your account is not linked to any organization workspace. If you just tried to register, the registration might have failed.
+          </p>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-3 bg-bg-base hover:bg-border-card text-text-main font-bold text-sm rounded-[12px] border border-border-card transition-all flex items-center justify-center gap-2"
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (companyStatus === "loading") {
+    return (
+      <div className="min-h-screen w-full bg-bg-base flex flex-col items-center justify-center p-6 text-brand-primary">
+        <RefreshCw className="animate-spin mb-4" size={32} />
+        <p className="text-text-mut font-bold">Verifying workspace...</p>
+      </div>
+    );
+  }
+
   if (companyStatus === "pending" && !isSuperAdmin) {
     return (
       <div className="min-h-screen w-full bg-bg-base flex flex-col items-center justify-center p-6 relative overflow-hidden animate-fade-in text-center">
@@ -651,13 +696,20 @@ export default function DashboardLayout({ children }) {
           <p className="text-sm text-text-sec leading-relaxed mb-8">
             Your organization workspace has been registered successfully. However, your module is currently frozen pending review by the global system administrator.
           </p>
-          <div className="p-4 bg-bg-base/50 rounded-[12px] border border-border-card text-left mb-8">
+          <div className="p-4 bg-bg-base/50 rounded-[12px] border border-border-card text-left mb-6">
             <h3 className="text-[11px] font-bold text-text-mut uppercase tracking-wider mb-2">What happens next?</h3>
             <ul className="text-xs text-text-sec space-y-2 list-disc pl-4">
-              <li>Our team is reviewing your registration details.</li>
+              <li>Our team is reviewing the details for <strong>{companyName || "your organization"}</strong>.</li>
               <li>Once approved, this portal will automatically unlock.</li>
               <li>You will gain access to all management and employee onboarding tools.</li>
             </ul>
+          </div>
+          <div className="flex items-start gap-3 p-4 bg-blue-500/10 rounded-[12px] border border-blue-500/20 text-left mb-8">
+            <Info size={20} className="text-blue-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold text-blue-500 mb-1">Need Urgent Access?</h4>
+              <p className="text-xs text-blue-500/80">If you require immediate approval, please contact the global system administrator at <strong>admin@teamcarrezza.com</strong> with your organization name.</p>
+            </div>
           </div>
           <button 
             onClick={handleLogout}
@@ -710,19 +762,23 @@ export default function DashboardLayout({ children }) {
         {/* Small business branding card */}
         {!isSuperAdmin && (
           <div className="mx-4 my-4 p-3 bg-brand-primary/5 rounded-[12px] border border-brand-primary/10 flex items-center gap-3">
-            <img
-              src={companyLogo || "/logo.png"}
-              alt="Logo"
-              className="w-10 h-10 rounded-[10px] object-contain bg-white p-1.5 shadow-sm"
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
-            />
-            <div className="flex flex-col text-left">
-              <span className="font-bold text-[11px] leading-tight text-text-main">
-                {companyName || "Organization"}
-              </span>
-              <span className="text-[9px] font-black tracking-widest uppercase text-text-mut mt-1">ATTENDANCE SYSTEM</span>
+            {companyLogo ? (
+              <img
+                src={companyLogo}
+                alt="Logo"
+                className="w-10 h-10 rounded-[10px] object-contain bg-white p-1.5 shadow-sm"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-[10px] bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center text-brand-primary font-black text-lg shadow-sm">
+                {companyName ? companyName.charAt(0).toUpperCase() : <Building2 size={18} />}
+              </div>
+            )}
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-black text-text-main truncate" title={companyName}>{companyName || "Organization"}</p>
+              <p className="text-[10px] font-bold text-text-mut uppercase tracking-wider truncate border border-brand-primary/20 bg-brand-primary/10 rounded-full px-2 py-0.5 mt-1 inline-block">Workspace</p>
             </div>
           </div>
         )}
@@ -888,9 +944,17 @@ export default function DashboardLayout({ children }) {
                       <span className="font-extrabold text-xs text-text-main uppercase tracking-wider"><Bell size={14} className='inline-block mr-1' /> Notifications</span>
                       <div className="flex items-center gap-2">
                         {totalUnreadCount > 0 && (
-                          <span className="bg-brand-primary text-white px-2 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
-                            {totalUnreadCount} New
-                          </span>
+                          <>
+                            <span className="bg-brand-primary text-white px-2 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
+                              {totalUnreadCount} New
+                            </span>
+                            <button 
+                              onClick={handleMarkAllAsRead}
+                              className="text-[10px] text-brand-primary hover:underline font-bold bg-brand-primary/10 px-2 py-0.5 rounded cursor-pointer"
+                            >
+                              Mark all as read
+                            </button>
+                          </>
                         )}
                         <button onClick={() => setShowNotifications(false)} className="text-text-mut hover:text-text-main transition-colors cursor-pointer flex items-center justify-center p-0.5" title="Close notifications">
                           <X size={16} />
@@ -920,7 +984,16 @@ export default function DashboardLayout({ children }) {
                                 <div className="flex justify-between items-center">
                                   <span className="font-extrabold text-text-main truncate max-w-[150px]">{item.title}</span>
                                   {!item.read && (
-                                    <span className="bg-brand-primary text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">NEW</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="bg-brand-primary text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">NEW</span>
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); markNotificationRead(item.id); }}
+                                        className="p-1 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer"
+                                        title="Mark as read"
+                                      >
+                                        <Check size={12} />
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                                 <p className="text-[10px] text-text-sec">{item.message}</p>
@@ -950,8 +1023,13 @@ export default function DashboardLayout({ children }) {
 
                             return (
                               <div 
-                                key={req.id} 
-                                className={`p-2.5 rounded-[12px] border text-xs flex flex-col gap-1 transition-all ${
+                                key={req.id}
+                                onClick={() => {
+                                  if (currentUser?.role === "admin") navigate("/admin");
+                                  else navigate("/history");
+                                  setShowNotifications(false);
+                                }}
+                                className={`p-2.5 rounded-[12px] border text-xs flex flex-col gap-1 transition-all cursor-pointer hover:bg-bg-base/40 ${
                                   isNewUpdate 
                                     ? "bg-brand-primary/10 border-brand-primary/20 shadow-sm" 
                                     : "bg-bg-base/30 border-border-card"

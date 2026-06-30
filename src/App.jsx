@@ -38,7 +38,8 @@ function AdminRoute({ children }) {
   const isAdminRole = 
     currentUser.role === "admin" || 
     currentUser.role === "system admin" || 
-    currentUser.role === "systemadmin";
+    currentUser.role === "systemadmin" ||
+    (currentUser.designation || "").toLowerCase().includes("system admin");
   
   if (!isAdminRole) {
     return <Navigate to="/dashboard" replace />;
@@ -73,7 +74,8 @@ function PublicRoute({ children }) {
     const isAdminRole = 
       currentUser.role === "admin" || 
       currentUser.role === "system admin" || 
-      currentUser.role === "systemadmin";
+      currentUser.role === "systemadmin" ||
+      (currentUser.designation || "").toLowerCase().includes("system admin");
       
     if (isAdminRole) {
       return <Navigate to="/admin" replace />;

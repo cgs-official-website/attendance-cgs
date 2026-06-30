@@ -701,14 +701,18 @@ export default function AdminDashboard() {
       return true;
     }
     
+    // System Admins can edit assets globally
+    if ((currentUser.name || "").toLowerCase().includes("system admin") || currentUser.role === "admin") {
+      return true;
+    }
+    
     // If the asset has an assigning authority set:
     if (asset.assigningAuthorityId) {
-      // Only that system admin can edit it, along with the super admin.
+      // Only that specific authority can edit it, along with the admins above.
       return currentUser.uid === asset.assigningAuthorityId;
     }
     
-    // If no assigning authority is set, any admin role can edit.
-    return currentUser.role === "admin";
+    return false;
   };
 
   const handleOpenAddAssetModal = () => {
@@ -1723,60 +1727,64 @@ export default function AdminDashboard() {
 
           {/* Stats Widgets */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm relative overflow-hidden">
-              <div className="flex items-center gap-4">
+            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex flex-col justify-between shadow-sm min-h-[130px]">
+              <div className="flex items-start justify-between w-full">
                 <div className="w-12 h-12 rounded-[14px] bg-brand-primary/10 text-brand-primary flex items-center justify-center">
                   <Users size={22} />
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">TOTAL EMPLOYEES</span>
-                  <span className="text-3xl font-extrabold text-text-main block mt-0.5">{totalRegistered}</span>
-                </div>
+                <span className="bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                  +2%
+                </span>
               </div>
-              <span className="absolute top-4 right-4 bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full text-[9px] font-bold">
-                +2%
-              </span>
+              <div className="mt-4">
+                <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">TOTAL EMPLOYEES</span>
+                <span className="text-3xl font-extrabold text-text-main block mt-1">{totalRegistered}</span>
+              </div>
             </div>
 
-            <div className="bg-bg-card border-l-4 border-brand-primary border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-4">
+            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex flex-col justify-between shadow-sm min-h-[130px] border-l-4 border-l-brand-primary">
+              <div className="flex items-start justify-between w-full">
                 <div className="w-12 h-12 rounded-[14px] bg-brand-primary/10 text-brand-primary flex items-center justify-center">
                   <Users size={22} />
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">CURRENTLY PRESENT</span>
-                  <span className="text-3xl font-extrabold text-text-main block mt-0.5">{presentCount}</span>
-                </div>
+                <span className="bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full text-[10px] font-bold">
+                  92% Active
+                </span>
               </div>
-              <span className="text-[10px] font-bold text-brand-primary">92% Active</span>
+              <div className="mt-4">
+                <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">CURRENTLY PRESENT</span>
+                <span className="text-3xl font-extrabold text-text-main block mt-1">{presentCount}</span>
+              </div>
             </div>
 
-            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm relative overflow-hidden">
-              <div className="flex items-center gap-4">
+            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex flex-col justify-between shadow-sm min-h-[130px]">
+              <div className="flex items-start justify-between w-full">
                 <div className="w-12 h-12 rounded-[14px] bg-brand-warning/10 text-brand-warning flex items-center justify-center">
                   <Clock size={22} />
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">LATE ARRIVALS</span>
-                  <span className="text-3xl font-extrabold text-text-main block mt-0.5">{lateArrivalsCount}</span>
-                </div>
+                <span className="bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                  +5 from yesterday
+                </span>
               </div>
-              <span className="absolute top-4 right-4 bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full text-[9px] font-bold">
-                +5 from yesterday
-              </span>
+              <div className="mt-4">
+                <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">LATE ARRIVALS</span>
+                <span className="text-3xl font-extrabold text-text-main block mt-1">{lateArrivalsCount}</span>
+              </div>
             </div>
 
-            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-4">
+            <div className="bg-bg-card border border-border-card rounded-[20px] p-5 flex flex-col justify-between shadow-sm min-h-[130px]">
+              <div className="flex items-start justify-between w-full">
                 <div className="w-12 h-12 rounded-[14px] bg-brand-danger/10 text-brand-danger flex items-center justify-center">
                   <AlertCircle size={22} />
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">ABSENT</span>
-                  <span className="text-3xl font-extrabold text-text-main block mt-0.5">{absentCount}</span>
-                </div>
+                <span className="bg-slate-500/10 text-text-sec px-2.5 py-1 rounded-full text-[10px] font-bold">
+                  Leave: 42
+                </span>
               </div>
-              <span className="text-[10px] font-semibold text-text-sec">Scheduled Leave: 42</span>
+              <div className="mt-4">
+                <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">ABSENT</span>
+                <span className="text-3xl font-extrabold text-text-main block mt-1">{absentCount}</span>
+              </div>
             </div>
           </div>
 
@@ -4544,6 +4552,8 @@ export default function AdminDashboard() {
         const paginatedAssets = filteredAssets.slice(assetsStartIndex, assetsStartIndex + assetsPerPage);
         const assetsTotalPages = Math.ceil(filteredAssets.length / assetsPerPage) || 1;
 
+        const canManageAssetsGlobal = currentUser?.role === "admin" || currentUser?.role === "superadmin" || (currentUser?.name || "").toLowerCase().includes("super admin") || (currentUser?.name || "").toLowerCase().includes("system admin");
+
         return (
           <div className="animate-fade-in space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2 text-left">
@@ -4566,20 +4576,24 @@ export default function AdminDashboard() {
                   <FileText size={14} /> 
                   <span>PDF</span>
                 </button>
-                <button
-                  onClick={handleOpenAssignAssetsModal}
-                  className="py-2.5 px-4 bg-bg-card border border-border-card text-text-sec hover:text-text-main text-xs font-bold rounded-[12px] transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <UserPlus size={16} />
-                  <span>Assign Assets</span>
-                </button>
-                <button
-                  onClick={handleOpenAddAssetModal}
-                  className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus size={16} />
-                  <span>Add Asset</span>
-                </button>
+                {canManageAssetsGlobal && (
+                  <>
+                    <button
+                      onClick={handleOpenAssignAssetsModal}
+                      className="py-2.5 px-4 bg-bg-card border border-border-card text-text-sec hover:text-text-main text-xs font-bold rounded-[12px] transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserPlus size={16} />
+                      <span>Assign Assets</span>
+                    </button>
+                    <button
+                      onClick={handleOpenAddAssetModal}
+                      className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={16} />
+                      <span>Add Asset</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 

@@ -492,7 +492,7 @@ export default function DashboardLayout({ children }) {
     }
   };
 
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "System Admin" || currentUser?.role === "systemadmin" || (currentUser?.designation || "").toLowerCase().includes("system admin");
   const isSuperAdmin = currentUser?.role === "superadmin";
   const activeTabParam = searchParams.get("tab") || "live";
 

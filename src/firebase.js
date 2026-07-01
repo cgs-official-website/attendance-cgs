@@ -2563,7 +2563,46 @@ export const createCompany = async (companyData) => {
   return company;
 };
 
-export const getCompanyStats = async () => {
+export const getCompanyStats = async (companyId = null) => {
+  if (companyId) {
+    if (dbType === "firebase") {
+      let usersCount = 0;
+      let tasksCount = 0;
+      let attCount = 0;
+      
+      try {
+        const usersSnap = await getDocs(query(collection(db, "users"), where("companyId", "==", companyId)));
+        usersCount = usersSnap.size;
+        
+        const tasksSnap = await getDocs(query(collection(db, "tasks"), where("companyId", "==", companyId)));
+        tasksCount = tasksSnap.docs.filter(d => d.data().status !== "Completed").length;
+        
+        const attSnap = await getDocs(query(collection(db, "attendanceLogs"), where("companyId", "==", companyId)));
+        attCount = attSnap.size;
+      } catch (err) {
+        console.error("Error fetching specific company stats", err);
+      }
+      
+      return {
+        totalUsers: usersCount,
+        totalTasks: tasksCount,
+        totalAttendance: attCount
+      };
+    } else {
+      const users = (typeof getLocalUsers === 'function' ? getLocalUsers() : (localDb.getUsers ? localDb.getUsers() : [])).filter(u => u.companyId === companyId);
+      const tasksStr = localStorage.getItem("att_tasks");
+      const tasks = tasksStr ? JSON.parse(tasksStr).filter(t => t.companyId === companyId && t.status !== "Completed") : [];
+      const logsStr = localStorage.getItem("att_attendanceLogs");
+      const logs = logsStr ? JSON.parse(logsStr).filter(l => l.companyId === companyId) : [];
+      
+      return {
+        totalUsers: users.length,
+        totalTasks: tasks.length,
+        totalAttendance: logs.length
+      };
+    }
+  }
+
   const companies = await getCompanies();
   return {
     total: companies.length,

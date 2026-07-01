@@ -479,8 +479,12 @@ export default function SuperAdminDashboard() {
             </button>
             
             <div className="flex items-center gap-4 mb-8 border-b border-border-card pb-6">
-              <div className="w-16 h-16 bg-brand-primary/10 rounded-[16px] flex items-center justify-center text-brand-primary">
-                <Building2 size={32} />
+              <div className="w-16 h-16 bg-brand-primary/10 rounded-[16px] flex items-center justify-center text-brand-primary shrink-0 overflow-hidden shadow-inner border border-brand-primary/10">
+                {selectedCompany.logoBase64 ? (
+                  <img src={selectedCompany.logoBase64} alt="Logo" className="w-full h-full object-contain bg-white p-1" onError={(e) => e.target.style.display='none'} />
+                ) : (
+                  <span className="text-2xl font-black">{selectedCompany.name ? selectedCompany.name.charAt(0).toUpperCase() : <Building2 size={32} />}</span>
+                )}
               </div>
               <div>
                 <h2 className="text-2xl font-black text-text-main">{selectedCompany.name}</h2>
@@ -498,39 +502,15 @@ export default function SuperAdminDashboard() {
                 <div className="w-8 h-8 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin"></div>
               </div>
             ) : companyStats ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="bg-bg-base/50 border border-border-card rounded-[20px] p-6 text-center shadow-lg relative overflow-hidden">
-                  <div className="absolute -top-4 -right-4 text-brand-primary/5">
-                    <Users size={80} />
-                  </div>
-                  <div className="w-12 h-12 mx-auto bg-brand-primary/10 text-brand-primary rounded-full flex items-center justify-center mb-3">
-                    <Users size={24} />
-                  </div>
-                  <h3 className="text-3xl font-black text-text-main">{companyStats.totalUsers}</h3>
-                  <p className="text-xs font-bold uppercase tracking-wider text-text-mut mt-1">Total Users</p>
+              <div className="bg-gradient-to-br from-brand-primary/10 to-transparent border border-brand-primary/20 rounded-[20px] p-8 text-center shadow-lg relative overflow-hidden flex flex-col items-center justify-center">
+                <div className="absolute -top-10 -right-10 text-brand-primary/5">
+                  <Users size={160} />
                 </div>
-                
-                <div className="bg-bg-base/50 border border-border-card rounded-[20px] p-6 text-center shadow-lg relative overflow-hidden">
-                  <div className="absolute -top-4 -right-4 text-amber-500/5">
-                    <CheckSquare size={80} />
-                  </div>
-                  <div className="w-12 h-12 mx-auto bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mb-3">
-                    <CheckSquare size={24} />
-                  </div>
-                  <h3 className="text-3xl font-black text-text-main">{companyStats.totalTasks}</h3>
-                  <p className="text-xs font-bold uppercase tracking-wider text-text-mut mt-1">Active Tasks</p>
+                <div className="w-16 h-16 bg-brand-primary/10 text-brand-primary rounded-full flex items-center justify-center mb-4 relative z-10">
+                  <Users size={32} />
                 </div>
-
-                <div className="bg-bg-base/50 border border-border-card rounded-[20px] p-6 text-center shadow-lg relative overflow-hidden">
-                  <div className="absolute -top-4 -right-4 text-emerald-500/5">
-                    <CalendarIcon size={80} />
-                  </div>
-                  <div className="w-12 h-12 mx-auto bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mb-3">
-                    <CalendarIcon size={24} />
-                  </div>
-                  <h3 className="text-3xl font-black text-text-main">{companyStats.totalAttendance}</h3>
-                  <p className="text-xs font-bold uppercase tracking-wider text-text-mut mt-1">Attendance Logs</p>
-                </div>
+                <h3 className="text-5xl font-black text-text-main relative z-10">{companyStats.totalUsers}</h3>
+                <p className="text-sm font-bold uppercase tracking-widest text-brand-primary mt-2 relative z-10">Total Active Users</p>
               </div>
             ) : (
               <div className="text-center text-text-mut py-8 font-semibold">Stats unavailable.</div>
@@ -560,6 +540,32 @@ export default function SuperAdminDashboard() {
                   <span className="text-text-mut font-semibold">Created Date</span>
                   <span className="text-text-main font-semibold text-xs">{new Date(selectedCompany.createdAt).toLocaleString()}</span>
                 </div>
+                
+                {selectedCompany.serviceType && (
+                  <div className="flex justify-between items-center text-sm border-t border-border-card pt-3 mt-3">
+                    <span className="text-text-mut font-semibold">Service Type</span>
+                    <span className="text-text-main font-semibold text-xs">{selectedCompany.serviceType}</span>
+                  </div>
+                )}
+                {selectedCompany.orgSize && (
+                  <div className="flex justify-between items-center text-sm mt-2">
+                    <span className="text-text-mut font-semibold">Organization Size</span>
+                    <span className="text-text-main font-semibold text-xs">{selectedCompany.orgSize}</span>
+                  </div>
+                )}
+                {selectedCompany.ceoName && (
+                  <div className="flex justify-between items-center text-sm mt-2">
+                    <span className="text-text-mut font-semibold">CEO / Director</span>
+                    <span className="text-text-main font-semibold text-xs">{selectedCompany.ceoName}</span>
+                  </div>
+                )}
+                {selectedCompany.gstNumber && (
+                  <div className="flex justify-between items-center text-sm mt-2">
+                    <span className="text-text-mut font-semibold">GST Number</span>
+                    <span className="font-mono text-xs bg-bg-card px-2 py-1 rounded text-text-sec">{selectedCompany.gstNumber}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center text-sm border-t border-border-card pt-3 mt-3">
                   <span className="text-text-mut font-semibold">Vendor Status</span>
                   <div className="flex items-center gap-2">

@@ -259,7 +259,7 @@ export const registerUser = async (name, department, programType, email, passwor
       designation,
       isProjectManager,
       employeeId,
-      companyId: companySlug ? (getLocalCompanies().find(c => c.slug === companySlug)?.id || "") : "",
+      companyId: companySlug ? (localDb.getCompanies ? localDb.getCompanies() : (typeof getLocalCompanies === 'function' ? getLocalCompanies() : [])).find(c => c.slug?.toLowerCase() === companySlug.toLowerCase())?.id || "" : "",
       password // storing hashed or plain in local storage for local verification
     };
     
@@ -1791,9 +1791,10 @@ export const createChannel = async (name, description, creatorId, creatorName, c
 export const subscribeToChannels = (companyId, callback) => {
   if (dbType === "firebase") {
     return onSnapshot(
-      query(collection(db, "channels"), where("companyId", "==", companyId || ""), orderBy("createdAt", "asc")),
+      query(collection(db, "channels"), where("companyId", "==", companyId || "")),
       (snapshot) => {
         const list = snapshot.docs.map(d => d.data());
+        list.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
         callback(list);
       }
     );
@@ -1939,11 +1940,10 @@ export const subscribeToMessages = (threadId, callback) => {
     return onSnapshot(
       query(
         collection(db, "messages"),
-        where("threadId", "==", threadId),
-        where("isDeleted", "==", false)
+        where("threadId", "==", threadId)
       ),
       (snapshot) => {
-        const msgs = snapshot.docs.map(d => d.data());
+        const msgs = snapshot.docs.map(d => d.data()).filter(m => m.isDeleted === false);
         msgs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
         callback(msgs);
       },
@@ -1986,11 +1986,10 @@ export const subscribeToAllMessages = (companyId, callback) => {
     return onSnapshot(
       query(
         collection(db, "messages"),
-        where("isDeleted", "==", false),
         where("companyId", "==", companyId || "")
       ),
       (snapshot) => {
-        const msgs = snapshot.docs.map(d => d.data());
+        const msgs = snapshot.docs.map(d => d.data()).filter(m => m.isDeleted === false);
         msgs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
         callback(msgs);
       },
@@ -2170,9 +2169,10 @@ export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName
 export const subscribeToDmThreads = (userId, companyId, callback) => {
   if (dbType === "firebase") {
     return onSnapshot(
-      query(collection(db, "dm_threads"), where("participantIds", "array-contains", userId), where("companyId", "==", companyId || "")),
+      query(collection(db, "dm_threads"), where("companyId", "==", companyId || "")),
       (snapshot) => {
-        callback(snapshot.docs.map(d => d.data()));
+        const list = snapshot.docs.map(d => d.data()).filter(t => t.participantIds && t.participantIds.includes(userId));
+        callback(list);
       }
     );
   } else {
@@ -2585,8 +2585,9 @@ export const autoMigrateFirebase = async () => {
 };
 
 export const getCompanyBySlug = async (slug) => {
+  if (!slug) return null;
   const companies = await getCompanies();
-  return companies.find(c => c.slug === slug);
+  return companies.find(c => c.slug?.toLowerCase() === slug.toLowerCase());
 };
 
 export const assignCompanyToUser = async (userId, companyId) => {

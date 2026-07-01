@@ -42,6 +42,8 @@ import {
   subscribeToLeaveRequests,
   subscribeToAttendanceRules,
   subscribeToAllMessages,
+  subscribeToChannels,
+  subscribeToDmThreads,
   subscribeToNotifications,
   markNotificationRead,
   createNotification,
@@ -142,6 +144,8 @@ export default function DashboardLayout({ children }) {
   const [companyStatus, setCompanyStatus] = useState("loading");
   const [companyName, setCompanyName] = useState("");
   const [companyLogo, setCompanyLogo] = useState("");
+  const [channels, setChannels] = useState([]);
+  const [dmThreads, setDmThreads] = useState([]);
 
   useEffect(() => {
     let unsubscribe = () => {};
@@ -313,25 +317,23 @@ export default function DashboardLayout({ children }) {
   // Subscribe to all chat messages for notification counts
   useEffect(() => {
     if (!currentUser) return;
-
     const unsubscribe = subscribeToAllMessages(currentUser.companyId, (allMsgs) => {
-      // Find messages not sent by the current user
-      const otherMsgs = allMsgs.filter(m => m.senderId !== currentUser.uid);
-
-      // Determine unread messages based on centralized read receipts
-      const receipts = currentUser.teamHubReadReceipts || {};
-      
-      const unread = otherMsgs.filter(m => {
-        const threadReadTime = receipts[m.threadId] || "1970-01-01T00:00:00.000Z";
-        return new Date(m.timestamp) > new Date(threadReadTime);
-      });
-      
-      const latestTime = unread.length > 0 ? Math.max(...unread.map(m => new Date(m.timestamp).getTime())) : 0;
-      setUnreadMessagesData({ count: unread.length, latestTime });
+      setUnreadMessagesData({ allMsgs });
     });
-
     return unsubscribe;
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = subscribeToChannels(currentUser.companyId, setChannels);
+    return unsub;
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const unsub = subscribeToDmThreads(currentUser.uid, currentUser.companyId, setDmThreads);
+    return unsub;
+  }, [currentUser?.uid]);
 
   // Check for missing hourly task reports
   useEffect(() => {
@@ -497,7 +499,31 @@ export default function DashboardLayout({ children }) {
   const activeTabParam = searchParams.get("tab") || "live";
 
   const activeTasksCount = currentUser?.tasks?.filter(t => !t.completed)?.length || 0;
-  const showTeamHubBadge = unreadMessagesData.count > 0 && unreadMessagesData.latestTime > (clearedItems.teamHubTime || 0);
+  
+  const realUnreadMessagesCount = React.useMemo(() => {
+    if (!currentUser || !unreadMessagesData.allMsgs) return 0;
+    
+    const relevantThreadIds = new Set();
+    channels.forEach(ch => {
+      if (ch.id === "general" || ch.memberIds?.includes(currentUser.uid)) {
+        relevantThreadIds.add(ch.id);
+      }
+    });
+    dmThreads.forEach(dm => {
+      relevantThreadIds.add(dm.id);
+    });
+    
+    const otherMsgs = unreadMessagesData.allMsgs.filter(m => m.senderId !== currentUser.uid && relevantThreadIds.has(m.threadId));
+    const receipts = currentUser.teamHubReadReceipts || {};
+    
+    return otherMsgs.filter(m => {
+      const threadReadTime = receipts[m.threadId] || "1970-01-01T00:00:00.000Z";
+      return new Date(m.timestamp) > new Date(threadReadTime);
+    }).length;
+  }, [unreadMessagesData.allMsgs, channels, dmThreads, currentUser]);
+  
+  const showTeamHubBadge = realUnreadMessagesCount > 0;
+  
   const showTasksBadge = activeTasks.length > 0 && clearedItems.tasks !== activeTasks.map(t => t.id).sort().join(",");
   const showProjectsBadge = activeProjects.length > 0 && clearedItems.projects !== activeProjects.sort().join(",");
 
@@ -560,7 +586,7 @@ export default function DashboardLayout({ children }) {
       label: "Team Hub",
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
-      badge: location.pathname === "/team-hub" ? null : (showTeamHubBadge ? unreadMessagesData.count : null),
+      badge: showTeamHubBadge ? realUnreadMessagesCount : null,
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
@@ -612,7 +638,7 @@ export default function DashboardLayout({ children }) {
       label: "Team Hub",
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
-      badge: location.pathname === "/team-hub" ? null : (showTeamHubBadge ? unreadMessagesData.count : null),
+      badge: showTeamHubBadge ? realUnreadMessagesCount : null,
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {

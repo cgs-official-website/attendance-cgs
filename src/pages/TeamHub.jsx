@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -783,6 +783,22 @@ export default function TeamHub() {
     ).length;
   }, [allMessages, currentUser?.uid, currentUser?.teamHubReadReceipts]);
 
+  const unreadChannelsCount = useMemo(() => {
+    return channels.reduce((acc, ch) => {
+      // Only count channels the user is in
+      if (ch.id === "general" || ch.memberIds?.includes(currentUser?.uid)) {
+        return acc + getUnreadCount(ch.id);
+      }
+      return acc;
+    }, 0);
+  }, [channels, getUnreadCount, currentUser?.uid]);
+
+  const unreadDmsCount = useMemo(() => {
+    return dmThreads.reduce((acc, thread) => {
+      return acc + getUnreadCount(thread.id);
+    }, 0);
+  }, [dmThreads, getUnreadCount]);
+
   const handleJoinChannel = async (ch) => {
     setJoiningId(ch.id);
     try {
@@ -886,17 +902,28 @@ export default function TeamHub() {
 
         {/* Tabs */}
         <div className="flex border-b border-border-card">
-          {[["channels", Hash, "Channels"], ["dms", MessageSquare, "Messages"]].map(([key, Icon, label]) => (
+          {[
+            ["channels", Hash, "Channels", unreadChannelsCount], 
+            ["dms", MessageSquare, "Messages", unreadDmsCount]
+          ].map(([key, Icon, label, count]) => (
             <button
               key={key}
               onClick={() => setSidebarTab(key)}
-              className={`flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+              className={`flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer relative ${
                 sidebarTab === key
                   ? "text-brand-primary border-b-2 border-brand-primary"
                   : "text-text-mut hover:text-text-main"
               }`}
             >
-              <Icon size={12} /> {label}
+              <div className="flex items-center gap-1.5 relative">
+                <Icon size={12} /> {label}
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-2.5 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
+                  </span>
+                )}
+              </div>
             </button>
           ))}
         </div>

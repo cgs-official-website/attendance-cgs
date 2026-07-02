@@ -33,6 +33,7 @@ export default function TaskManagement() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [reportText, setReportText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [selectedDownloadProject, setSelectedDownloadProject] = useState("All");
 
   // Daily log states
   const [activeSubTab, setActiveSubTab] = useState("tasks"); // "tasks" | "daily-logs"
@@ -270,7 +271,8 @@ export default function TaskManagement() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(24);
     doc.setTextColor(79, 70, 229);
-    doc.text("My Task Reports", img.complete ? 45 : 14, 20);
+    const titleText = selectedDownloadProject === "All" ? "My Task Reports" : `Task Report: ${selectedDownloadProject}`;
+    doc.text(titleText, img.complete ? 45 : 14, 20);
     
     // Header Info
     doc.setFontSize(10);
@@ -294,7 +296,9 @@ export default function TaskManagement() {
     startY = img.complete ? 42 : 42;
     
     const tableData = [];
-    tasks.forEach(t => {
+    const tasksToExport = selectedDownloadProject === "All" ? tasks : tasks.filter(t => t.project === selectedDownloadProject);
+    
+    tasksToExport.forEach(t => {
       const status = t.completed ? "Done" : "Active";
       tableData.push([{ content: t.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
       
@@ -322,19 +326,21 @@ export default function TaskManagement() {
       head: [["Task Details", "Status", "Duration"]],
       body: tableData,
       startY: startY,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: 8, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left", cellPadding: 10 },
-      columnStyles: { 0: { cellWidth: 105 }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 52 } },
+      styles: { fontSize: 9, font: "helvetica", cellPadding: { top: 6, bottom: 6, left: 4, right: 4 }, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, cellPadding: { top: 8, bottom: 8, left: 4, right: 4 } },
+      columnStyles: { 0: { cellWidth: 105, halign: 'left' }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 52 } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
-    doc.save(`My_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+    const fileNameSuffix = selectedDownloadProject === "All" ? "My_Reports" : `Project_${selectedDownloadProject.replace(/\s+/g, '_')}`;
+    doc.save(`${fileNameSuffix}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const handleDownloadExcel = () => {
     const tableData = [];
-    tasks.forEach(t => {
+    const tasksToExport = selectedDownloadProject === "All" ? tasks : tasks.filter(t => t.project === selectedDownloadProject);
+    tasksToExport.forEach(t => {
       const status = t.completed ? "Done" : "Active";
       tableData.push({
         "Employee": currentUser.name,
@@ -376,8 +382,10 @@ export default function TaskManagement() {
 
     const ws = XLSX.utils.json_to_sheet(tableData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "My Reports");
-    XLSX.writeFile(wb, `My_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const sheetName = selectedDownloadProject === "All" ? "My Reports" : selectedDownloadProject.substring(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const fileNameSuffix = selectedDownloadProject === "All" ? "My_Reports" : `Project_${selectedDownloadProject.replace(/\s+/g, '_')}`;
+    XLSX.writeFile(wb, `${fileNameSuffix}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleDownloadSingleTaskPDF = async (task) => {
@@ -445,9 +453,9 @@ export default function TaskManagement() {
       head: [["Task Details", "Status", "Duration"]],
       body: tableData,
       startY: startY,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: 8, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left", cellPadding: 10 },
-      columnStyles: { 0: { cellWidth: 105 }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 52 } },
+      styles: { fontSize: 9, font: "helvetica", cellPadding: { top: 6, bottom: 6, left: 4, right: 4 }, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, cellPadding: { top: 8, bottom: 8, left: 4, right: 4 } },
+      columnStyles: { 0: { cellWidth: 105, halign: 'left' }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 52 } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
@@ -651,6 +659,24 @@ export default function TaskManagement() {
                 My Task History
               </h3>
               <div className="flex items-center justify-end gap-3 w-full sm:w-auto flex-wrap">
+                {(() => {
+                  const uniqueProjects = [...new Set(tasks.map(t => t.project).filter(Boolean))];
+                  if (uniqueProjects.length > 0) {
+                    return (
+                      <select
+                        value={selectedDownloadProject}
+                        onChange={(e) => setSelectedDownloadProject(e.target.value)}
+                        className="py-2 px-3 bg-bg-base border border-border-card rounded-[10px] text-xs font-bold text-text-main outline-none focus:border-brand-primary/50 transition-colors cursor-pointer"
+                      >
+                        <option value="All">All Projects</option>
+                        {uniqueProjects.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    );
+                  }
+                  return null;
+                })()}
                 <button 
                   onClick={handleDownloadPDF}
                   className="py-2 px-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-[10px] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
@@ -684,7 +710,16 @@ export default function TaskManagement() {
                       <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found.</td>
                     </tr>
                   ) : (
-                    tasks.map((task, idx) => (
+                    (() => {
+                      const tasksToExport = selectedDownloadProject === "All" ? tasks : tasks.filter(t => t.project === selectedDownloadProject);
+                      if (tasksToExport.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="4" className="p-6 text-center text-xs text-text-mut">No tasks found for selected project.</td>
+                          </tr>
+                        );
+                      }
+                      return tasksToExport.map((task, idx) => (
                       <React.Fragment key={task.id || idx}>
                         <tr className="border-b border-border-card/50">
                           <td className="p-3 text-xs font-bold text-text-main">{currentUser.name}</td>
@@ -727,7 +762,8 @@ export default function TaskManagement() {
                           </tr>
                         )}
                       </React.Fragment>
-                    ))
+                    ));
+                  })()
                   )}
                 </tbody>
               </table>

@@ -10,25 +10,20 @@ export default function Register() {
   const [name, setName] = useState("");
   const [selectedDept, setSelectedDept] = useState("");
   const [customDept, setCustomDept] = useState("");
-  const [selectedProgram, setSelectedProgram] = useState("Internship");
+  const [selectedProgram, setSelectedProgram] = useState("Full-Time");
   const [customProgram, setCustomProgram] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [shiftStart, setShiftStart] = useState("10:00");
-  const [shiftEnd, setShiftEnd] = useState("19:00");
+  const [shiftType, setShiftType] = useState("Morning");
+  const [shiftStart, setShiftStart] = useState("09:00");
+  const [shiftEnd, setShiftEnd] = useState("18:00");
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { companySlug } = useParams();
-
-  const presets = [
-    { label: "10 AM - 7 PM", start: "10:00", end: "19:00" },
-    { label: "9 AM - 6 PM", start: "09:00", end: "18:00" },
-    { label: "8 AM - 5 PM", start: "08:00", end: "17:00" }
-  ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -262,10 +257,10 @@ export default function Register() {
                     disabled={loading}
                     required
                   >
+                    <option value="Full-Time">Full-Time</option>
+                    <option value="Part-Time">Part-Time</option>
                     <option value="Internship">Internship</option>
-                    <option value="Training">Training</option>
-                    <option value="Full Time">Full Time</option>
-                    <option value="Part Time">Part Time</option>
+                    <option value="Contract">Contract</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
@@ -285,22 +280,30 @@ export default function Register() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-text-sec">Shift Presets</label>
-                <div className="flex gap-1 flex-wrap">
-                  {presets.map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className="flex-1 py-1.5 px-2 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-main text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer"
-                      onClick={() => {
-                        setShiftStart(p.start);
-                        setShiftEnd(p.end);
-                        showToast(`Filled preset: ${p.label}`, "info", 1200);
-                      }}
-                    >
-                      {p.label.split(" ")[0]} {p.label.split(" ")[1]}
-                    </button>
-                  ))}
+                <label className="text-xs font-semibold text-text-sec">Shift Type</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${shiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
+                    onClick={() => {
+                      setShiftType('Morning');
+                      setShiftStart('09:00');
+                      setShiftEnd('18:00');
+                    }}
+                  >
+                    Morning Shift
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${shiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
+                    onClick={() => {
+                      setShiftType('Night');
+                      setShiftStart('21:00');
+                      setShiftEnd('06:00');
+                    }}
+                  >
+                    Night Shift
+                  </button>
                 </div>
               </div>
             </div>

@@ -18,6 +18,11 @@ export default function PurchaseOrganization() {
   const [adminPassword, setAdminPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   
+  const [adminProgram, setAdminProgram] = useState("Full-Time");
+  const [shiftType, setShiftType] = useState("Morning");
+  const [shiftStart, setShiftStart] = useState("09:00");
+  const [shiftEnd, setShiftEnd] = useState("18:00");
+
   const [loading, setLoading] = useState(false);
   
   const { showToast } = useToast();
@@ -40,12 +45,12 @@ export default function PurchaseOrganization() {
       const userObj = await registerUser(
         adminName,
         "Administration",
-        "Full Time",
+        adminProgram,
         adminEmail,
         adminPassword,
-        "09:00", // Default
-        "18:00", // Default
-        25, 10, 6, "", "", [], [], "Full-time", "Company Admin", false, "ADMIN-01", "", "admin"
+        shiftStart,
+        shiftEnd,
+        25, 10, 6, "", "", [], [], adminProgram, "Company Admin", false, "ADMIN-01", "", "admin"
       );
 
       // 2. Generate slug from org name
@@ -308,6 +313,85 @@ export default function PurchaseOrganization() {
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Program & Shift Configuration */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-text-mut border-b border-border-card pb-2">Admin Work Settings</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-text-sec">Program Type</label>
+                  <div className="relative">
+                    <select
+                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main focus:bg-bg-card focus:border-brand-primary outline-none transition-all appearance-none"
+                      value={adminProgram}
+                      onChange={(e) => setAdminProgram(e.target.value)}
+                      disabled={loading}
+                      required
+                    >
+                      <option value="Full-Time">Full-Time</option>
+                      <option value="Part-Time">Part-Time</option>
+                      <option value="Internship">Internship</option>
+                      <option value="Contract">Contract</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-text-sec">Shift Type</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${shiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
+                      onClick={() => {
+                        setShiftType('Morning');
+                        setShiftStart('09:00');
+                        setShiftEnd('18:00');
+                      }}
+                    >
+                      Morning Shift
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${shiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
+                      onClick={() => {
+                        setShiftType('Night');
+                        setShiftStart('21:00');
+                        setShiftEnd('06:00');
+                      }}
+                    >
+                      Night Shift
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 bg-brand-primary/5 p-3 rounded-[12px] border border-dashed border-brand-primary/20">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-brand-primary">Shift Start</label>
+                  <input
+                    type="time"
+                    className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all"
+                    value={shiftStart}
+                    onChange={(e) => setShiftStart(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-brand-primary">Shift End</label>
+                  <input
+                    type="time"
+                    className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all"
+                    value={shiftEnd}
+                    onChange={(e) => setShiftEnd(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
                 </div>
               </div>
             </div>

@@ -157,11 +157,10 @@ export default function AdminDashboard() {
   // Add Employee Form Fields
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [newDept, setNewDept] = useState("");
-  const [newProgram, setNewProgram] = useState("Internship");
-  const [newShiftStart, setNewShiftStart] = useState("10:00");
-  const [newShiftEnd, setNewShiftEnd] = useState("19:00");
+  const [newShiftType, setNewShiftType] = useState("Morning");
+  const [newShiftStart, setNewShiftStart] = useState("09:00");
+  const [newShiftEnd, setNewShiftEnd] = useState("18:00");
   const [newAnnual, setNewAnnual] = useState(25);
   const [newSick, setNewSick] = useState(10);
   const [newCasual, setNewCasual] = useState(6);
@@ -176,7 +175,7 @@ export default function AdminDashboard() {
   // Edit Form Fields
   const [editName, setEditName] = useState("");
   const [editDept, setEditDept] = useState("");
-  const [editProgram, setEditProgram] = useState("Internship");
+  const [editShiftType, setEditShiftType] = useState("Morning");
   const [editShiftStart, setEditShiftStart] = useState("10:00");
   const [editShiftEnd, setEditShiftEnd] = useState("19:00");
   const [editAnnual, setEditAnnual] = useState(25);
@@ -287,11 +286,7 @@ export default function AdminDashboard() {
   const [chatTypeFilter, setChatTypeFilter]   = useState("all"); // 'all' | 'channel' | 'dm'
   const [chatThreadFilter, setChatThreadFilter] = useState("all"); // specific thread id or 'all'
 
-  const shiftPresets = [
-    { label: "10 AM - 7 PM", start: "10:00", end: "19:00" },
-    { label: "9 AM - 6 PM", start: "09:00", end: "18:00" },
-    { label: "8 AM - 5 PM", start: "08:00", end: "17:00" }
-  ];
+
 
   const formatShiftTime = (timeStr) => {
     if (!timeStr) return "10:00 AM";
@@ -1536,7 +1531,7 @@ export default function AdminDashboard() {
   // Add Employee handler
   const handleAddNewEmployee = async (e) => {
     e.preventDefault();
-    if (!newName || !newEmail || !newPassword || !newDept || !newProgram || !newShiftStart || !newShiftEnd) {
+    if (!newName || !newEmail || !newDept || !newShiftStart || !newShiftEnd) {
       return showToast("Please fill in all fields.", "warning");
     }
 
@@ -1546,15 +1541,17 @@ export default function AdminDashboard() {
       const roleStr = newRole === "Admin" ? "admin" : (newRole === "System Admin" ? "system admin" : "employee");
       const isPm = newRole === "Project Manager" || newRole === "Admin" || newRole === "System Admin";
       
-      await registerUser(newName, newDept, newProgram, newEmail, newPassword, newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr, currentUser.companyId);
-      showToast(`Employee ${newName} registered successfully.`, "success");
+      await registerUser(newName, newDept, newJobType, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr, currentUser.companyId);
+      showToast(`Employee ${newName} registered successfully. Default password is 'Welcome@123'.`, "success");
       setShowAddModal(false);
       
       // Reset fields
       setNewName("");
       setNewEmail("");
-      setNewPassword("");
       setNewDept("");
+      setNewShiftType("Morning");
+      setNewShiftStart("09:00");
+      setNewShiftEnd("18:00");
       setNewAnnual(25);
       setNewSick(10);
       setNewCasual(6);
@@ -1578,7 +1575,6 @@ export default function AdminDashboard() {
     setSelectedUser(user);
     setEditName(user.name || "");
     setEditDept(user.department || "");
-    setEditProgram(user.programType || "Internship");
     setEditShiftStart(user.shiftStart || "10:00");
     setEditShiftEnd(user.shiftEnd || "19:00");
     setEditAnnual(user.annualLeaves !== undefined ? user.annualLeaves : 25);
@@ -1607,7 +1603,7 @@ export default function AdminDashboard() {
 
   const handleSaveUserEdit = async (e) => {
     e.preventDefault();
-    if (!editName || !editDept || !editProgram || !editShiftStart || !editShiftEnd) {
+    if (!editName || !editDept || !editShiftStart || !editShiftEnd) {
       return showToast("Please fill in all fields.", "warning");
     }
     
@@ -1617,7 +1613,7 @@ export default function AdminDashboard() {
         selectedUser.uid, 
         editName, 
         editDept, 
-        editProgram, 
+        editJobType, 
         editShiftStart, 
         editShiftEnd,
         editAnnual,
@@ -3705,60 +3701,43 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Shift Password</label>
-                  <input 
-                    type="password" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 6 chars"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Domain / Department</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newDept}
-                    onChange={(e) => setNewDept(e.target.value)}
-                    placeholder="e.g. Engineering"
-                    required
-                  />
-                </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Domain / Department</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
+                  value={newDept}
+                  onChange={(e) => setNewDept(e.target.value)}
+                  placeholder="e.g. Engineering"
+                  required
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Program Type</label>
-                  <select 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newProgram}
-                    onChange={(e) => setNewProgram(e.target.value)}
+              <div className="flex flex-col gap-1 mt-2">
+                <label className="text-xs font-bold text-text-sec">Shift Type</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${newShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
+                    onClick={() => {
+                      setNewShiftType('Morning');
+                      setNewShiftStart('09:00');
+                      setNewShiftEnd('18:00');
+                    }}
                   >
-                    <option value="Internship">Internship</option>
-                    <option value="Training">Training</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Quick Shift Presets</label>
-                  <div className="flex gap-1">
-                    {shiftPresets.map((p, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        className="flex-1 py-2 px-1 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-[9px] font-bold transition-all whitespace-nowrap cursor-pointer"
-                        onClick={() => {
-                          setNewShiftStart(p.start);
-                          setNewShiftEnd(p.end);
-                        }}
-                      >
-                        {p.label.split(" ")[0]} {p.label.split(" ")[1]}
-                      </button>
-                    ))}
-                  </div>
+                    Morning Shift
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${newShiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
+                    onClick={() => {
+                      setNewShiftType('Night');
+                      setNewShiftStart('21:00');
+                      setNewShiftEnd('06:00');
+                    }}
+                  >
+                    Night Shift
+                  </button>
                 </div>
               </div>
 

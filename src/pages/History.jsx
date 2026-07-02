@@ -9,7 +9,11 @@ import {
   subscribeToRegularizationRequests,
   subscribeToLeaveRequests
 } from "../firebase";
-import { Calendar, Search, MapPin, Coffee, Clock, BarChart2, X } from "lucide-react";
+import { Calendar, Search, MapPin, Coffee, Clock, BarChart2, X, Download, FileText } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
+import logoImg from '../assets/zuna-logo.png';
 
 export default function History() {
   const { currentUser } = useAuth();
@@ -154,6 +158,99 @@ export default function History() {
 
   const maxChartHours = Math.max(8, ...chartData.map(c => c.hours));
 
+  const handleDownloadPDF = () => {
+    if (filteredLogs.length === 0) return showToast("No logs available to download.", "warning");
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    
+    // Header background
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.rect(0, 0, pageWidth, 50, 'F');
+    
+    // Logo handling
+    try {
+      doc.addImage(logoImg, 'PNG', 14, 12, 28, 28);
+    } catch (e) {
+      console.warn("Logo image failed to load for PDF:", e);
+    }
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("My Attendance Report", 50, 26);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text(`Employee: ${currentUser.name}`, 50, 34);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 50, 40);
+
+    const tableData = filteredLogs.map((log) => {
+      const workingHours = log.totalWorkingMinutes ? (log.totalWorkingMinutes / 60).toFixed(1) + " hrs" : "-";
+      return [
+        log.date,
+        log.checkInTime || "-",
+        log.checkOutTime || "-",
+        workingHours,
+        log.status || "Present"
+      ];
+    });
+
+    autoTable(doc, {
+      head: [["Date", "Check In", "Check Out", "Working Hours", "Status"]],
+      body: tableData,
+      startY: 60,
+      styles: { fontSize: 9, font: "helvetica", cellPadding: { top: 6, bottom: 6, left: 4, right: 4 }, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", halign: 'center', cellPadding: { top: 8, bottom: 8, left: 4, right: 4 } },
+      columnStyles: { 
+        0: { halign: 'left' }, 
+        1: { halign: 'center' }, 
+        2: { halign: 'center' }, 
+        3: { halign: 'center' }, 
+        4: { halign: 'center' }
+      },
+      theme: 'grid',
+      alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+    
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+    }
+
+    doc.save(`Attendance_Report_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast("PDF report generated successfully.", "success");
+  };
+
+  const handleDownloadExcel = () => {
+    if (filteredLogs.length === 0) return showToast("No logs available to download.", "warning");
+    
+    const excelData = filteredLogs.map((log) => ({
+      "Date": log.date,
+      "Check In": log.checkInTime || "-",
+      "Check Out": log.checkOutTime || "-",
+      "Working Hours": log.totalWorkingMinutes ? (log.totalWorkingMinutes / 60).toFixed(1) + " hrs" : "-",
+      "Status": log.status || "Present",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance Report");
+    XLSX.writeFile(workbook, `Attendance_Report_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast("Excel spreadsheet generated successfully.", "success");
+  };
+
   if (loading) {
     return (
       <div className="space-y-8 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
@@ -194,13 +291,31 @@ export default function History() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">My Attendance History</h1>
           <p className="text-sm text-text-sec mt-1">Review your historical logs and break details.</p>
         </div>
-        <button
-          onClick={() => setShowRegModal(true)}
-          className="py-3 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-md shadow-brand-primary/10 cursor-pointer"
-        >
-          <Clock size={15} />
-          <span>Raise Regularization</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleDownloadPDF}
+            className="py-3 px-4 bg-bg-card hover:bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-sm cursor-pointer transition-colors"
+            title="Download PDF Report"
+          >
+            <FileText size={15} className="text-brand-danger" />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+          <button
+            onClick={handleDownloadExcel}
+            className="py-3 px-4 bg-bg-card hover:bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-sm cursor-pointer transition-colors"
+            title="Download Excel Report"
+          >
+            <Download size={15} className="text-brand-success" />
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+          <button
+            onClick={() => setShowRegModal(true)}
+            className="py-3 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-md shadow-brand-primary/10 cursor-pointer"
+          >
+            <Clock size={15} />
+            <span>Raise Regularization</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary stats row */}

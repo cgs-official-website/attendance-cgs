@@ -463,6 +463,74 @@ export default function TaskManagement() {
     doc.save(`Task_Report_${task.title.replace(/\s+/g, '_').substring(0,10)}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
+  const handleDownloadDailyLogPDF = () => {
+    if (dailyReports.length === 0) return showToast("No daily logs to download.", "warning");
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    
+    // Header background
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.rect(0, 0, pageWidth, 50, 'F');
+    
+    try {
+      doc.addImage(logoImg, 'PNG', 14, 12, 28, 28);
+    } catch (e) {}
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("Daily Activity Log Report", 50, 26);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.text(`Employee: ${currentUser.name}`, 50, 34);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 50, 40);
+
+    const tableData = dailyReports.map((report) => [
+      report.date,
+      report.hours + "h",
+      report.tasksCompleted || "-",
+      report.issuesFaced || "-",
+      report.status || "Completed"
+    ]);
+
+    autoTable(doc, {
+      head: [["Date", "Hours", "Tasks Completed", "Issues Faced", "Status"]],
+      body: tableData,
+      startY: 60,
+      styles: { fontSize: 9, font: "helvetica", cellPadding: 6, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+      columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' }, 4: { halign: 'center' } },
+      theme: 'grid',
+      alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+
+    doc.save(`Daily_Activity_Log_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast("PDF report generated successfully.", "success");
+  };
+
+  const handleDownloadDailyLogExcel = () => {
+    if (dailyReports.length === 0) return showToast("No daily logs to download.", "warning");
+    
+    const excelData = dailyReports.map((report) => ({
+      "Date": report.date,
+      "Hours": report.hours,
+      "Tasks Completed": report.tasksCompleted || "-",
+      "Issues Faced": report.issuesFaced || "-",
+      "Supervisor Remarks": report.supervisorRemarks || "-",
+      "Status": report.status || "Completed"
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Daily Log");
+    XLSX.writeFile(workbook, `Daily_Activity_Log_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast("Excel spreadsheet generated successfully.", "success");
+  };
+
   return (
     <div className="animate-fade-in pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -778,16 +846,34 @@ export default function TaskManagement() {
               <h2 className="text-lg font-bold text-text-main">Daily Activity Log</h2>
               <p className="text-xs text-text-sec mt-1">Submit your daily updates and view supervisor feedback.</p>
             </div>
-            <button
-              onClick={() => {
-                setLogDate(new Date().toISOString().split("T")[0]);
-                setShowAddLogModal(true);
-              }}
-              className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus size={16} />
-              <span>Add Daily Log</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleDownloadDailyLogPDF}
+                className="py-2.5 px-4 bg-bg-card hover:bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-sm cursor-pointer transition-colors"
+                title="Download PDF Report"
+              >
+                <FileText size={15} className="text-brand-danger" />
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+              <button
+                onClick={handleDownloadDailyLogExcel}
+                className="py-2.5 px-4 bg-bg-card hover:bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-sm cursor-pointer transition-colors"
+                title="Download Excel Report"
+              >
+                <Download size={15} className="text-brand-success" />
+                <span className="hidden sm:inline">Excel</span>
+              </button>
+              <button
+                onClick={() => {
+                  setLogDate(new Date().toISOString().split("T")[0]);
+                  setShowAddLogModal(true);
+                }}
+                className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={16} />
+                <span>Add Daily Log</span>
+              </button>
+            </div>
           </div>
 
           {/* Daily Logs Table */}

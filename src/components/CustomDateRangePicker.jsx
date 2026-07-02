@@ -124,7 +124,7 @@ export default function CustomDateRangePicker({ startDate, endDate, setStartDate
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
   return (
-    <div className="flex flex-col sm:flex-row bg-white dark:bg-bg-card rounded-[24px] border border-border-card overflow-hidden shadow-sm font-sans w-full max-w-[700px] mx-auto text-left">
+    <div className="flex flex-col sm:flex-row bg-bg-card rounded-[24px] border border-border-card overflow-hidden shadow-sm font-sans w-full max-w-[700px] mx-auto text-left">
       {/* Calendar Grid Section */}
       <div className="p-6 sm:p-8 flex-1">
         <div className="flex items-center justify-between mb-8">

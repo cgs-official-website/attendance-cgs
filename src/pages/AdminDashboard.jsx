@@ -5683,6 +5683,22 @@ export default function AdminDashboard() {
             
             <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
               <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
+              {payrollData.some(p => p.employeeId === selectedPayrollUser.uid) && (
+                <button 
+                  onClick={async () => {
+                    try {
+                      await deleteEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, payrollMonth, payrollYear);
+                      showToast("Payslip deleted successfully", "success");
+                      setShowPayslipModal(false);
+                    } catch (e) {
+                      showToast("Failed to delete payslip", "error");
+                    }
+                  }} 
+                  className="px-6 py-2.5 flex items-center gap-2 bg-brand-danger hover:bg-red-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-danger/20 transition-all active:scale-95 cursor-pointer"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
               <button 
                 onClick={async () => {
                   try {
@@ -5707,7 +5723,7 @@ export default function AdminDashboard() {
                 }} 
                 className="px-6 py-2.5 flex items-center gap-2 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-primary/20 transition-all active:scale-95 cursor-pointer"
               >
-                <Check size={14} /> Publish Payslip
+                <Check size={14} /> {payrollData.some(p => p.employeeId === selectedPayrollUser.uid) ? 'Update Payslip' : 'Publish Payslip'}
               </button>
               <button 
                 onClick={() => {

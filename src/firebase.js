@@ -3069,6 +3069,21 @@ export const saveEmployeePayroll = async (companyId, employeeId, payrollData) =>
   }
 };
 
+export const deleteEmployeePayroll = async (companyId, employeeId, month, year) => {
+  if (dbType === "firebase") {
+    const recordId = `${employeeId}_${month}_${year}`;
+    const docRef = doc(db, "payroll", companyId, "employeePayroll", recordId);
+    await deleteDoc(docRef);
+  } else {
+    const current = localStorage.getItem(`att_payroll_${companyId}`)
+      ? JSON.parse(localStorage.getItem(`att_payroll_${companyId}`))
+      : [];
+    const recordId = `${employeeId}_${month}_${year}`;
+    const filtered = current.filter(p => p.id !== recordId);
+    localStorage.setItem(`att_payroll_${companyId}`, JSON.stringify(filtered));
+  }
+};
+
 export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", userId);

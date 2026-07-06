@@ -31,7 +31,8 @@ import {
   recoverChatData,
   subscribeToCompanyPayroll,
   saveEmployeePayroll,
-  updateEmployeeGrossSalary
+  updateEmployeeGrossSalary,
+  listenToCompany
 } from "../firebase";
 import { 
   Shield, 
@@ -340,6 +341,20 @@ export default function AdminDashboard() {
   const [payrollMonth, setPayrollMonth] = useState(new Date().toLocaleString('default', { month: 'long' }));
   const [payrollYear, setPayrollYear] = useState(new Date().getFullYear());
   const [payrollData, setPayrollData] = useState([]);
+  const [companyName, setCompanyName] = useState("");
+  const [companyLogo, setCompanyLogo] = useState("");
+
+  useEffect(() => {
+    if (currentUser?.companyId) {
+      const unsub = listenToCompany(currentUser.companyId, (data) => {
+        if(data) {
+          setCompanyName(data.name || "ZUNA HRMS");
+          setCompanyLogo(data.logoBase64 || "");
+        }
+      });
+      return () => unsub();
+    }
+  }, [currentUser?.companyId]);
   const [showEditSalaryModal, setShowEditSalaryModal] = useState(false);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
   const [selectedPayrollUser, setSelectedPayrollUser] = useState(null);
@@ -5612,7 +5627,12 @@ export default function AdminDashboard() {
             <div className="p-8 text-left" id="payslip-content">
               <div className="flex justify-between items-start border-b border-border-card pb-6 mb-6">
                 <div>
-                  <h1 className="text-2xl font-extrabold text-brand-primary tracking-tight">ZUNA HRMS</h1>
+                  <div className="flex items-center gap-3 mb-2">
+                    {companyLogo && (
+                      <img src={companyLogo} alt={companyName} className="h-10 object-contain" />
+                    )}
+                    <h1 className="text-2xl font-extrabold text-brand-primary tracking-tight">{companyName || "ZUNA HRMS"}</h1>
+                  </div>
                   <p className="text-xs text-text-sec font-medium mt-1">Salary Slip for {payrollMonth} {payrollYear}</p>
                 </div>
                 <div className="text-right">
@@ -5663,6 +5683,32 @@ export default function AdminDashboard() {
             
             <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
               <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await saveEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, {
+                      month: payrollMonth,
+                      year: payrollYear,
+                      grossSalary: selectedPayrollUser.gross,
+                      basic: selectedPayrollUser.basic,
+                      hra: selectedPayrollUser.hra,
+                      special: selectedPayrollUser.special,
+                      pf: selectedPayrollUser.pf,
+                      esi: selectedPayrollUser.esi,
+                      pt: selectedPayrollUser.pt,
+                      tds: selectedPayrollUser.tds,
+                      net: selectedPayrollUser.net
+                    });
+                    showToast("Payslip published to employee portal", "success");
+                    setShowPayslipModal(false);
+                  } catch (e) {
+                    showToast("Failed to publish payslip", "error");
+                  }
+                }} 
+                className="px-6 py-2.5 flex items-center gap-2 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-primary/20 transition-all active:scale-95 cursor-pointer"
+              >
+                <Check size={14} /> Publish Payslip
+              </button>
               <button 
                 onClick={() => {
                   window.print(); 

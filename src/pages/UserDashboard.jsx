@@ -17,7 +17,8 @@ import {
   stopTaskTimer,
   getLocalDateString,
   subscribeToAssets,
-  subscribeToCompanyPayroll
+  subscribeToCompanyPayroll,
+  listenToCompany
 } from "../firebase";
 import {
   Play,
@@ -93,6 +94,22 @@ export default function UserDashboard() {
   const [userLogs, setUserLogs] = useState([]);
   const [myAssets, setMyAssets] = useState([]);
   const [myPayslips, setMyPayslips] = useState([]);
+  const [showPayslipModal, setShowPayslipModal] = useState(false);
+  const [selectedPayslip, setSelectedPayslip] = useState(null);
+  const [companyName, setCompanyName] = useState("");
+  const [companyLogo, setCompanyLogo] = useState("");
+
+  useEffect(() => {
+    if (currentUser?.companyId) {
+      const unsub = listenToCompany(currentUser.companyId, (data) => {
+        if(data) {
+          setCompanyName(data.name || "ZUNA HRMS");
+          setCompanyLogo(data.logoBase64 || "");
+        }
+      });
+      return () => unsub();
+    }
+  }, [currentUser?.companyId]);
   const [todayLog, setTodayLog] = useState(null);
   const [gpsLocation, setGpsLocation] = useState(null);
   const [gpsError, setGpsError] = useState(null);
@@ -297,7 +314,7 @@ export default function UserDashboard() {
     });
 
     const unsubscribePayroll = subscribeToCompanyPayroll(currentUser.companyId, null, null, (list) => {
-      setMyPayslips(list.filter(p => p.uid === currentUser.uid));
+      setMyPayslips(list.filter(p => p.employeeId === currentUser.uid));
     });
 
     return () => {
@@ -865,7 +882,8 @@ export default function UserDashboard() {
                   <div className="pt-6 mt-6 border-t border-border-card z-10">
                     <button 
                       onClick={() => {
-                        showToast("Printing payslips will be supported soon.", "info");
+                        setSelectedPayslip({ ...payslip, ...calc });
+                        setShowPayslipModal(true);
                       }}
                       className="w-full flex items-center justify-center gap-2 py-2.5 bg-bg-base hover:bg-brand-primary/10 text-brand-primary font-bold text-xs rounded-[12px] transition-colors"
                     >
@@ -877,6 +895,95 @@ export default function UserDashboard() {
             })
           )}
         </div>
+
+        {/* Payslip Modal */}
+        {showPayslipModal && selectedPayslip && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-bg-card w-full max-w-2xl rounded-[24px] border border-border-card shadow-2xl overflow-hidden animate-slide-up flex flex-col relative my-auto">
+              <div className="px-6 py-5 border-b border-border-card flex items-center justify-between sticky top-0 bg-bg-card z-10 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                    <FileText className="text-emerald-500" size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-text-main">Payslip Preview</h3>
+                    <p className="text-[10px] text-text-sec mt-0.5">{currentUser.name} - {selectedPayslip.month} {selectedPayslip.year}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowPayslipModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1 rounded-lg hover:bg-bg-base"><X size={18} /></button>
+              </div>
+              <div className="p-8 text-left" id="payslip-content">
+                <div className="flex justify-between items-start border-b border-border-card pb-6 mb-6">
+                  <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    {companyLogo && (
+                      <img src={companyLogo} alt={companyName} className="h-10 object-contain" />
+                    )}
+                    <h1 className="text-2xl font-extrabold text-brand-primary tracking-tight">{companyName || "ZUNA HRMS"}</h1>
+                  </div>
+                    <p className="text-xs text-text-sec font-medium mt-1">Salary Slip for {selectedPayslip.month} {selectedPayslip.year}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-text-main">{currentUser.name}</p>
+                    <p className="text-xs text-text-sec mt-1 uppercase tracking-wider">{currentUser.designation || currentUser.role}</p>
+                    <p className="text-[10px] text-text-mut mt-0.5">Emp ID: {currentUser.employeeId || currentUser.uid.substring(0,6).toUpperCase()}</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider border-b border-border-card pb-2 mb-3">Earnings</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Basic Salary</span><span className="text-xs font-bold text-text-main">₹{(selectedPayslip.basic || 0).toLocaleString('en-IN')}</span></div>
+                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">House Rent Allowance (HRA)</span><span className="text-xs font-bold text-text-main">₹{(selectedPayslip.hra || 0).toLocaleString('en-IN')}</span></div>
+                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Special Allowance</span><span className="text-xs font-bold text-text-main">₹{(selectedPayslip.special || 0).toLocaleString('en-IN')}</span></div>
+                    </div>
+                    <div className="flex justify-between border-t border-border-card mt-3 pt-3">
+                      <span className="text-xs font-extrabold text-text-main">Total Earnings</span>
+                      <span className="text-xs font-extrabold text-text-main">₹{(selectedPayslip.grossSalary || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider border-b border-border-card pb-2 mb-3">Deductions</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">EPF (12%)</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.pf || 0).toLocaleString('en-IN')}</span></div>
+                      {selectedPayslip.esi > 0 && <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">ESI (0.75%)</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.esi || 0).toLocaleString('en-IN')}</span></div>}
+                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Professional Tax</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.pt || 0).toLocaleString('en-IN')}</span></div>
+                      {selectedPayslip.tds > 0 && <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">TDS</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.tds || 0).toLocaleString('en-IN')}</span></div>}
+                    </div>
+                    <div className="flex justify-between border-t border-border-card mt-3 pt-3">
+                      <span className="text-xs font-extrabold text-text-main">Total Deductions</span>
+                      <span className="text-xs font-extrabold text-brand-danger">₹{((selectedPayslip.pf || 0) + (selectedPayslip.esi || 0) + (selectedPayslip.pt || 0) + (selectedPayslip.tds || 0)).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-[16px] flex items-center justify-between">
+                  <span className="text-sm font-extrabold text-text-main">Net Salary Payable</span>
+                  <span className="text-2xl font-extrabold text-emerald-500">₹{(selectedPayslip.net || 0).toLocaleString('en-IN')}</span>
+                </div>
+                
+                <div className="mt-8 text-center border-t border-border-card pt-6">
+                  <p className="text-[10px] text-text-mut italic">This is a system generated payslip and does not require a physical signature.</p>
+                </div>
+              </div>
+              
+              <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
+                <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
+                <button 
+                  onClick={() => {
+                    window.print(); 
+                  }} 
+                  className="px-6 py-2.5 flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
+                >
+                  <Download size={14} /> Download PDF
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
       </div>
     );
   }

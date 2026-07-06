@@ -31,7 +31,8 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   RefreshCw,
   Lock,
   Info,
-  Building2
+  Building2,
+  IndianRupee
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -600,6 +601,12 @@ export default function DashboardLayout({ children }) {
       icon: HardDrive,
       active: location.pathname === "/admin" && activeTabParam === "assets",
       onClick: () => { navigate("/admin?tab=assets"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Payroll (India)",
+      icon: IndianRupee,
+      active: location.pathname === "/admin" && activeTabParam === "payroll",
+      onClick: () => { navigate("/admin?tab=payroll"); setIsMobileOpen(false); }
     },
     {
       label: "Project Management",

@@ -28,7 +28,10 @@ import {
   addAsset,
   updateAsset,
   deleteAsset,
-  recoverChatData
+  recoverChatData,
+  subscribeToCompanyPayroll,
+  saveEmployeePayroll,
+  updateEmployeeGrossSalary
 } from "../firebase";
 import { 
   Shield, 
@@ -65,7 +68,9 @@ import {
   Layers,
   Activity,
   Lock,
-  Eye
+  Eye,
+  IndianRupee,
+  Banknote
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -330,6 +335,24 @@ export default function AdminDashboard() {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedShiftFilter, setSelectedShiftFilter] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
+
+  // Payroll Module
+  const [payrollMonth, setPayrollMonth] = useState(new Date().toLocaleString('default', { month: 'long' }));
+  const [payrollYear, setPayrollYear] = useState(new Date().getFullYear());
+  const [payrollData, setPayrollData] = useState([]);
+  const [showEditSalaryModal, setShowEditSalaryModal] = useState(false);
+  const [showPayslipModal, setShowPayslipModal] = useState(false);
+  const [selectedPayrollUser, setSelectedPayrollUser] = useState(null);
+  const [editSalaryValue, setEditSalaryValue] = useState("");
+
+  useEffect(() => {
+    if (activeTab === "payroll" && currentUser?.role === "admin") {
+      const unsub = subscribeToCompanyPayroll(currentUser.companyId, payrollMonth, payrollYear, (data) => {
+        setPayrollData(data);
+      });
+      return () => unsub();
+    }
+  }, [activeTab, payrollMonth, payrollYear, currentUser?.companyId, currentUser?.role]);
 
   const loadDirectoryData = async () => {
     try {
@@ -5314,6 +5337,341 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ------------------ VIEW: PAYROLL (INDIA) ------------------ */}
+      {activeTab === "payroll" && (() => {
+        // Calculations for Indian Payroll
+        const calculatePayroll = (gross) => {
+          const basic = gross * 0.5;
+          const hra = basic * 0.4;
+          const special = gross - basic - hra;
+          const pf = basic * 0.12;
+          const esi = gross <= 21000 ? gross * 0.0075 : 0;
+          const pt = 200; // Standard Professional Tax
+          const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0; // Simplified mock TDS
+          const net = gross - (pf + esi + pt + tds);
+          return { basic, hra, special, pf, esi, pt, tds, net };
+        };
+
+        const currentPayroll = staffUsers.map(user => {
+          // If the user doesn't have a grossSalary, set to 0. It must be manually assigned.
+          const gross = user.grossSalary || 0;
+          const calc = calculatePayroll(gross);
+          
+          return {
+            ...user,
+            gross,
+            ...calc
+          };
+        });
+
+        // Search logic for payroll table
+        const filteredPayroll = currentPayroll.filter((u) => {
+          const matchesSearch = 
+            u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            u.email.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchesDept = !selectedDept || u.department === selectedDept;
+          return matchesSearch && matchesDept;
+        });
+
+        const totalGross = filteredPayroll.reduce((acc, curr) => acc + curr.gross, 0);
+        const totalPF = filteredPayroll.reduce((acc, curr) => acc + curr.pf, 0);
+        const totalNet = filteredPayroll.reduce((acc, curr) => acc + curr.net, 0);
+        
+        return (
+          <div className="animate-fade-in space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2 text-left">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Payroll Management</h1>
+                <p className="text-sm text-text-sec mt-1">Manage employee salaries, EPF, ESI, and generate payslips complying with Indian Law.</p>
+              </div>
+            </div>
+
+            {/* Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Total Gross Payout</span>
+                  <span className="text-3xl font-extrabold text-text-main block mt-1.5 flex items-center gap-1"><IndianRupee size={24} /> {totalGross.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="absolute right-0 top-0 p-4 opacity-5">
+                  <Banknote size={80} />
+                </div>
+              </div>
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Total PF Contribution</span>
+                  <span className="text-3xl font-extrabold text-brand-primary block mt-1.5 flex items-center gap-1"><IndianRupee size={24} /> {totalPF.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="absolute right-0 top-0 p-4 text-brand-primary opacity-5">
+                  <Activity size={80} />
+                </div>
+              </div>
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Total Net Payout</span>
+                  <span className="text-3xl font-extrabold text-emerald-500 block mt-1.5 flex items-center gap-1"><IndianRupee size={24} /> {totalNet.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="absolute right-0 top-0 p-4 text-emerald-500 opacity-5">
+                  <Check size={80} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
+              <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-end">
+                <div className="flex flex-col gap-1.5 flex-grow">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Search Employee</label>
+                  <div className="relative">
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut" />
+                    <input
+                      type="text"
+                      className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all placeholder-text-mut"
+                      placeholder="Search name or email..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5 min-w-[150px]">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Department</label>
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                    value={selectedDept}
+                    onChange={(e) => setSelectedDept(e.target.value)}
+                  >
+                    <option value="">All Departments</option>
+                    {departments.map((dept, idx) => <option key={idx} value={dept}>{dept}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5 min-w-[120px]">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Month</label>
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                    value={payrollMonth}
+                    onChange={(e) => setPayrollMonth(e.target.value)}
+                  >
+                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm overflow-hidden text-left">
+              <div className="overflow-x-auto custom-scrollbar -mx-6 px-6">
+                <table className="w-full min-w-[900px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-card">
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Employee</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Gross Salary</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Basic Pay</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">HRA</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">PF (12%)</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">ESI</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Net Salary</th>
+                      <th className="pb-3 px-4 text-right text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPayroll.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="text-center py-12 text-sm text-text-mut">No payroll data found.</td>
+                      </tr>
+                    ) : (
+                      filteredPayroll.map(user => (
+                        <tr key={user.uid} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-extrabold text-text-main">{user.name}</span>
+                              <span className="text-[10px] font-bold text-text-sec uppercase mt-0.5">{user.designation || user.role}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-xs font-extrabold text-text-main flex items-center gap-0.5"><IndianRupee size={12} /> {user.gross.toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="py-3 px-4 text-xs font-bold text-text-sec">₹{user.basic.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-text-sec">₹{user.hra.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-brand-danger">₹{user.pf.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-brand-danger">₹{user.esi.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4">
+                            <span className="text-xs font-extrabold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-[6px] border border-emerald-500/20">₹{user.net.toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button 
+                                onClick={() => {
+                                  setSelectedPayrollUser(user);
+                                  setEditSalaryValue(user.gross);
+                                  setShowEditSalaryModal(true);
+                                }}
+                                className="p-1.5 text-text-mut hover:text-brand-primary bg-bg-base hover:bg-brand-primary/10 rounded-lg transition-colors border border-border-card/60"
+                                title="Edit Salary Structure"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setSelectedPayrollUser(user);
+                                  setShowPayslipModal(true);
+                                }}
+                                className="p-1.5 text-text-mut hover:text-emerald-500 bg-bg-base hover:bg-emerald-500/10 rounded-lg transition-colors border border-border-card/60"
+                                title="View Payslip"
+                              >
+                                <FileText size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ------------------ MODALS ------------------ */}
+      {showEditSalaryModal && selectedPayrollUser && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-bg-card w-full max-w-md rounded-[24px] border border-border-card shadow-2xl overflow-hidden animate-slide-up flex flex-col relative my-auto">
+            <div className="px-6 py-5 border-b border-border-card flex items-center justify-between sticky top-0 bg-bg-card z-10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center">
+                  <Banknote className="text-brand-primary" size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-text-main">Update Salary</h3>
+                  <p className="text-[10px] text-text-sec mt-0.5">{selectedPayrollUser.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditSalaryModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1 rounded-lg hover:bg-bg-base"><X size={18} /></button>
+            </div>
+            <div className="p-6">
+              <label className="text-xs font-bold text-text-sec block mb-2">Gross Salary (Monthly)</label>
+              <div className="relative">
+                <IndianRupee size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut" />
+                <input 
+                  type="number"
+                  value={editSalaryValue}
+                  onChange={(e) => setEditSalaryValue(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-bg-base/50 border border-border-card rounded-[12px] text-sm text-text-main outline-none focus:border-brand-primary transition-colors font-bold"
+                />
+              </div>
+              <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-[12px]">
+                <p className="text-[11px] text-amber-600 font-semibold leading-relaxed">
+                  Updating this value will persist the gross salary to the employee's database profile and automatically recalculate their EPF, ESI, HRA, and PT components using the Indian standard slabs.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
+              <button onClick={() => setShowEditSalaryModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Cancel</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue);
+                    showToast("Salary updated successfully", "success");
+                    setShowEditSalaryModal(false);
+                    loadDirectoryData();
+                  } catch (e) {
+                    showToast("Failed to update salary", "error");
+                  }
+                }} 
+                className="px-6 py-2.5 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-primary/20 transition-all active:scale-95 cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showPayslipModal && selectedPayrollUser && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-bg-card w-full max-w-2xl rounded-[24px] border border-border-card shadow-2xl overflow-hidden animate-slide-up flex flex-col relative my-auto">
+            <div className="px-6 py-5 border-b border-border-card flex items-center justify-between sticky top-0 bg-bg-card z-10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <FileText className="text-emerald-500" size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-text-main">Payslip Preview</h3>
+                  <p className="text-[10px] text-text-sec mt-0.5">{selectedPayrollUser.name} - {payrollMonth} {payrollYear}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPayslipModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1 rounded-lg hover:bg-bg-base"><X size={18} /></button>
+            </div>
+            <div className="p-8 text-left" id="payslip-content">
+              <div className="flex justify-between items-start border-b border-border-card pb-6 mb-6">
+                <div>
+                  <h1 className="text-2xl font-extrabold text-brand-primary tracking-tight">ZUNA HRMS</h1>
+                  <p className="text-xs text-text-sec font-medium mt-1">Salary Slip for {payrollMonth} {payrollYear}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-text-main">{selectedPayrollUser.name}</p>
+                  <p className="text-xs text-text-sec mt-1 uppercase tracking-wider">{selectedPayrollUser.designation || selectedPayrollUser.role}</p>
+                  <p className="text-[10px] text-text-mut mt-0.5">Emp ID: {selectedPayrollUser.employeeId || selectedPayrollUser.uid.substring(0,6).toUpperCase()}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider border-b border-border-card pb-2 mb-3">Earnings</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Basic Salary</span><span className="text-xs font-bold text-text-main">₹{selectedPayrollUser.basic.toLocaleString('en-IN')}</span></div>
+                    <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">House Rent Allowance (HRA)</span><span className="text-xs font-bold text-text-main">₹{selectedPayrollUser.hra.toLocaleString('en-IN')}</span></div>
+                    <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Special Allowance</span><span className="text-xs font-bold text-text-main">₹{selectedPayrollUser.special.toLocaleString('en-IN')}</span></div>
+                  </div>
+                  <div className="flex justify-between border-t border-border-card mt-3 pt-3">
+                    <span className="text-xs font-extrabold text-text-main">Total Earnings</span>
+                    <span className="text-xs font-extrabold text-text-main">₹{selectedPayrollUser.gross.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider border-b border-border-card pb-2 mb-3">Deductions</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">EPF (12%)</span><span className="text-xs font-bold text-brand-danger">₹{selectedPayrollUser.pf.toLocaleString('en-IN')}</span></div>
+                    {selectedPayrollUser.esi > 0 && <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">ESI (0.75%)</span><span className="text-xs font-bold text-brand-danger">₹{selectedPayrollUser.esi.toLocaleString('en-IN')}</span></div>}
+                    <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Professional Tax</span><span className="text-xs font-bold text-brand-danger">₹{selectedPayrollUser.pt.toLocaleString('en-IN')}</span></div>
+                    {selectedPayrollUser.tds > 0 && <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">TDS</span><span className="text-xs font-bold text-brand-danger">₹{selectedPayrollUser.tds.toLocaleString('en-IN')}</span></div>}
+                  </div>
+                  <div className="flex justify-between border-t border-border-card mt-3 pt-3">
+                    <span className="text-xs font-extrabold text-text-main">Total Deductions</span>
+                    <span className="text-xs font-extrabold text-brand-danger">₹{(selectedPayrollUser.pf + selectedPayrollUser.esi + selectedPayrollUser.pt + selectedPayrollUser.tds).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-8 bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-[16px] flex items-center justify-between">
+                <span className="text-sm font-extrabold text-text-main">Net Salary Payable</span>
+                <span className="text-2xl font-extrabold text-emerald-500">₹{selectedPayrollUser.net.toLocaleString('en-IN')}</span>
+              </div>
+              
+              <div className="mt-8 text-center border-t border-border-card pt-6">
+                <p className="text-[10px] text-text-mut italic">This is a system generated payslip and does not require a physical signature.</p>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
+              <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
+              <button 
+                onClick={() => {
+                  window.print(); 
+                }} 
+                className="px-6 py-2.5 flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
+              >
+                <Download size={14} /> Download PDF
+              </button>
+            </div>
           </div>
         </div>,
         document.body

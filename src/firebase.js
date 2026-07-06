@@ -3016,3 +3016,69 @@ export const deleteAsset = async (id) => {
     notifyNoticeListeners();
   }
 };
+
+// ==========================================
+// PAYROLL MODULE (Indian Employment Law)
+// ==========================================
+
+export const subscribeToCompanyPayroll = (companyId, month, year, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "payroll", companyId, "employeePayroll");
+    if (month && year) {
+      qRef = query(qRef, where("month", "==", month), where("year", "==", year));
+    }
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(list);
+    });
+  } else {
+    const current = localStorage.getItem(`att_payroll_${companyId}`)
+      ? JSON.parse(localStorage.getItem(`att_payroll_${companyId}`))
+      : [];
+    const filtered = current.filter(p => (!month || p.month === month) && (!year || p.year === String(year)));
+    callback(filtered);
+    return () => {};
+  }
+};
+
+export const saveEmployeePayroll = async (companyId, employeeId, payrollData) => {
+  if (dbType === "firebase") {
+    const month = payrollData.month;
+    const year = payrollData.year;
+    const recordId = `${employeeId}_${month}_${year}`;
+    const docRef = doc(db, "payroll", companyId, "employeePayroll", recordId);
+    await setDoc(docRef, {
+      ...payrollData,
+      employeeId,
+      companyId,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } else {
+    const current = localStorage.getItem(`att_payroll_${companyId}`)
+      ? JSON.parse(localStorage.getItem(`att_payroll_${companyId}`))
+      : [];
+    const recordId = `${employeeId}_${payrollData.month}_${payrollData.year}`;
+    const idx = current.findIndex(p => p.id === recordId);
+    const newRecord = { ...payrollData, employeeId, companyId, id: recordId, updatedAt: new Date().toISOString() };
+    if (idx >= 0) {
+      current[idx] = newRecord;
+    } else {
+      current.push(newRecord);
+    }
+    localStorage.setItem(`att_payroll_${companyId}`, JSON.stringify(current));
+  }
+};
+
+export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "users", userId);
+    await updateDoc(docRef, { grossSalary: Number(grossSalary) });
+  } else {
+    const current = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
+    const idx = current.findIndex(u => u.uid === userId);
+    if (idx >= 0) {
+      current[idx].grossSalary = Number(grossSalary);
+      localStorage.setItem("att_users", JSON.stringify(current));
+    }
+  }
+};

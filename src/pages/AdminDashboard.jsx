@@ -1718,7 +1718,7 @@ export default function AdminDashboard() {
                   <Users size={22} />
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                  +2%
+                  {staffUsers.filter(u => new Date(u.createdAt) >= new Date(new Date().setDate(new Date().getDate() - 30))).length} New This Month
                 </span>
               </div>
               <div className="mt-4">
@@ -1733,7 +1733,7 @@ export default function AdminDashboard() {
                   <Users size={22} />
                 </div>
                 <span className="bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full text-[10px] font-bold">
-                  92% Active
+                  {totalRegistered > 0 ? Math.round((presentCount / totalRegistered) * 100) : 0}% Active
                 </span>
               </div>
               <div className="mt-4">
@@ -1748,7 +1748,7 @@ export default function AdminDashboard() {
                   <Clock size={22} />
                 </div>
                 <span className="bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                  +5 from yesterday
+                  Today
                 </span>
               </div>
               <div className="mt-4">
@@ -1763,7 +1763,7 @@ export default function AdminDashboard() {
                   <AlertCircle size={22} />
                 </div>
                 <span className="bg-slate-500/10 text-text-sec px-2.5 py-1 rounded-full text-[10px] font-bold">
-                  Leave: 42
+                  Leave: {allRequests.filter(lr => lr.status === "approved" && lr.startDate <= new Date().toISOString().split('T')[0] && lr.endDate >= new Date().toISOString().split('T')[0]).length}
                 </span>
               </div>
               <div className="mt-4">

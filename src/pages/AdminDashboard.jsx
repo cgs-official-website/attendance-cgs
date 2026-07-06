@@ -31,6 +31,7 @@ import {
   recoverChatData,
   subscribeToCompanyPayroll,
   saveEmployeePayroll,
+  deleteEmployeePayroll,
   updateEmployeeGrossSalary,
   listenToCompany
 } from "../firebase";
@@ -357,6 +358,7 @@ export default function AdminDashboard() {
   }, [currentUser?.companyId]);
   const [showEditSalaryModal, setShowEditSalaryModal] = useState(false);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
+  const [showDeletePayslipConfirm, setShowDeletePayslipConfirm] = useState(false);
   const [selectedPayrollUser, setSelectedPayrollUser] = useState(null);
   const [editSalaryValue, setEditSalaryValue] = useState("");
 
@@ -5366,7 +5368,7 @@ export default function AdminDashboard() {
           const special = gross - basic - hra;
           const pf = basic * 0.12;
           const esi = gross <= 21000 ? gross * 0.0075 : 0;
-          const pt = 200; // Standard Professional Tax
+          const pt = gross > 0 ? 200 : 0; // Standard Professional Tax
           const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0; // Simplified mock TDS
           const net = gross - (pf + esi + pt + tds);
           return { basic, hra, special, pf, esi, pt, tds, net };
@@ -5393,9 +5395,9 @@ export default function AdminDashboard() {
           return matchesSearch && matchesDept;
         });
 
-        const totalGross = filteredPayroll.reduce((acc, curr) => acc + curr.gross, 0);
-        const totalPF = filteredPayroll.reduce((acc, curr) => acc + curr.pf, 0);
-        const totalNet = filteredPayroll.reduce((acc, curr) => acc + curr.net, 0);
+        const totalGross = payrollData.reduce((acc, curr) => acc + (curr.grossSalary || 0), 0);
+        const totalPF = payrollData.reduce((acc, curr) => acc + (curr.pf || 0), 0);
+        const totalNet = payrollData.reduce((acc, curr) => acc + (curr.net || 0), 0);
         
         return (
           <div className="animate-fade-in space-y-6">
@@ -5681,47 +5683,36 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
-              <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
+            <div className="px-6 py-4 border-t border-border-card flex flex-col sm:flex-row justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
+              <button onClick={() => setShowPayslipModal(false)} className="w-full sm:w-auto px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
               {payrollData.some(p => p.employeeId === selectedPayrollUser.uid) && (
                 <button 
-                  onClick={async () => {
-                    try {
-                      await deleteEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, payrollMonth, payrollYear);
-                      showToast("Payslip deleted successfully", "success");
-                      setShowPayslipModal(false);
-                    } catch (e) {
-                      showToast("Failed to delete payslip", "error");
-                    }
-                  }} 
-                  className="px-6 py-2.5 flex items-center gap-2 bg-brand-danger hover:bg-red-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-danger/20 transition-all active:scale-95 cursor-pointer"
+                  onClick={() => setShowDeletePayslipConfirm(true)} 
+                  className="w-full sm:w-auto px-6 py-2.5 flex items-center justify-center gap-2 bg-brand-danger hover:bg-red-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-danger/20 transition-all active:scale-95 cursor-pointer"
                 >
                   <Trash2 size={14} /> Delete
                 </button>
               )}
               <button 
-                onClick={async () => {
-                  try {
-                    await saveEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, {
-                      month: payrollMonth,
-                      year: payrollYear,
-                      grossSalary: selectedPayrollUser.gross,
-                      basic: selectedPayrollUser.basic,
-                      hra: selectedPayrollUser.hra,
-                      special: selectedPayrollUser.special,
-                      pf: selectedPayrollUser.pf,
-                      esi: selectedPayrollUser.esi,
-                      pt: selectedPayrollUser.pt,
-                      tds: selectedPayrollUser.tds,
-                      net: selectedPayrollUser.net
-                    });
-                    showToast("Payslip published to employee portal", "success");
-                    setShowPayslipModal(false);
-                  } catch (e) {
-                    showToast("Failed to publish payslip", "error");
-                  }
+                onClick={() => {
+                  setShowPayslipModal(false);
+                  saveEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, {
+                    month: payrollMonth,
+                    year: payrollYear,
+                    grossSalary: selectedPayrollUser.gross,
+                    basic: selectedPayrollUser.basic,
+                    hra: selectedPayrollUser.hra,
+                    special: selectedPayrollUser.special,
+                    pf: selectedPayrollUser.pf,
+                    esi: selectedPayrollUser.esi,
+                    pt: selectedPayrollUser.pt,
+                    tds: selectedPayrollUser.tds,
+                    net: selectedPayrollUser.net
+                  })
+                  .then(() => showToast("Payslip published to employee portal", "success"))
+                  .catch(() => showToast("Failed to publish payslip", "error"));
                 }} 
-                className="px-6 py-2.5 flex items-center gap-2 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-primary/20 transition-all active:scale-95 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-primary/20 transition-all active:scale-95 cursor-pointer"
               >
                 <Check size={14} /> {payrollData.some(p => p.employeeId === selectedPayrollUser.uid) ? 'Update Payslip' : 'Publish Payslip'}
               </button>
@@ -5729,11 +5720,40 @@ export default function AdminDashboard() {
                 onClick={() => {
                   window.print(); 
                 }} 
-                className="px-6 py-2.5 flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
               >
                 <Download size={14} /> Download PDF
               </button>
             </div>
+
+            {/* Confirmation Overlay for Delete Payslip */}
+            {showDeletePayslipConfirm && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 rounded-[24px]">
+                <div className="bg-bg-card max-w-sm w-full p-6 rounded-[20px] shadow-2xl border border-border-card animate-scale-up text-center">
+                  <div className="w-12 h-12 rounded-full bg-brand-danger/10 text-brand-danger flex items-center justify-center mx-auto mb-4">
+                    <Trash2 size={24} />
+                  </div>
+                  <h3 className="text-lg font-extrabold text-text-main mb-2">Delete Payslip?</h3>
+                  <p className="text-sm text-text-sec mb-6">Are you sure you want to delete this published payslip? It will be removed from the employee's portal immediately.</p>
+                  <div className="flex gap-3">
+                    <button onClick={() => setShowDeletePayslipConfirm(false)} className="flex-1 py-2.5 rounded-[12px] font-bold text-xs bg-bg-base text-text-main hover:bg-border-card transition-colors">Cancel</button>
+                    <button 
+                      onClick={() => {
+                        // Optimistic close
+                        setShowDeletePayslipConfirm(false);
+                        setShowPayslipModal(false);
+                        deleteEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, payrollMonth, payrollYear)
+                          .then(() => showToast("Payslip deleted successfully", "success"))
+                          .catch(() => showToast("Failed to delete payslip", "error"));
+                      }}
+                      className="flex-1 py-2.5 rounded-[12px] font-bold text-xs bg-brand-danger text-white hover:bg-red-600 transition-colors shadow-lg shadow-brand-danger/20"
+                    >
+                      Yes, Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body

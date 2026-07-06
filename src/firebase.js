@@ -148,6 +148,7 @@ if (dbType === "local") {
 const authListeners = new Set();
 const attendanceListeners = new Set();
 const noticeListeners = new Set();
+const payrollListeners = new Set();
 
 // Helper to notify simulation listeners
 const notifyAuthListeners = (user) => {
@@ -158,6 +159,9 @@ const notifyAttendanceListeners = () => {
 };
 const notifyNoticeListeners = () => {
   noticeListeners.forEach(cb => cb());
+};
+const notifyPayrollListeners = (companyId) => {
+  payrollListeners.forEach(cb => cb(companyId));
 };
 
 // ----------------------------------------------------
@@ -3032,12 +3036,17 @@ export const subscribeToCompanyPayroll = (companyId, month, year, callback) => {
       callback(list);
     });
   } else {
-    const current = localStorage.getItem(`att_payroll_${companyId}`)
-      ? JSON.parse(localStorage.getItem(`att_payroll_${companyId}`))
-      : [];
-    const filtered = current.filter(p => (!month || p.month === month) && (!year || p.year === String(year)));
-    callback(filtered);
-    return () => {};
+    const handler = (updatedCompanyId) => {
+      if (updatedCompanyId && updatedCompanyId !== companyId) return;
+      const current = localStorage.getItem(`att_payroll_${companyId}`)
+        ? JSON.parse(localStorage.getItem(`att_payroll_${companyId}`))
+        : [];
+      const filtered = current.filter(p => (!month || p.month === month) && (!year || p.year === String(year)));
+      callback(filtered);
+    };
+    payrollListeners.add(handler);
+    handler(companyId);
+    return () => payrollListeners.delete(handler);
   }
 };
 
@@ -3066,6 +3075,7 @@ export const saveEmployeePayroll = async (companyId, employeeId, payrollData) =>
       current.push(newRecord);
     }
     localStorage.setItem(`att_payroll_${companyId}`, JSON.stringify(current));
+    notifyPayrollListeners(companyId);
   }
 };
 
@@ -3081,6 +3091,7 @@ export const deleteEmployeePayroll = async (companyId, employeeId, month, year) 
     const recordId = `${employeeId}_${month}_${year}`;
     const filtered = current.filter(p => p.id !== recordId);
     localStorage.setItem(`att_payroll_${companyId}`, JSON.stringify(filtered));
+    notifyPayrollListeners(companyId);
   }
 };
 

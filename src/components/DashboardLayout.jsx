@@ -663,6 +663,12 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/dashboard?tab=assets"); setIsMobileOpen(false); }
     },
     {
+      label: "My Payslips",
+      icon: IndianRupee,
+      active: location.pathname === "/dashboard" && searchParams.get("tab") === "payslips",
+      onClick: () => { navigate("/dashboard?tab=payslips"); setIsMobileOpen(false); }
+    },
+    {
       label: "My History",
       icon: Calendar,
       active: location.pathname === "/history",

@@ -16,7 +16,8 @@ import {
   getAllRegisteredUsers,
   stopTaskTimer,
   getLocalDateString,
-  subscribeToAssets
+  subscribeToAssets,
+  subscribeToCompanyPayroll
 } from "../firebase";
 import {
   Play,
@@ -46,7 +47,11 @@ import {
   Newspaper,
   Check,
   Activity,
-  HardDrive
+  HardDrive,
+  IndianRupee,
+  Banknote,
+  FileText,
+  Download
 } from "lucide-react";
 import CustomDateRangePicker from "../components/CustomDateRangePicker";
 
@@ -87,6 +92,7 @@ export default function UserDashboard() {
 
   const [userLogs, setUserLogs] = useState([]);
   const [myAssets, setMyAssets] = useState([]);
+  const [myPayslips, setMyPayslips] = useState([]);
   const [todayLog, setTodayLog] = useState(null);
   const [gpsLocation, setGpsLocation] = useState(null);
   const [gpsError, setGpsError] = useState(null);
@@ -290,11 +296,16 @@ export default function UserDashboard() {
       setMyAssets(list.filter(a => a.assignedUserId === currentUser.uid));
     });
 
+    const unsubscribePayroll = subscribeToCompanyPayroll(currentUser.companyId, null, null, (list) => {
+      setMyPayslips(list.filter(p => p.uid === currentUser.uid));
+    });
+
     return () => {
       unsubscribe();
       unsubscribePaid();
       unsubscribeLeaves();
       unsubscribeAssets();
+      unsubscribePayroll();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [currentUser.uid, currentUser.department, currentUser.companyId]);
@@ -779,6 +790,92 @@ export default function UserDashboard() {
             {/* Recent Activity Skeleton */}
             <div className="h-[320px] rounded-[24px] skeleton" />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === "payslips") {
+    return (
+      <div className="space-y-6 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
+        {/* Breadcrumb & Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-1.5 text-xs text-text-mut font-semibold mb-2">
+            <span>Dashboard</span>
+            <span>&gt;</span>
+            <span className="text-brand-primary">My Payslips</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">My Payslips</h1>
+          <p className="text-sm text-text-sec mt-1">View and download your monthly salary slips.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {myPayslips.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-sm text-text-mut bg-bg-card rounded-[24px] border border-border-card border-dashed">
+              No payslips found for your account yet.
+            </div>
+          ) : (
+            myPayslips.map((payslip, idx) => {
+              const calculatePayroll = (gross) => {
+                const basic = gross * 0.5;
+                const hra = basic * 0.4;
+                const special = gross - basic - hra;
+                const pf = basic * 0.12;
+                const esi = gross <= 21000 ? gross * 0.0075 : 0;
+                const pt = 200;
+                const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0;
+                const net = gross - (pf + esi + pt + tds);
+                return { basic, hra, special, pf, esi, pt, tds, net };
+              };
+
+              const calc = calculatePayroll(payslip.grossSalary || 0);
+
+              return (
+                <div key={idx} className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col group hover:shadow-md transition-shadow relative overflow-hidden text-left">
+                  <div className="flex justify-between items-start mb-6 z-10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
+                        <FileText className="text-brand-primary" size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-text-main">{payslip.month || "Current"} {payslip.year || new Date().getFullYear()}</h3>
+                        <p className="text-[10px] text-text-sec font-bold mt-0.5 uppercase tracking-wider">Salary Slip</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4 flex-grow z-10">
+                    <div>
+                      <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block mb-1">Net Payable</span>
+                      <span className="text-2xl font-extrabold text-emerald-500 flex items-center gap-1"><IndianRupee size={20} /> {calc.net.toLocaleString('en-IN')}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 border-t border-border-card pt-4 mt-4">
+                      <div>
+                        <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block mb-1">Gross Salary</span>
+                        <span className="text-sm font-bold text-text-main">₹{(payslip.grossSalary || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block mb-1">Deductions</span>
+                        <span className="text-sm font-bold text-brand-danger">₹{(calc.pf + calc.esi + calc.pt + calc.tds).toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 mt-6 border-t border-border-card z-10">
+                    <button 
+                      onClick={() => {
+                        showToast("Printing payslips will be supported soon.", "info");
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-bg-base hover:bg-brand-primary/10 text-brand-primary font-bold text-xs rounded-[12px] transition-colors"
+                    >
+                      <Download size={16} /> View Details & Download
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     );

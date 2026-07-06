@@ -64,7 +64,8 @@ import {
   ChevronDown,
   Layers,
   Activity,
-  Lock
+  Lock,
+  Eye
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -92,6 +93,11 @@ const getMockDesignation = (name) => {
   if (nameLower.includes("james")) return "DevOps Engineer";
   return "Software Intern";
 };
+
+const shiftPresets = [
+  { label: "Morning Shift", start: "09:00", end: "18:00" },
+  { label: "Night Shift", start: "21:00", end: "06:00" }
+];
 
 const getInitials = (name) => {
   if (!name) return "U";
@@ -190,6 +196,7 @@ export default function AdminDashboard() {
   const [editJobType, setEditJobType] = useState("Full-time");
   const [editDesignation, setEditDesignation] = useState("");
   const [editRole, setEditRole] = useState("Employee");
+  const [editProgram, setEditProgram] = useState("Internship");
   const [editTasks, setEditTasks] = useState([]);
   const [editEmployeeId, setEditEmployeeId] = useState("");
 
@@ -224,6 +231,7 @@ export default function AdminDashboard() {
   const [leavesPendingPage, setLeavesPendingPage] = useState(1);
   const [regsPendingPage, setRegsPendingPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // Notice Board / Rules & Leaves tab states
   const [rulesInput, setRulesInput] = useState("");
@@ -320,6 +328,7 @@ export default function AdminDashboard() {
   };
   const [selectedDept, setSelectedDept] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
 
   const loadDirectoryData = async () => {
@@ -492,7 +501,15 @@ export default function AdminDashboard() {
       }
     }
     
-    return matchesSearch && matchesDept && matchesStatus;
+    let matchesShift = true;
+    if (selectedShiftFilter) {
+      const start = u.shiftStart || "10:00";
+      const isNight = start >= "18:00" || start < "06:00";
+      if (selectedShiftFilter === "morning") matchesShift = !isNight;
+      else if (selectedShiftFilter === "night") matchesShift = isNight;
+    }
+    
+    return matchesSearch && matchesDept && matchesStatus && matchesShift;
   });
 
   // Filter leave requests for the queue
@@ -1574,6 +1591,7 @@ export default function AdminDashboard() {
     setEditProject(user.projects ? user.projects.join(', ') : (user.project || ""));
     setEditJobType(user.jobType || "Full-time");
     setEditDesignation(user.designation || "");
+    setEditProgram(user.programType || "Internship");
     setEditTasks(user.tasks || []);
     setEditEmployeeId(user.employeeId || "");
     
@@ -1698,9 +1716,9 @@ export default function AdminDashboard() {
       
       {/* ------------------ VIEW 1: ADMIN PANEL / LIVE MONITORING ------------------ */}
       {activeTab === "live" && (() => {
-        const liveStartIndex = (livePage - 1) * 10;
-        const paginatedLiveStatus = liveStatusList.slice(liveStartIndex, liveStartIndex + 10);
-        const liveTotalPages = Math.ceil(liveStatusList.length / 10) || 1;
+        const liveStartIndex = (livePage - 1) * rowsPerPage;
+        const paginatedLiveStatus = liveStatusList.slice(liveStartIndex, liveStartIndex + rowsPerPage);
+        const liveTotalPages = Math.ceil(liveStatusList.length / rowsPerPage) || 1;
 
         return (
           <>
@@ -1780,7 +1798,7 @@ export default function AdminDashboard() {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-extrabold text-base text-text-main tracking-tight">Live Attendance</h3>
                 <button 
-                  onClick={() => setActiveTab("logs")}
+                  onClick={() => setActiveTab("users")}
                   className="text-xs font-bold text-brand-primary hover:text-brand-hover hover:underline cursor-pointer"
                 >
                   View All Records
@@ -1849,11 +1867,15 @@ export default function AdminDashboard() {
 
                         return (
                           <tr key={user.uid} className="hover:bg-bg-base/30">
-                            <td className="py-3.5 pr-4 flex items-center gap-3">
+                            <td 
+                              className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
+                              onClick={() => { setSelectedUser(user); setShowDetailModal(true); }}
+                              title="View Records"
+                            >
                               <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
                                 {user.name ? getInitials(user.name) : "U"}
                               </div>
-                              <span className="font-bold text-text-main truncate max-w-[130px]">{user.name}</span>
+                              <span className="font-bold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{user.name}</span>
                             </td>
                             <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
                             <td className="py-3.5 px-4 text-brand-primary font-bold">{inTime}</td>
@@ -1881,9 +1903,24 @@ export default function AdminDashboard() {
 
               {liveStatusList.length > 10 && (
                 <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
-                  <span className="text-text-mut font-semibold">
-                    Showing {liveStartIndex + 1} to {Math.min(liveStatusList.length, liveStartIndex + 10)} of {liveStatusList.length} entries
-                  </span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-text-mut font-semibold">
+                      Showing {liveStartIndex + 1} to {Math.min(liveStatusList.length, liveStartIndex + rowsPerPage)} of {liveStatusList.length} entries
+                    </span>
+                    <select 
+                      value={rowsPerPage} 
+                      onChange={(e) => {
+                        setRowsPerPage(Number(e.target.value));
+                        setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                      }}
+                      className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                    >
+                      <option value={10}>10 / page</option>
+                      <option value={20}>20 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => setLivePage(prev => Math.max(1, prev - 1))}
@@ -1939,12 +1976,19 @@ export default function AdminDashboard() {
                   {leaveRequests.map((req) => (
                     <div key={req.id} className="p-4 border border-border-card rounded-[16px] bg-bg-base/30 space-y-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                        <div 
+                          className="flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 p-1.5 -ml-1.5 rounded-lg transition-colors"
+                          onClick={() => {
+                            const u = staffUsers.find(su => su.uid === req.userId);
+                            if (u) { setSelectedUser(u); setShowDetailModal(true); }
+                          }}
+                          title="View Records"
+                        >
                           <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
                             {req.userName ? getInitials(req.userName) : "U"}
                           </div>
                           <div>
-                            <span className="font-extrabold text-xs text-text-main block">{req.userName || req.name}</span>
+                            <span className="font-extrabold text-xs text-text-main block hover:text-brand-primary transition-colors">{req.userName || req.name}</span>
                             <span className="text-[10px] text-text-mut font-semibold">{req.type} • {req.duration}</span>
                           </div>
                         </div>
@@ -1979,9 +2023,9 @@ export default function AdminDashboard() {
 
       {/* ------------------ VIEW 2: STAFF DIRECTORY / USERS REGISTRY ------------------ */}
       {activeTab === "users" && (() => {
-        const usersStartIndex = (usersPage - 1) * 10;
-        const paginatedProfiles = filteredProfiles.slice(usersStartIndex, usersStartIndex + 10);
-        const usersTotalPages = Math.ceil(filteredProfiles.length / 10) || 1;
+        const usersStartIndex = (usersPage - 1) * rowsPerPage;
+        const paginatedProfiles = filteredProfiles.slice(usersStartIndex, usersStartIndex + rowsPerPage);
+        const usersTotalPages = Math.ceil(filteredProfiles.length / rowsPerPage) || 1;
 
         return (
           <>
@@ -2085,9 +2129,24 @@ export default function AdminDashboard() {
                 </select>
               </div>
 
+              {/* Shift */}
+              <div className="flex flex-col gap-1.5 min-w-[150px]">
+                <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider" htmlFor="shift-filter">Shift</label>
+                <select
+                  id="shift-filter"
+                  className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                  value={selectedShiftFilter}
+                  onChange={(e) => setSelectedShiftFilter(e.target.value)}
+                >
+                  <option value="">All Shifts</option>
+                  <option value="morning">Morning Shift</option>
+                  <option value="night">Night Shift</option>
+                </select>
+              </div>
+
               {/* Action resets */}
               <button 
-                onClick={() => { setSearchQuery(""); setSelectedDept(""); setSelectedStatus(""); }}
+                onClick={() => { setSearchQuery(""); setSelectedDept(""); setSelectedStatus(""); setSelectedShiftFilter(""); }}
                 className="py-2.5 px-5 border border-border-card rounded-[12px] hover:bg-bg-base text-xs font-bold text-text-sec cursor-pointer"
               >
                 Clear Filters
@@ -2167,6 +2226,16 @@ export default function AdminDashboard() {
                           <td className="py-3.5 pl-4 text-right">
                             <div className="flex gap-2 justify-end">
                               <button 
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowDetailModal(true);
+                                }} 
+                                className="w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec hover:text-brand-primary transition-colors cursor-pointer" 
+                                title="View User Details"
+                              >
+                                <Eye size={13} />
+                              </button>
+                              <button 
                                 onClick={() => openEditModal(user)} 
                                 className="w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec hover:text-brand-primary transition-colors cursor-pointer" 
                                 title="Edit User"
@@ -2208,9 +2277,24 @@ export default function AdminDashboard() {
 
             {filteredProfiles.length > 10 && (
               <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
-                <span className="text-text-mut font-semibold">
-                  Showing {usersStartIndex + 1} to {Math.min(filteredProfiles.length, usersStartIndex + 10)} of {filteredProfiles.length} entries
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="text-text-mut font-semibold">
+                    Showing {usersStartIndex + 1} to {Math.min(filteredProfiles.length, usersStartIndex + rowsPerPage)} of {filteredProfiles.length} entries
+                  </span>
+                  <select 
+                    value={rowsPerPage} 
+                    onChange={(e) => {
+                      setRowsPerPage(Number(e.target.value));
+                      setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                    }}
+                    className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={20}>20 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setUsersPage(prev => Math.max(1, prev - 1))}
@@ -2273,17 +2357,17 @@ export default function AdminDashboard() {
         const selectedRequest = leaveRequests.find(r => r.id === selectedRequestId);
         const selectedRegRequest = regularizationRequests.find(r => r.id === selectedRegRequestId);
 
-        const leavesPendingStartIndex = (leavesPendingPage - 1) * 10;
-        const paginatedPendingLeaves = filteredLeaveRequests.slice(leavesPendingStartIndex, leavesPendingStartIndex + 10);
-        const leavesPendingTotalPages = Math.ceil(filteredLeaveRequests.length / 10) || 1;
+        const leavesPendingStartIndex = (leavesPendingPage - 1) * rowsPerPage;
+        const paginatedPendingLeaves = filteredLeaveRequests.slice(leavesPendingStartIndex, leavesPendingStartIndex + rowsPerPage);
+        const leavesPendingTotalPages = Math.ceil(filteredLeaveRequests.length / rowsPerPage) || 1;
 
-        const regsPendingStartIndex = (regsPendingPage - 1) * 10;
-        const paginatedPendingRegs = filteredRegRequests.slice(regsPendingStartIndex, regsPendingStartIndex + 10);
-        const regsPendingTotalPages = Math.ceil(filteredRegRequests.length / 10) || 1;
+        const regsPendingStartIndex = (regsPendingPage - 1) * rowsPerPage;
+        const paginatedPendingRegs = filteredRegRequests.slice(regsPendingStartIndex, regsPendingStartIndex + rowsPerPage);
+        const regsPendingTotalPages = Math.ceil(filteredRegRequests.length / rowsPerPage) || 1;
 
-        const historyStartIndex = (historyPage - 1) * 10;
-        const paginatedHistory = filteredHistory.slice(historyStartIndex, historyStartIndex + 10);
-        const historyTotalPages = Math.ceil(filteredHistory.length / 10) || 1;
+        const historyStartIndex = (historyPage - 1) * rowsPerPage;
+        const paginatedHistory = filteredHistory.slice(historyStartIndex, historyStartIndex + rowsPerPage);
+        const historyTotalPages = Math.ceil(filteredHistory.length / rowsPerPage) || 1;
 
         return (
           <>
@@ -2450,12 +2534,20 @@ export default function AdminDashboard() {
                                   isSelected ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""
                                 }`}
                               >
-                                <td className="py-3.5 pr-4 flex items-center gap-3">
+                                <td 
+                                  className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const u = staffUsers.find(su => su.uid === req.userId);
+                                    if (u) { setSelectedUser(u); setShowDetailModal(true); }
+                                  }}
+                                  title="View Records"
+                                >
                                   <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
                                     {req.userName ? getInitials(req.userName) : "U"}
                                   </div>
                                   <div className="flex flex-col">
-                                    <span className="font-extrabold text-text-main truncate max-w-[130px]">{req.userName}</span>
+                                    <span className="font-extrabold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{req.userName}</span>
                                     <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
                                   </div>
                                 </td>
@@ -2487,9 +2579,24 @@ export default function AdminDashboard() {
 
                   {filteredLeaveRequests.length > 10 && (
                     <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
-                      <span className="text-text-mut font-semibold">
-                        Showing {leavesPendingStartIndex + 1} to {Math.min(filteredLeaveRequests.length, leavesPendingStartIndex + 10)} of {filteredLeaveRequests.length} entries
-                      </span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-text-mut font-semibold">
+                          Showing {leavesPendingStartIndex + 1} to {Math.min(filteredLeaveRequests.length, leavesPendingStartIndex + rowsPerPage)} of {filteredLeaveRequests.length} entries
+                        </span>
+                        <select 
+                          value={rowsPerPage} 
+                          onChange={(e) => {
+                            setRowsPerPage(Number(e.target.value));
+                            setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                          }}
+                          className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                        >
+                          <option value={10}>10 / page</option>
+                          <option value={20}>20 / page</option>
+                          <option value={50}>50 / page</option>
+                          <option value={100}>100 / page</option>
+                        </select>
+                      </div>
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => setLeavesPendingPage(prev => Math.max(1, prev - 1))}
@@ -2785,12 +2892,20 @@ export default function AdminDashboard() {
                                   isSelected ? "bg-brand-primary/5 border-l-4 border-brand-primary" : ""
                                 }`}
                               >
-                                <td className="py-3.5 pr-4 flex items-center gap-3">
+                                <td 
+                                  className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const u = staffUsers.find(su => su.uid === req.userId);
+                                    if (u) { setSelectedUser(u); setShowDetailModal(true); }
+                                  }}
+                                  title="View Records"
+                                >
                                   <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
                                     {req.userName ? getInitials(req.userName) : "U"}
                                   </div>
                                   <div className="flex flex-col">
-                                    <span className="font-extrabold text-text-main truncate max-w-[130px]">{req.userName}</span>
+                                    <span className="font-extrabold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{req.userName}</span>
                                     <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
                                   </div>
                                 </td>
@@ -2813,9 +2928,24 @@ export default function AdminDashboard() {
 
                   {filteredRegRequests.length > 10 && (
                     <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
-                      <span className="text-text-mut font-semibold">
-                        Showing {regsPendingStartIndex + 1} to {Math.min(filteredRegRequests.length, regsPendingStartIndex + 10)} of {filteredRegRequests.length} entries
-                      </span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-text-mut font-semibold">
+                          Showing {regsPendingStartIndex + 1} to {Math.min(filteredRegRequests.length, regsPendingStartIndex + rowsPerPage)} of {filteredRegRequests.length} entries
+                        </span>
+                        <select 
+                          value={rowsPerPage} 
+                          onChange={(e) => {
+                            setRowsPerPage(Number(e.target.value));
+                            setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                          }}
+                          className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                        >
+                          <option value={10}>10 / page</option>
+                          <option value={20}>20 / page</option>
+                          <option value={50}>50 / page</option>
+                          <option value={100}>100 / page</option>
+                        </select>
+                      </div>
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => setRegsPendingPage(prev => Math.max(1, prev - 1))}
@@ -2981,12 +3111,20 @@ export default function AdminDashboard() {
 
                           return (
                             <tr key={item.id} className="hover:bg-bg-base/30">
-                              <td className="py-3.5 pr-4 flex items-center gap-3">
+                              <td 
+                                className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const u = staffUsers.find(su => su.uid === item.userId);
+                                  if (u) { setSelectedUser(u); setShowDetailModal(true); }
+                                }}
+                                title="View Records"
+                              >
                                 <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
                                   {item.userName ? getInitials(item.userName) : "U"}
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="font-extrabold text-text-main truncate max-w-[130px]">{item.userName}</span>
+                                  <span className="font-extrabold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{item.userName}</span>
                                   <span className="text-[10px] text-text-mut font-semibold mt-0.5">{item.userDept || "Staff"}</span>
                                 </div>
                               </td>
@@ -3022,9 +3160,24 @@ export default function AdminDashboard() {
 
                 {filteredHistory.length > 10 && (
                   <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
-                    <span className="text-text-mut font-semibold">
-                      Showing {historyStartIndex + 1} to {Math.min(filteredHistory.length, historyStartIndex + 10)} of {filteredHistory.length} entries
-                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-text-mut font-semibold">
+                        Showing {historyStartIndex + 1} to {Math.min(filteredHistory.length, historyStartIndex + rowsPerPage)} of {filteredHistory.length} entries
+                      </span>
+                      <select 
+                        value={rowsPerPage} 
+                        onChange={(e) => {
+                          setRowsPerPage(Number(e.target.value));
+                          setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                        }}
+                        className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                      >
+                        <option value={10}>10 / page</option>
+                        <option value={20}>20 / page</option>
+                        <option value={50}>50 / page</option>
+                        <option value={100}>100 / page</option>
+                      </select>
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
@@ -3589,6 +3742,43 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+
+
+              <div className="bg-bg-base/30 p-4 rounded-[12px] border border-border-card mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h5 className="text-xs font-bold text-text-main">Attendance Records</h5>
+                  <span className="text-[10px] text-text-mut">
+                    {logs.filter(l => l.uid === selectedUser.uid).length} Records
+                  </span>
+                </div>
+                
+                <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                  {logs.filter(l => l.uid === selectedUser.uid).length === 0 ? (
+                    <p className="text-[10px] text-text-mut italic">No attendance records found.</p>
+                  ) : (
+                    logs.filter(l => l.uid === selectedUser.uid)
+                    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+                    .map((log, idx) => {
+                      const checkIn = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "-";
+                      const checkOut = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "-";
+                      const totalHrs = log.totalWorkingMinutes ? (log.totalWorkingMinutes / 60).toFixed(2) : (log.checkInTime && !log.checkOutTime ? "Active" : "0.00");
+                      
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-2.5 rounded-[8px] bg-bg-card border border-border-card">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-text-main">{log.date || "Unknown Date"}</span>
+                            <span className="text-[10px] text-text-mut">{checkIn} - {checkOut}</span>
+                          </div>
+                          <div className="text-right flex flex-col">
+                            <span className="text-xs font-bold text-brand-primary">{totalHrs === "Active" ? "Active" : `${totalHrs} hrs`}</span>
+                            <span className="text-[10px] text-text-mut">{log.status || (log.checkOutTime ? "Present" : "Checked In")}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end pt-4 border-t border-border-card mt-4">
@@ -4086,7 +4276,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {editUser.role !== "superadmin" && (
+              {selectedUser?.role !== "superadmin" && (
               <div className="grid grid-cols-2 gap-4 bg-brand-primary/5 p-3 rounded-[12px] border border-dashed border-border-card">
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-bold text-brand-primary">Shift Start</label>
@@ -4490,7 +4680,7 @@ export default function AdminDashboard() {
         });
 
         // Pagination for assets
-        const assetsPerPage = 10;
+        const assetsPerPage = rowsPerPage;
         const assetsStartIndex = (assetsPage - 1) * assetsPerPage;
         const paginatedAssets = filteredAssets.slice(assetsStartIndex, assetsStartIndex + assetsPerPage);
         const assetsTotalPages = Math.ceil(filteredAssets.length / assetsPerPage) || 1;
@@ -4702,9 +4892,24 @@ export default function AdminDashboard() {
 
                   {filteredAssets.length > assetsPerPage && (
                     <div className="p-4 border-t border-border-card flex items-center justify-between flex-wrap gap-3">
-                      <span className="text-xs text-text-mut font-semibold">
-                        Showing {assetsStartIndex + 1} to {Math.min(filteredAssets.length, assetsStartIndex + assetsPerPage)} of {filteredAssets.length} entries
-                      </span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-text-mut font-semibold">
+                          Showing {assetsStartIndex + 1} to {Math.min(filteredAssets.length, assetsStartIndex + assetsPerPage)} of {filteredAssets.length} entries
+                        </span>
+                        <select 
+                          value={rowsPerPage} 
+                          onChange={(e) => {
+                            setRowsPerPage(Number(e.target.value));
+                            setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                          }}
+                          className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                        >
+                          <option value={10}>10 / page</option>
+                          <option value={20}>20 / page</option>
+                          <option value={50}>50 / page</option>
+                          <option value={100}>100 / page</option>
+                        </select>
+                      </div>
                       <div className="flex gap-1.5">
                         <button
                           disabled={assetsPage === 1}

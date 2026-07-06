@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData, deleteCompany } from "../firebase";
 import { useToast } from "../context/ToastContext";
 import { useModal } from "../context/ModalContext";
-import { Building2, Plus, Users, ShieldAlert, Link, X, CheckSquare, Calendar as CalendarIcon, Download, FileText, Trash2 } from "lucide-react";
+import { Building2, Plus, Users, ShieldAlert, Link as LinkIcon, X, CheckSquare, Calendar as CalendarIcon, Download, FileText, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
@@ -278,32 +278,32 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="animate-fade-in p-6">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-8">
         <div>
-          <h1 className="text-3xl font-black text-text-main flex items-center gap-3">
-            <ShieldAlert className="text-brand-primary" size={32} />
+          <h1 className="text-2xl sm:text-3xl font-black text-text-main flex items-center gap-3">
+            <ShieldAlert className="text-brand-primary shrink-0" size={32} />
             Super Admin Portal
           </h1>
-          <p className="text-text-mut font-medium mt-1">Manage Vendors and Sub-Organizations</p>
+          <p className="text-text-mut font-medium mt-1 text-sm sm:text-base">Manage Vendors and Sub-Organizations</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <button 
             onClick={async () => {
               const res = await recoverLostData();
               if (res.success) showToast(res.msg, "success");
               else showToast(res.msg, "error");
             }}
-            className="py-2.5 px-5 bg-amber-500/10 text-amber-500 font-bold rounded-[12px] hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-sm flex items-center gap-2 text-sm"
+            className="w-full sm:w-auto py-2.5 px-5 bg-amber-500/10 text-amber-500 font-bold rounded-[12px] hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 text-sm"
           >
-            <ShieldAlert size={18} />
-            Recover Data
+            <ShieldAlert size={18} className="shrink-0" />
+            <span className="whitespace-nowrap">Recover Data</span>
           </button>
           <button 
             onClick={() => setShowModal(true)}
-            className="py-2.5 px-5 bg-brand-primary text-white font-bold rounded-[12px] hover:bg-brand-hover transition-all cursor-pointer shadow-xl shadow-brand-primary/20 flex items-center gap-2 text-sm"
+            className="w-full sm:w-auto py-2.5 px-5 bg-brand-primary text-white font-bold rounded-[12px] hover:bg-brand-hover transition-all cursor-pointer shadow-xl shadow-brand-primary/20 flex items-center justify-center gap-2 text-sm"
           >
-            <Plus size={18} strokeWidth={3} />
-            Provision New Organization
+            <Plus size={18} strokeWidth={3} className="shrink-0" />
+            <span className="whitespace-nowrap">Provision New Organization</span>
           </button>
         </div>
       </div>
@@ -373,17 +373,20 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div className="space-y-3 bg-bg-base/50 p-4 rounded-[16px] border border-border-card">
-                <div className="flex items-center gap-2 text-sm text-text-sec">
-                  <ShieldAlert size={16} className="text-brand-primary" />
-                  <span className="font-bold">ID:</span> {company.companyCode || company.id}
+                <div className="flex items-center gap-2 text-sm text-text-sec min-w-0">
+                  <ShieldAlert size={16} className="text-brand-primary shrink-0" />
+                  <span className="font-bold shrink-0">ID:</span> 
+                  <span className="truncate">{company.companyCode || company.id}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-text-sec">
-                  <Link size={16} className="text-brand-primary" />
-                  <span className="font-bold">Slug:</span> /{company.slug}/login
+                <div className="flex items-center gap-2 text-sm text-text-sec min-w-0">
+                  <LinkIcon size={16} className="text-brand-primary shrink-0" />
+                  <span className="font-bold shrink-0">Slug:</span> 
+                  <span className="truncate">/{company.slug}/login</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-text-sec">
-                  <Users size={16} className="text-brand-primary" />
-                  <span className="font-bold">Created:</span> {new Date(company.createdAt).toLocaleDateString()}
+                <div className="flex items-center gap-2 text-sm text-text-sec min-w-0">
+                  <Users size={16} className="text-brand-primary shrink-0" />
+                  <span className="font-bold shrink-0">Created:</span> 
+                  <span className="truncate">{new Date(company.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             </div>
@@ -532,9 +535,9 @@ export default function SuperAdminDashboard() {
                   <span className="text-text-mut font-semibold">Company ID</span>
                   <span className="font-mono text-xs bg-bg-card px-2 py-1 rounded text-text-sec">{selectedCompany.id}</span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-text-mut font-semibold">Login URL</span>
-                  <span className="font-medium text-brand-primary hover:underline cursor-pointer">/{selectedCompany.slug}/login</span>
+                <div className="flex justify-between items-center text-sm gap-4 min-w-0">
+                  <span className="text-text-mut font-semibold whitespace-nowrap shrink-0">Login URL</span>
+                  <span className="font-medium text-brand-primary hover:underline cursor-pointer truncate">/{selectedCompany.slug}/login</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-text-mut font-semibold">Created Date</span>

@@ -413,6 +413,7 @@ export default function Profile() {
             </div>
 
             {/* Shift Times */}
+            {currentUser?.role !== "superadmin" && (
             <div className="p-4 bg-brand-primary/5 rounded-[16px] border border-brand-primary/10 space-y-4">
               <h4 className="text-xs font-bold text-brand-primary flex items-center gap-1.5">
                 <Clock size={14} />
@@ -461,6 +462,7 @@ export default function Profile() {
                 </p>
               )}
             </div>
+            )}
 
             {/* Save Button */}
             <div className="flex justify-end pt-4 border-t border-border-card">

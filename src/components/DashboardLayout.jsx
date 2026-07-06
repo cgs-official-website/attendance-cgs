@@ -609,13 +609,6 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
     },
     {
-      label: "Task Management",
-      icon: CheckSquare,
-      active: location.pathname === "/task-management",
-      badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
-      onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
-    },
-    {
       label: "My Profile",
       icon: User,
       active: location.pathname === "/profile",
@@ -823,9 +816,9 @@ export default function DashboardLayout({ children }) {
                   : "text-text-sec hover:text-brand-primary hover:bg-brand-primary/8"
                   }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon size={18} />
-                  <span>{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon size={18} className="flex-shrink-0" />
+                  <span className="whitespace-nowrap truncate">{item.label}</span>
                 </div>
                 {item.badge ? (
                   <span className="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center justify-center animate-pulse min-w-[20px]">
@@ -1184,9 +1177,9 @@ export default function DashboardLayout({ children }) {
                       : "text-text-sec hover:text-brand-primary hover:bg-brand-primary/8"
                       }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Icon size={18} />
-                      <span>{item.label}</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon size={18} className="flex-shrink-0" />
+                      <span className="whitespace-nowrap truncate">{item.label}</span>
                     </div>
                     {item.badge && (
                       <span className="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center justify-center animate-pulse min-w-[20px]">

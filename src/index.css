@@ -189,53 +189,65 @@ body::after {
 /* Toast Notification Styles */
 .toast-container {
   position: fixed;
-  top: 1.5rem;
-  right: 1.5rem;
+  top: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-width: 420px;
-  width: calc(100% - 3rem);
+  align-items: center;
+  gap: 0.875rem;
+  width: auto;
+  min-width: 320px;
+  max-width: 90vw;
   pointer-events: none;
 }
 
 .toast {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1.25rem;
-  border-radius: 12px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-card);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  gap: 0.875rem;
+  padding: 0.875rem 1.25rem 0.875rem 1rem;
+  border-radius: 50px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   pointer-events: auto;
-  animation: toast-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: toast-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.3s ease;
+}
+
+.toast:hover {
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
 }
 
 .toast-success {
-  border-left: 4px solid var(--brand-success);
+  box-shadow: 0 10px 30px -10px var(--brand-success), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 .toast-error {
-  border-left: 4px solid var(--brand-danger);
+  box-shadow: 0 10px 30px -10px var(--brand-danger), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 .toast-warning {
-  border-left: 4px solid var(--brand-warning);
+  box-shadow: 0 10px 30px -10px var(--brand-warning), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 .toast-info {
-  border-left: 4px solid var(--brand-primary);
+  box-shadow: 0 10px 30px -10px var(--brand-primary), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 @keyframes toast-slide-in {
   from {
-    transform: translateY(-1rem);
+    transform: translateY(-2rem) scale(0.9);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }

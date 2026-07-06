@@ -1567,6 +1567,13 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
         const rawDiff = (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) / 60000;
         const workingMinutes = Math.min(rawDiff >= 540 ? rawDiff - 60 : rawDiff, 480);
         
+        const attRef = doc(db, "attendance", recordId);
+        const attSnap = await getDoc(attRef);
+        let existingBreaks = [];
+        if (attSnap.exists()) {
+          existingBreaks = attSnap.data().breaks || [];
+        }
+
         const attendanceData = {
           id: recordId,
           userId: reqData.userId,
@@ -1576,14 +1583,14 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           checkInTime: checkInIso,
           checkOutTime: checkOutIso,
           status: "checked-out",
-          breaks: [],
+          breaks: existingBreaks,
           totalWorkingMinutes: workingMinutes,
           shortBreakBalance: 1800,
           longBreakBalance: 1800,
           bioBreakBalance: 900
         };
         
-        await setDoc(doc(db, "attendance", recordId), attendanceData);
+        await setDoc(attRef, attendanceData, { merge: true });
       }
     }
   } else {
@@ -1607,6 +1614,13 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
         const rawDiff = (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) / 60000;
         const workingMinutes = Math.min(rawDiff >= 540 ? rawDiff - 60 : rawDiff, 480);
         
+        const logs = localDb.getAttendance();
+        const logIdx = logs.findIndex(log => log.id === recordId);
+        let existingBreaks = [];
+        if (logIdx !== -1) {
+          existingBreaks = logs[logIdx].breaks || [];
+        }
+
         const attendanceData = {
           id: recordId,
           userId: reqData.userId,
@@ -1616,17 +1630,15 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           checkInTime: checkInIso,
           checkOutTime: checkOutIso,
           status: "checked-out",
-          breaks: [],
+          breaks: existingBreaks,
           totalWorkingMinutes: workingMinutes,
           shortBreakBalance: 1800,
           longBreakBalance: 1800,
           bioBreakBalance: 900
         };
         
-        const logs = localDb.getAttendance();
-        const logIdx = logs.findIndex(log => log.id === recordId);
         if (logIdx !== -1) {
-          logs[logIdx] = attendanceData;
+          logs[logIdx] = { ...logs[logIdx], ...attendanceData };
         } else {
           logs.push(attendanceData);
         }
@@ -2709,6 +2721,52 @@ export const recoverLostData = async () => {
     return { success: true, msg: `Advanced Recovery Complete! Restored ${recoveredCount} orphaned records to Carrezza.` };
   } catch (err) {
     console.error("Recovery failed:", err);
+    return { success: false, msg: err.message };
+  }
+};
+
+export const recoverChatData = async () => {
+  if (dbType !== "firebase") return { success: false, msg: "Not in firebase mode" };
+  
+  try {
+    const companiesSnapshot = await getDocs(collection(db, "companies"));
+    const companies = companiesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const carrezza = companies.find(c => c.name.toLowerCase().includes("carrezza"));
+    
+    if (!carrezza) throw new Error("Carrezza company not found");
+    const targetId = carrezza.id;
+
+    let recoveredCount = 0;
+
+    const usersSnap = await getDocs(query(collection(db, "users"), where("companyId", "==", targetId)));
+    const carrezzaUserIds = usersSnap.docs.map(d => d.id);
+
+    const msgsSnap = await getDocs(collection(db, "messages"));
+    for (const docSnap of msgsSnap.docs) {
+      const data = docSnap.data();
+      if (!data.companyId || (data.companyId !== targetId && carrezzaUserIds.includes(data.senderId))) {
+        await updateDoc(doc(db, "messages", docSnap.id), { companyId: targetId });
+        recoveredCount++;
+      }
+    }
+
+    const recoverGeneral = async (collectionName) => {
+      const snap = await getDocs(collection(db, collectionName));
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        if (!data.companyId || data.companyId === "Organization" || data.companyId === "") {
+          await updateDoc(doc(db, collectionName, docSnap.id), { companyId: targetId });
+          recoveredCount++;
+        }
+      }
+    };
+
+    await recoverGeneral("channels");
+    await recoverGeneral("dm_threads");
+
+    return { success: true, msg: `Chat Recovery Complete! Restored ${recoveredCount} orphaned chat records to Carrezza.` };
+  } catch (err) {
+    console.error("Chat recovery failed:", err);
     return { success: false, msg: err.message };
   }
 };

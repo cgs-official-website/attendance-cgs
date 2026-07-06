@@ -63,10 +63,13 @@ export const ToastProvider = ({ children }) => {
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "var(--text-muted)",
+                color: "rgba(255, 255, 255, 0.6)",
                 display: "flex",
-                padding: "2px"
+                padding: "2px",
+                transition: "color 0.2s ease"
               }}
+              onMouseEnter={(e) => e.currentTarget.style.color = "#fff"}
+              onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255, 255, 255, 0.6)"}
             >
               <X size={16} />
             </button>

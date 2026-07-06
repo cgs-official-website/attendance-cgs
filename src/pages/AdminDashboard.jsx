@@ -27,10 +27,12 @@ import {
   subscribeToAssets,
   addAsset,
   updateAsset,
-  deleteAsset
+  deleteAsset,
+  recoverChatData
 } from "../firebase";
 import { 
   Shield, 
+  ShieldAlert,
   Users, 
   Clock, 
   Coffee, 
@@ -494,23 +496,10 @@ export default function AdminDashboard() {
   });
 
   // Filter leave requests for the queue
-  const filteredLeaveRequests = leaveRequests.filter((req) => {
-    const matchesSearch = 
-      (req.userName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (req.type || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (req.startDate || "").includes(searchQuery) ||
-      (req.endDate || "").includes(searchQuery);
-    return matchesSearch;
-  });
+  const filteredLeaveRequests = leaveRequests;
 
   // Filter regularization requests for the queue
-  const filteredRegRequests = regularizationRequests.filter((req) => {
-    const matchesSearch = 
-      (req.userName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (req.date || "").includes(searchQuery) ||
-      (req.reason || "").toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
+  const filteredRegRequests = regularizationRequests;
 
   // Filter unified request history
   const getUnifiedHistory = () => {
@@ -2307,15 +2296,6 @@ export default function AdminDashboard() {
               
               <div className="flex gap-2">
                 <button 
-                  onClick={() => showToast("Filtering options...", "info")}
-                  className="flex items-center gap-1.5 py-2.5 px-4 border border-border-card text-xs font-bold rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec transition-colors cursor-pointer"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                  </svg>
-                  <span>Filter</span>
-                </button>
-                <button 
                   onClick={handleExportExcel} 
                   className="flex items-center gap-1.5 py-2.5 px-4 border border-emerald-500/30 text-xs font-bold rounded-[12px] bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer"
                 >
@@ -2963,45 +2943,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Filter Toolbar */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 pb-6 border-b border-border-card">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Search Employee / Reason</label>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all font-semibold"
-                      placeholder="Search name, reason..."
-                      value={historySearch}
-                      onChange={(e) => setHistorySearch(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Request Type</label>
-                    <select
-                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main font-semibold outline-none focus:border-brand-primary transition-all"
-                      value={historyType}
-                      onChange={(e) => setHistoryType(e.target.value)}
-                    >
-                      <option value="all">All Types</option>
-                      <option value="leave">Leave Requests</option>
-                      <option value="regularization">Regularizations</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Status</label>
-                    <select
-                      className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main font-semibold outline-none focus:border-brand-primary transition-all"
-                      value={historyStatus}
-                      onChange={(e) => setHistoryStatus(e.target.value)}
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
-                  </div>
-                </div>
+                {/* Filter Toolbar Removed */}
 
                 {filteredHistory.length === 0 ? (
                   <div className="text-center py-16 text-text-mut text-sm font-semibold">
@@ -3610,10 +3552,12 @@ export default function AdminDashboard() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
-                  <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Shift Schedule</span>
-                  <span className="text-sm font-bold text-text-main">{selectedUser.shiftStart || "10:00"} - {selectedUser.shiftEnd || "19:00"}</span>
-                </div>
+                {selectedUser.role !== "superadmin" && (
+                  <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
+                    <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Shift Schedule</span>
+                    <span className="text-sm font-bold text-text-main">{selectedUser.shiftStart || "10:00"} - {selectedUser.shiftEnd || "19:00"}</span>
+                  </div>
+                )}
                 <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
                   <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Program Type</span>
                   <span className="text-sm font-bold text-text-main">{selectedUser.programType || "Internship"}</span>
@@ -4142,6 +4086,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              {editUser.role !== "superadmin" && (
               <div className="grid grid-cols-2 gap-4 bg-brand-primary/5 p-3 rounded-[12px] border border-dashed border-border-card">
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-bold text-brand-primary">Shift Start</label>
@@ -4164,6 +4109,7 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
+              )}
               </div>
               
               <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
@@ -4335,6 +4281,16 @@ export default function AdminDashboard() {
           showToast("Chat log exported!", "success");
         };
 
+        const handleRecoverChat = async () => {
+          showToast("Recovering Carrezza chat data...", "info");
+          const res = await recoverChatData();
+          if (res.success) {
+            showToast(res.msg, "success");
+          } else {
+            showToast(res.msg, "error");
+          }
+        };
+
         const uniqueThreads = [...new Set(chatMessages.map(m => m.threadId))];
 
         return (
@@ -4344,12 +4300,20 @@ export default function AdminDashboard() {
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main">Chat Monitor</h1>
                 <p className="text-sm text-text-sec mt-1">View, search and moderate all team messages and direct conversations.</p>
               </div>
-              <button
-                onClick={handleExportChat}
-                className="flex items-center gap-2 px-4 py-2.5 bg-brand-primary text-white text-sm font-bold rounded-[12px] hover:bg-brand-hover transition-colors cursor-pointer shadow-md"
-              >
-                <Download size={15} /> Export Chat Log
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleRecoverChat}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 text-amber-500 text-sm font-bold rounded-[12px] hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-sm"
+                >
+                  <ShieldAlert size={15} /> Recover Chat Data
+                </button>
+                <button
+                  onClick={handleExportChat}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-brand-primary text-white text-sm font-bold rounded-[12px] hover:bg-brand-hover transition-colors cursor-pointer shadow-md"
+                >
+                  <Download size={15} /> Export Chat Log
+                </button>
+              </div>
             </div>
 
             {/* Stats Row */}

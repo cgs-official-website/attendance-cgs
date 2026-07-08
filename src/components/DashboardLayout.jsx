@@ -32,7 +32,8 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   Lock,
   Info,
   Building2,
-  IndianRupee
+  IndianRupee,
+  Link2
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -132,6 +133,32 @@ export default function DashboardLayout({ children }) {
   
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const [localSearch, setLocalSearch] = useState(searchParams.get("q") || "");
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+  useEffect(() => {
+    setLocalSearch(searchParams.get("q") || "");
+  }, [searchParams]);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const newParams = new URLSearchParams(searchParams);
+    if (localSearch.trim()) {
+      newParams.set("q", localSearch);
+    } else {
+      newParams.delete("q");
+    }
+    setSearchParams(newParams);
+  };
+
+  const handleClearSearch = () => {
+    setLocalSearch("");
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("q");
+    setSearchParams(newParams);
+    setIsSearchExpanded(false);
+  };
 
   // Notice board, rules & notification states
   const [showNotifications, setShowNotifications] = useState(false);
@@ -603,6 +630,12 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/admin?tab=assets"); setIsMobileOpen(false); }
     },
     {
+      label: "External Links",
+      icon: Link2,
+      active: location.pathname === "/admin" && activeTabParam === "external-links",
+      onClick: () => { navigate("/admin?tab=external-links"); setIsMobileOpen(false); }
+    },
+    {
       label: "Payroll (India)",
       icon: IndianRupee,
       active: location.pathname === "/admin" && activeTabParam === "payroll",
@@ -780,6 +813,14 @@ export default function DashboardLayout({ children }) {
     );
   }
 
+  const filteredModules = (() => {
+    if (!localSearch.trim()) return [];
+    const query = localSearch.toLowerCase();
+    return menuItems.filter(item => 
+      !item.hidden && item.label.toLowerCase().includes(query)
+    );
+  })();
+
   return (
     <div className="flex min-h-screen w-full bg-bg-base text-text-main overflow-x-hidden">
       {/* Sidebar Panel - Desktop */}
@@ -928,6 +969,81 @@ export default function DashboardLayout({ children }) {
 
           {/* Action icons - right side */}
           <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 ml-auto flex-shrink-0">
+            {/* Global Search */}
+            <div className={`flex items-center transition-all duration-300 ${isSearchExpanded ? 'w-full absolute left-0 px-4 bg-bg-card/95 backdrop-blur-md z-50 h-[60px] sm:h-[70px]' : 'w-auto relative'}`}>
+              {!isSearchExpanded ? (
+                <button
+                  onClick={() => setIsSearchExpanded(true)}
+                  className="flex w-8 h-8 items-center justify-center border border-border-card rounded-[10px] bg-bg-card hover:bg-bg-base text-text-sec transition-colors cursor-pointer flex-shrink-0"
+                  title="Search"
+                >
+                  <Search size={15} />
+                </button>
+              ) : (
+                <form onSubmit={handleSearchSubmit} className="flex items-center w-full max-w-[400px] gap-2 ml-auto lg:mr-4 relative animate-fade-in">
+                  <div className="relative w-full">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search size={15} className="text-text-mut" />
+                    </div>
+                    <input
+                      type="text"
+                      value={localSearch}
+                      onChange={(e) => setLocalSearch(e.target.value)}
+                      placeholder="Search modules..."
+                      className="w-full bg-bg-base border border-border-card text-text-main text-sm rounded-[10px] pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/50 transition-all"
+                      autoFocus
+                    />
+                    {localSearch && (
+                      <button
+                        type="button"
+                        onClick={handleClearSearch}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-text-mut hover:text-text-main cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+
+                    {/* Autocomplete dropdown */}
+                    {localSearch && filteredModules.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-bg-card border border-border-card rounded-[12px] shadow-xl overflow-hidden z-[100] animate-fade-in flex flex-col max-h-[300px] overflow-y-auto">
+                        {filteredModules.map((item, idx) => {
+                          const Icon = item.icon;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setLocalSearch("");
+                                setIsSearchExpanded(false);
+                                setTimeout(() => item.onClick(), 0);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bg-base transition-colors text-left text-sm font-semibold text-text-sec hover:text-brand-primary border-b border-border-card last:border-0"
+                            >
+                              <Icon size={16} />
+                              <span>{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {localSearch && filteredModules.length === 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-bg-card border border-border-card rounded-[12px] shadow-xl overflow-hidden z-[100] animate-fade-in p-4 text-center text-sm text-text-mut font-semibold">
+                        No modules found.
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchExpanded(false)}
+                    className="text-xs font-bold text-text-mut hover:text-text-main transition-colors cursor-pointer whitespace-nowrap bg-bg-base hover:bg-border-card px-3 py-2 rounded-[8px]"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
+            </div>
+
             {dbMode === "local" && (
               <span className="hidden xs:flex bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider items-center gap-1.5">
                 <HardDrive size={10} /> Demo

@@ -1689,7 +1689,7 @@ export const subscribeToRegularizationRequests = (companyId, callback) => {
 };
 
 // ============================================================
-// TEAM HUB — Channels, Direct Messages & File Sharing
+// TEAM HUB  Channels, Direct Messages & File Sharing
 // ============================================================
 
 // --- Listeners for realtime simulation ---
@@ -2129,7 +2129,7 @@ export const deleteChatMessage = async (messageId) => {
 };
 
 /**
- * Get all messages (admin only — for monitoring)
+ * Get all messages (admin only  for monitoring)
  */
 export const getAllMessagesAdmin = async (companyId = "") => {
   if (dbType === "firebase") {
@@ -2153,7 +2153,7 @@ export const getAllMessagesAdmin = async (companyId = "") => {
  * Get or create a DM thread between two users
  */
 export const getOrCreateDmThread = async (userAId, userBId, userAName, userBName, companyId = "") => {
-  // Canonical ID — always sorted so order doesn't matter
+  // Canonical ID  always sorted so order doesn't matter
   const threadId = [userAId, userBId].sort().join("_dm_");
 
   if (dbType === "firebase") {
@@ -3117,3 +3117,8 @@ export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
     }
   }
 };
+
+export const subscribeToExternalLinks = () => { return () => {}; };
+export const generateExternalLink = async () => {};
+export const revokeExternalLink = async () => {};
+export const getExternalLinkByToken = async () => {};

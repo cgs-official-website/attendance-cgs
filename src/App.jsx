@@ -15,6 +15,7 @@ import TaskManagement from "./pages/TaskManagement";
 import LandingPage from "./pages/LandingPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import PurchaseOrganization from "./pages/PurchaseOrganization";
+import ClientChat from "./pages/ClientChat";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -134,6 +135,10 @@ export default function App() {
               <Register />
             </PublicRoute>
           } 
+        />
+        <Route 
+          path="/client-chat/:linkToken" 
+          element={<ClientChat />} 
         />
 
         {/* User Protected Routes */}

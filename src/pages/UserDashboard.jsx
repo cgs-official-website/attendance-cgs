@@ -632,9 +632,16 @@ export default function UserDashboard() {
   };
 
   const getActiveHoursText = () => {
-    if (!todayLog || !todayLog.checkInTime) return "0.0 hrs";
+    const formatTime = (minutes) => {
+      const h = Math.floor(minutes / 60);
+      const m = Math.floor(minutes % 60);
+      const s = Math.floor((minutes * 60) % 60);
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    if (!todayLog || !todayLog.checkInTime) return "00:00:00";
     if (todayLog.status === "checked-out" && todayLog.totalWorkingMinutes !== undefined) {
-      return `${(todayLog.totalWorkingMinutes / 60).toFixed(1)} hrs`;
+      return formatTime(todayLog.totalWorkingMinutes);
     }
     const start = new Date(todayLog.checkInTime).getTime();
     const now = new Date().getTime();
@@ -645,7 +652,7 @@ export default function UserDashboard() {
     }, 0) || 0;
 
     const elapsedMinutes = Math.max(0, ((now - start) / 60000) - breakMinutes);
-    return `${(elapsedMinutes / 60).toFixed(1)} hrs`;
+    return formatTime(elapsedMinutes);
   };
 
   const getWeeklyHours = () => {

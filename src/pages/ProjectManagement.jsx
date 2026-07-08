@@ -17,6 +17,7 @@ import jsPDF from "jspdf";
 import logoImg from '../assets/zuna-logo.png';
 import { addStandardPDFHeader } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
+import ClientChatsPMTab from "../components/ClientChatsPMTab";
 
 export default function ProjectManagement() {
   const { currentUser } = useAuth();
@@ -932,9 +933,21 @@ export default function ProjectManagement() {
         >
           Daily Activity Logs
         </button>
+        <button
+          onClick={() => setActiveSubTab("client-chats")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "client-chats"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          Client Chats
+        </button>
       </div>
 
-      {activeSubTab === "team" ? (
+      {activeSubTab === "client-chats" ? (
+        <ClientChatsPMTab currentUser={currentUser} />
+      ) : activeSubTab === "team" ? (
         <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
         <div className="p-4 border-b border-border-card bg-bg-base/30 flex flex-col sm:flex-row items-center gap-4">
           <div className="relative w-full sm:max-w-md">

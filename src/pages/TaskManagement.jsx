@@ -821,14 +821,24 @@ export default function TaskManagement() {
                           <td className="px-6 py-4 font-bold text-text-main whitespace-nowrap">{report.date}</td>
                           <td className="px-6 py-4 text-text-sec whitespace-nowrap">{report.day || getDayOfWeek(report.date)}</td>
                           <td className="px-6 py-4 font-extrabold text-center text-text-main">{report.hours} h</td>
-                          <td className="px-6 py-4 text-text-sec max-w-xs break-words whitespace-pre-wrap">{report.tasksCompleted}</td>
-                          <td className="px-6 py-4 text-text-mut max-w-xs break-words whitespace-pre-wrap">{report.issuesFaced || <span className="italic text-text-mut/40">—</span>}</td>
-                          <td className="px-6 py-4 max-w-xs break-words">
-                            {report.supervisorRemarks ? (
-                              <span className="text-brand-primary font-bold">{report.supervisorRemarks}</span>
-                            ) : (
-                              <span className="text-text-mut/40 italic">No remarks yet</span>
-                            )}
+                          <td className="px-6 py-4">
+                            <div className="max-h-[120px] overflow-y-auto custom-scrollbar text-text-sec max-w-xs break-words whitespace-pre-wrap pr-2">
+                              {report.tasksCompleted}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="max-h-[120px] overflow-y-auto custom-scrollbar text-text-mut max-w-xs break-words whitespace-pre-wrap pr-2">
+                              {report.issuesFaced || <span className="italic text-text-mut/40">—</span>}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="max-h-[120px] overflow-y-auto custom-scrollbar max-w-xs break-words pr-2">
+                              {report.supervisorRemarks ? (
+                                <span className="text-brand-primary font-bold">{report.supervisorRemarks}</span>
+                              ) : (
+                                <span className="text-text-mut/40 italic">No remarks yet</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge}`}>

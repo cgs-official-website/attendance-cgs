@@ -75,7 +75,7 @@ function FilePreviewModal({ file, displayUrl, onClose }) {
   const isVideo = file.mimeType?.startsWith("video/") || file.name?.match(/\.(mp4|webm|ogg)$/i);
   const isPdf = file.mimeType === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf");
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (file.url && file.url.startsWith("data:")) {
       try {
         const blob = dataURLtoBlob(file.url);
@@ -92,13 +92,28 @@ function FilePreviewModal({ file, displayUrl, onClose }) {
         console.error("Failed to download local file:", err);
       }
     } else {
-      const link = document.createElement("a");
-      link.href = displayUrl;
-      link.download = file.name || "download";
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const response = await fetch(displayUrl);
+        if (!response.ok) throw new Error("Network response was not ok");
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = file.name || "download";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      } catch (err) {
+        console.error("Failed to download remote file:", err);
+        const link = document.createElement("a");
+        link.href = displayUrl;
+        link.download = file.name || "download";
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     }
   };
 

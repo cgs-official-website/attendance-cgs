@@ -860,25 +860,25 @@ export default function DashboardLayout({ children }) {
 
         {/* Footer info & Logout */}
         <div className="p-4 border-t border-border-card flex items-center justify-between bg-bg-base/30">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold text-xs uppercase overflow-hidden">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 shrink-0 rounded-full bg-white flex items-center justify-center overflow-hidden shadow-sm">
               {currentUser?.avatar ? (
                 <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "AP"
+                <img src="/logo.png" alt="Profile" className="w-full h-full object-contain p-1" onError={(e) => { e.target.style.display='none'; }} />
               )}
             </div>
-            <div className="flex flex-col text-left max-w-[110px]">
-              <span className="font-bold text-xs text-text-main truncate">{currentUser?.name}</span>
-              <span className="text-[9px] text-text-mut uppercase font-extrabold tracking-wider">{currentUser?.role}</span>
+            <div className="flex flex-col text-left min-w-0 pr-2">
+              <span className="font-bold text-sm text-text-main truncate leading-tight">{currentUser?.name || "Admin"}</span>
+              <span className="text-[10px] text-text-mut font-extrabold uppercase tracking-wider">{currentUser?.role?.replace('_', ' ') || "ADMIN"}</span>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="w-8 h-8 flex items-center justify-center rounded-[8px] hover:bg-red-500/10 text-text-sec hover:text-red-500 transition-colors cursor-pointer"
+            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-text-mut hover:text-red-500 transition-colors cursor-pointer"
             title="Log Out"
           >
-            <LogOut size={16} />
+            <LogOut size={18} />
           </button>
         </div>
       </aside>
@@ -1125,13 +1125,13 @@ export default function DashboardLayout({ children }) {
             {/* User profile avatar button */}
             <button
               onClick={() => navigate("/profile")}
-              className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 hover:border-brand-primary/60 hover:bg-brand-primary/25 transition-all flex items-center justify-center font-extrabold text-xs uppercase shadow-sm cursor-pointer focus:outline-none overflow-hidden"
+              className="flex-shrink-0 w-9 h-9 rounded-full bg-white border border-brand-primary/20 hover:border-brand-primary/60 hover:shadow-[0_0_0_2px_rgba(139,92,246,0.3)] transition-all flex items-center justify-center shadow-sm cursor-pointer focus:outline-none overflow-hidden"
               title="View Profile"
             >
               {currentUser?.avatar ? (
                 <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                currentUser?.name ? currentUser.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"
+                <img src="/logo.png" alt="Profile" className="w-full h-full object-contain p-1" onError={(e) => { e.target.style.display='none'; }} />
               )}
             </button>
           </div>

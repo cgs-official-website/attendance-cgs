@@ -516,8 +516,9 @@ export default function AdminDashboard() {
     };
   }).filter((item) => {
     const matchesSearch = 
-      item.user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      item.user.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (item.user.name || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (item.user.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.user.role || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = !selectedDept || item.user.department === selectedDept;
     
     return matchesSearch && matchesDept;
@@ -526,8 +527,9 @@ export default function AdminDashboard() {
   // Filter user profiles
   const filteredProfiles = staffUsers.filter((u) => {
     const matchesSearch = 
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      u.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (u.name || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (u.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.role || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = !selectedDept || u.department === selectedDept;
     
     let matchesStatus = true;

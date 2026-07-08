@@ -14,7 +14,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import logoImg from '../assets/zuna-logo.png';
-
+import { addStandardPDFHeader } from "../utils/pdfHeader";
 export default function History() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
@@ -158,34 +158,13 @@ export default function History() {
 
   const maxChartHours = Math.max(8, ...chartData.map(c => c.hours));
 
-  const handleDownloadPDF = () => {
-    if (filteredLogs.length === 0) return showToast("No logs available to download.", "warning");
-    
+  const handleDownloadPDF = async () => {
+    if (filteredLogs.length === 0) return showToast("No records to export.", "warning");
+
     const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const pageHeight = doc.internal.pageSize.height;
-    
-    // Header background
-    doc.setFillColor(15, 23, 42); // slate-900
-    doc.rect(0, 0, pageWidth, 50, 'F');
-    
-    // Logo handling
-    try {
-      doc.addImage(logoImg, 'PNG', 14, 12, 28, 28);
-    } catch (e) {
-      console.warn("Logo image failed to load for PDF:", e);
-    }
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.text("My Attendance Report", 50, 26);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(148, 163, 184); // slate-400
-    doc.text(`Employee: ${currentUser.name}`, 50, 34);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 50, 40);
+    const titleText = "My Attendance Report";
+    const subtitleText = `Employee: ${currentUser.name} | Generated: ${new Date().toLocaleDateString()}`;
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText);
 
     const tableData = filteredLogs.map((log) => {
       const workingHours = log.totalWorkingMinutes ? (log.totalWorkingMinutes / 60).toFixed(1) + " hrs" : "-";
@@ -201,7 +180,7 @@ export default function History() {
     autoTable(doc, {
       head: [["Date", "Check In", "Check Out", "Working Hours", "Status"]],
       body: tableData,
-      startY: 60,
+      startY: startY + 5,
       styles: { fontSize: 9, font: "helvetica", cellPadding: { top: 6, bottom: 6, left: 4, right: 4 }, lineColor: [226, 232, 240], lineWidth: 0.1 },
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", halign: 'center', cellPadding: { top: 8, bottom: 8, left: 4, right: 4 } },
       columnStyles: { 

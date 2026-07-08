@@ -2135,8 +2135,9 @@ export const getAllMessagesAdmin = async (companyId = "") => {
   if (dbType === "firebase") {
     let qRef = collection(db, "messages");
     if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
-    const snapshot = await getDocs(query(qRef, orderBy("timestamp", "desc")));
-    return snapshot.docs.map(d => d.data());
+    const snapshot = await getDocs(qRef);
+    const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return msgs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   } else {
     let msgs = getLocalMessages();
     if (companyId) msgs = msgs.filter(m => m.companyId === companyId);

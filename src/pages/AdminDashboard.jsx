@@ -75,6 +75,7 @@ import {
   Banknote
 } from "lucide-react";
 import { jsPDF } from "jspdf";
+import { addStandardPDFHeader } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
 const getBase64ImageFromUrl = async (imageUrl) => {
@@ -302,7 +303,7 @@ export default function AdminDashboard() {
   const [chatFilter, setChatFilter]           = useState(""); // search
   const [chatTypeFilter, setChatTypeFilter]   = useState("all"); // 'all' | 'channel' | 'dm'
   const [chatThreadFilter, setChatThreadFilter] = useState("all"); // specific thread id or 'all'
-
+  const [chatPage, setChatPage] = useState(1);
 
 
   const formatShiftTime = (timeStr) => {
@@ -457,7 +458,8 @@ export default function AdminDashboard() {
     setLeavesPendingPage(1);
     setRegsPendingPage(1);
     setHistoryPage(1);
-  }, [activeTab, approvalsSubTab, searchQuery, historySearch, historyType, historyStatus]);
+    setChatPage(1);
+  }, [activeTab, approvalsSubTab, searchQuery, historySearch, historyType, historyStatus, chatFilter, chatTypeFilter, chatThreadFilter]);
 
   useEffect(() => {
     if (regularizationRequests.length > 0 && (!selectedRegRequestId || !regularizationRequests.some(r => r.id === selectedRegRequestId))) {
@@ -915,45 +917,12 @@ export default function AdminDashboard() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-    
-    let logoLoaded = false;
-    try {
-      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
-      doc.addImage(logoBase64, "PNG", 14, 10, 15, 15);
-      logoLoaded = true;
-    } catch (e) {
-      console.warn("Failed to load company logo image for PDF:", e);
-    }
+    const titleText = "Organization Assets Report";
+    const subtitleText = `Scope: Active Hardware & Devices Inventory | Generated: ${new Date().toLocaleString()} | Total Count: ${assets.length} item(s)`;
+    let currentY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
 
-    if (!logoLoaded) {
-      doc.setFillColor(0, 97, 224);
-      doc.circle(21.5, 17.5, 7.5, "F");
-      doc.setDrawColor(255, 255, 255);
-      doc.setLineWidth(0.8);
-      doc.line(18.5, 17.5, 20.5, 19.5);
-      doc.line(20.5, 19.5, 24.5, 14.5);
-    }
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(0, 97, 224);
-    doc.text("Organization Assets Report", 34, 16);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Scope: Active Hardware & Devices Inventory`, 34, 22);
-    
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 200, 16);
-    doc.text(`Total Count: ${assets.length} item(s)`, 200, 22);
-    
-    doc.setDrawColor(226, 232, 240);
-    doc.line(14, 28, 280, 28);
-    
     const headers = ["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Assigned", "Authority"];
     const colWidths = [45, 30, 40, 25, 45, 35, 45];
-    
-    let currentY = 38;
     
     doc.setFillColor(0, 97, 224);
     doc.rect(14, currentY - 5, 266, 7, "F");
@@ -1181,49 +1150,13 @@ export default function AdminDashboard() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-    
-    // Load company logo
-    let logoLoaded = false;
-    try {
-      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
-      doc.addImage(logoBase64, "PNG", 14, 10, 15, 15);
-      logoLoaded = true;
-    } catch (e) {
-      console.warn("Failed to load company logo image for PDF, drawing vector fallback:", e);
-    }
-
-    if (!logoLoaded) {
-      // Draw programmatically a backup corporate vector badge
-      doc.setFillColor(0, 97, 224); // Primary Blue
-      doc.circle(21.5, 17.5, 7.5, "F");
-      doc.setDrawColor(255, 255, 255); // White checkmark
-      doc.setLineWidth(0.8);
-      doc.line(18.5, 17.5, 20.5, 19.5);
-      doc.line(20.5, 19.5, 24.5, 14.5);
-    }
-    
-    // Add title text next to logo
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(0, 97, 224); // Brand Primary Blue
-    doc.text("Carrezza Global Solutions Pvt Ltd", 34, 16);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Scope: Corporate Attendance Registry Report`, 34, 22);
-    
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 200, 16);
-    doc.text(`Filtered Count: ${filteredLogs.length} record(s)`, 200, 22);
-    
-    doc.setDrawColor(226, 232, 240);
-    doc.line(14, 28, 280, 28);
+    const titleText = "Corporate Attendance Registry Report";
+    const subtitleText = `Generated: ${new Date().toLocaleString()} | Filtered Count: ${filteredLogs.length} record(s)`;
+    let currentY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
     
     // Table Headers
     const headers = ["Date", "Name", "Department", "Program", "Check In", "Check Out", "Breaks", "Working Hrs"];
     const colWidths = [24, 45, 35, 30, 25, 25, 30, 25];
-    
-    let currentY = 38;
     
     // Print header background band
     doc.setFillColor(0, 97, 224);
@@ -1381,49 +1314,13 @@ export default function AdminDashboard() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-    
-    // Load company logo
-    let logoLoaded = false;
-    try {
-      const logoBase64 = await getBase64ImageFromUrl("/logo.png");
-      doc.addImage(logoBase64, "PNG", 14, 10, 15, 15);
-      logoLoaded = true;
-    } catch (e) {
-      console.warn("Failed to load company logo image for PDF, drawing vector fallback:", e);
-    }
-
-    if (!logoLoaded) {
-      // Draw programmatically a backup corporate vector badge
-      doc.setFillColor(0, 97, 224); // Primary Blue
-      doc.circle(21.5, 17.5, 7.5, "F");
-      doc.setDrawColor(255, 255, 255); // White checkmark
-      doc.setLineWidth(0.8);
-      doc.line(18.5, 17.5, 20.5, 19.5);
-      doc.line(20.5, 19.5, 24.5, 14.5);
-    }
-    
-    // Add title text next to logo
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(0, 97, 224); // Brand Primary Blue
-    doc.text("Carrezza Global Solutions Pvt Ltd", 34, 16);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105); // Slate 600
-    doc.text(`Scope: Individual Attendance History for ${user.name} (${user.email})`, 34, 22);
-    
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 200, 16);
-    doc.text(`Department: ${user.department || "N/A"}`, 200, 22);
-    
-    doc.setDrawColor(226, 232, 240);
-    doc.line(14, 28, 280, 28);
+    const titleText = `Individual Attendance History for ${user.name} (${user.email})`;
+    const subtitleText = `Department: ${user.department || "N/A"} | Generated: ${new Date().toLocaleString()}`;
+    let currentY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
     
     // Table Headers
     const headers = ["Date", "Check In", "Check Out", "Breaks Summary", "GPS Check-In", "GPS Check-Out", "Active Hours"];
     const colWidths = [30, 30, 30, 45, 55, 55, 25];
-    
-    let currentY = 38;
     
     // Print header backgrounds
     doc.setFillColor(0, 97, 224);
@@ -4491,15 +4388,23 @@ export default function AdminDashboard() {
             ["Timestamp", "Type", "Thread", "Sender", "Message", "File Name", "File URL"]
           ];
           filteredMsgs.forEach(m => {
-            rows.push([
+            let fileUrl = m.fileData?.url || "";
+            if (fileUrl.startsWith("data:") && fileUrl.length > 500) {
+              fileUrl = "[Embedded File Data]";
+            }
+            
+            const rowData = [
               m.timestamp ? new Date(m.timestamp).toLocaleString() : "",
               m.threadType,
               getThreadLabel(m),
               m.senderName,
               m.text || "",
               m.fileData?.name || "",
-              m.fileData?.url || ""
-            ]);
+              fileUrl
+            ];
+            
+            // Truncate to avoid Excel's 32,767 character limit per cell
+            rows.push(rowData.map(val => String(val).substring(0, 32000)));
           });
           const ws = XLSX.utils.aoa_to_sheet(rows);
           const wb = XLSX.utils.book_new();
@@ -4508,7 +4413,8 @@ export default function AdminDashboard() {
           rows.forEach(row => row.forEach((val, i) => {
             max_len[i] = Math.max(max_len[i] || 10, String(val || "").length);
           }));
-          ws["!cols"] = Object.keys(max_len).map(i => ({ wch: max_len[i] + 3 }));
+          // Prevent column width from exceeding 255 (Excel limit)
+          ws["!cols"] = Object.keys(max_len).map(i => ({ wch: Math.min(max_len[i] + 3, 250) }));
           XLSX.writeFile(wb, `Chat_Monitor_Export_${new Date().toISOString().split("T")[0]}.xlsx`);
           showToast("Chat log exported!", "success");
         };
@@ -4620,8 +4526,9 @@ export default function AdminDashboard() {
                   <p className="text-sm font-semibold text-text-mut">No messages found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border-card bg-bg-base">
                         {["Timestamp", "Type", "Thread / Channel", "Sender", "Message", "Attachment", "Actions"].map(h => (
@@ -4630,7 +4537,7 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredMsgs.slice(0, 200).map(msg => (
+                      {filteredMsgs.slice((chatPage - 1) * 20, chatPage * 20).map(msg => (
                         <tr key={msg.id} className="border-b border-border-card hover:bg-bg-base transition-colors">
                           <td className="px-4 py-3 text-[11px] text-text-mut whitespace-nowrap">
                             {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : "—"}
@@ -4680,6 +4587,31 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination Controls */}
+                {Math.ceil(filteredMsgs.length / 20) > 1 && (
+                  <div className="px-5 py-3 border-t border-border-card flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider">
+                      Page {chatPage} of {Math.ceil(filteredMsgs.length / 20)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setChatPage(p => Math.max(1, p - 1))}
+                        disabled={chatPage === 1}
+                        className="px-3 py-1.5 bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[8px] hover:bg-brand-primary/10 hover:text-brand-primary hover:border-brand-primary/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      >
+                        Previous
+                      </button>
+                      <button 
+                        onClick={() => setChatPage(p => Math.min(Math.ceil(filteredMsgs.length / 20), p + 1))}
+                        disabled={chatPage === Math.ceil(filteredMsgs.length / 20)}
+                        className="px-3 py-1.5 bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[8px] hover:bg-brand-primary/10 hover:text-brand-primary hover:border-brand-primary/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </div>
 
@@ -5370,7 +5302,7 @@ export default function AdminDashboard() {
           const special = gross - basic - hra;
           const pf = basic * 0.12;
           const esi = gross <= 21000 ? gross * 0.0075 : 0;
-          const pt = gross > 0 ? 200 : 0; // Standard Professional Tax
+          const pt = gross > 21000 ? 200 : 0; // Professional Tax applicable only if > 21000
           const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0; // Simplified mock TDS
           const net = gross - (pf + esi + pt + tds);
           return { basic, hra, special, pf, esi, pt, tds, net };

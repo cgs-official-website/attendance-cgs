@@ -14,9 +14,9 @@ import {
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare } from "lucide-react";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
 import logoImg from '../assets/zuna-logo.png';
+import { addStandardPDFHeader } from "../utils/pdfHeader";
+import * as XLSX from "xlsx";
 
 export default function ProjectManagement() {
   const { currentUser } = useAuth();
@@ -179,46 +179,9 @@ export default function ProjectManagement() {
 
   const handleDownloadPDF = async () => {
     const doc = new jsPDF();
-    
-    const img = new Image();
-    img.src = logoImg;
-    await new Promise((resolve) => {
-      img.onload = resolve;
-      img.onerror = resolve; 
-    });
-
-    let startY = 20;
-    if (img.complete && img.naturalWidth > 0) {
-      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
-      startY = 40;
-    }
-    
-    // Main Title
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.setTextColor(79, 70, 229);
-    doc.text("Project Task Reports", img.complete ? 45 : 14, 20);
-    
-    // Header Info
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Project Manager:", img.complete ? 45 : 14, 27);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${currentUser.name}`, img.complete ? 75 : 44, 27);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
-
-    // Divider Line
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.5);
-    doc.line(14, 36, 196, 36);
-
-    startY = img.complete ? 42 : 42;
+    const titleText = "Project Task Reports";
+    const subtitleText = `Project Manager: ${currentUser.name} | Downloaded: ${new Date().toLocaleString()}`;
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText);
     
     const tableData = [];
     teamMembers.forEach(m => {
@@ -335,20 +298,9 @@ export default function ProjectManagement() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-
-    doc.setFillColor(30, 78, 121); // #1e4e79
-    doc.rect(14, 10, 269, 15, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("DAILY REPORT LOG", 148.5, 20, { align: "center" });
-
-    doc.setFillColor(170, 198, 226); // #aac6e2
-    doc.rect(14, 25, 269, 8, "F");
-    doc.setTextColor(15, 23, 42);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.text("Log each intern's daily activity below | All fields required | Rows auto-highlight based on status", 148.5, 30.2, { align: "center" });
+    const titleText = "DAILY REPORT LOG";
+    const subtitleText = "Log each intern's daily activity below | All fields required | Rows auto-highlight based on status";
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
 
     const bodyData = filteredReports.map((report, idx) => [
       idx + 1,
@@ -363,7 +315,7 @@ export default function ProjectManagement() {
     ]);
 
     autoTable(doc, {
-      startY: 37,
+      startY: startY + 5,
       head: [["#", "Candidate Name", "Date", "Day (Auto)", "Hours", "Tasks Completed", "Issues Faced", "Supervisor Remarks", "Status"]],
       body: bodyData,
       theme: "grid",
@@ -541,37 +493,9 @@ export default function ProjectManagement() {
     }
 
     const doc = new jsPDF();
-    
-    const img = new Image();
-    img.src = logoImg;
-    await new Promise((resolve) => {
-      img.onload = resolve;
-      img.onerror = resolve; 
-    });
-
-    let startY = 20;
-    if (img.complete && img.naturalWidth > 0) {
-      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
-      startY = 40;
-    }
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(79, 70, 229);
-    doc.text(`Reports: ${selectedMemberForReports.name}`, img.complete ? 45 : 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Project Manager:", img.complete ? 45 : 14, 27);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${currentUser.name}`, img.complete ? 75 : 44, 27);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
+    const titleText = `Reports: ${selectedMemberForReports.name}`;
+    const subtitleText = `Project Manager: ${currentUser.name} | Downloaded: ${new Date().toLocaleString()}`;
+    let startY = await addStandardPDFHeader(doc, titleText, subtitleText);
 
     let filtersApplied = [];
     if (memberFilterDate) filtersApplied.push(`Date: ${memberFilterDate}`);
@@ -579,15 +503,14 @@ export default function ProjectManagement() {
     if (memberFilterProject !== "All") filtersApplied.push(`Project: ${memberFilterProject}`);
     if (filtersApplied.length > 0) {
        doc.setFontSize(9);
-       doc.text(`Filters: ${filtersApplied.join(' | ')}`, img.complete ? 45 : 14, 37);
-       startY = img.complete ? 45 : 45;
-    } else {
-       startY = img.complete ? 42 : 42;
+       doc.setTextColor(80, 80, 80);
+       doc.text(`Filters: ${filtersApplied.join(' | ')}`, 14, startY);
+       startY += 6;
     }
-
+    
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.5);
-    doc.line(14, startY - 6, 196, startY - 6);
+    doc.line(14, startY - 2, 196, startY - 2);
 
     const tableData = [];
     filteredTasks.forEach(t => {

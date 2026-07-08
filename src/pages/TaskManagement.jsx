@@ -20,7 +20,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import logoImg from '../assets/zuna-logo.png';
-
+import { addStandardPDFHeader } from "../utils/pdfHeader";
 export default function TaskManagement() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
@@ -253,47 +253,9 @@ export default function TaskManagement() {
 
   const handleDownloadPDF = async () => {
     const doc = new jsPDF();
-    
-    const img = new Image();
-    img.src = logoImg;
-    await new Promise((resolve) => {
-      img.onload = resolve;
-      img.onerror = resolve; 
-    });
-
-    let startY = 20;
-    if (img.complete && img.naturalWidth > 0) {
-      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
-      startY = 40;
-    }
-    
-    // Main Title
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.setTextColor(79, 70, 229);
     const titleText = selectedDownloadProject === "All" ? "My Task Reports" : `Task Report: ${selectedDownloadProject}`;
-    doc.text(titleText, img.complete ? 45 : 14, 20);
-    
-    // Header Info
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Employee:", img.complete ? 45 : 14, 27);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${currentUser.name}`, img.complete ? 65 : 34, 27);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
-
-    // Divider Line
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.5);
-    doc.line(14, 36, 196, 36);
-
-    startY = img.complete ? 42 : 42;
+    const subtitleText = `Employee: ${currentUser.name} | Downloaded: ${new Date().toLocaleString()}`;
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText);
     
     const tableData = [];
     const tasksToExport = selectedDownloadProject === "All" ? tasks : tasks.filter(t => t.project === selectedDownloadProject);
@@ -390,46 +352,9 @@ export default function TaskManagement() {
 
   const handleDownloadSingleTaskPDF = async (task) => {
     const doc = new jsPDF();
-    
-    const img = new Image();
-    img.src = logoImg;
-    await new Promise((resolve) => {
-      img.onload = resolve;
-      img.onerror = resolve; 
-    });
-
-    let startY = 20;
-    if (img.complete && img.naturalWidth > 0) {
-      doc.addImage(img, 'PNG', 14, 10, 25, 25 * (img.naturalHeight / img.naturalWidth));
-      startY = 40;
-    }
-    
-    // Main Title
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.setTextColor(79, 70, 229);
-    doc.text(`Task Report: ${task.title}`, img.complete ? 45 : 14, 20);
-    
-    // Header Info
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Employee:", img.complete ? 45 : 14, 27);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${currentUser.name}`, img.complete ? 65 : 34, 27);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Downloaded:", img.complete ? 45 : 14, 32);
-    doc.setFont("helvetica", "normal");
-    doc.text(` ${new Date().toLocaleString()}`, img.complete ? 68 : 37, 32);
-
-    // Divider Line
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.5);
-    doc.line(14, 36, 196, 36);
-
-    startY = img.complete ? 42 : 42;
+    const titleText = `Task Report: ${task.title}`;
+    const subtitleText = `Employee: ${currentUser.name} | Downloaded: ${new Date().toLocaleString()}`;
+    let startY = await addStandardPDFHeader(doc, titleText, subtitleText);
     
     const tableData = [];
     const status = task.completed ? "Done" : "Active";
@@ -463,31 +388,13 @@ export default function TaskManagement() {
     doc.save(`Task_Report_${task.title.replace(/\s+/g, '_').substring(0,10)}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
-  const handleDownloadDailyLogPDF = () => {
+  const handleDownloadDailyLogPDF = async () => {
     if (dailyReports.length === 0) return showToast("No daily logs to download.", "warning");
     
     const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const pageHeight = doc.internal.pageSize.height;
-    
-    // Header background
-    doc.setFillColor(15, 23, 42); // slate-900
-    doc.rect(0, 0, pageWidth, 50, 'F');
-    
-    try {
-      doc.addImage(logoImg, 'PNG', 14, 12, 28, 28);
-    } catch (e) {}
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.text("Daily Activity Log Report", 50, 26);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(148, 163, 184); // slate-400
-    doc.text(`Employee: ${currentUser.name}`, 50, 34);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 50, 40);
+    const titleText = "Daily Activity Log Report";
+    const subtitleText = `Employee: ${currentUser.name} | Generated: ${new Date().toLocaleDateString()}`;
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText);
 
     const tableData = dailyReports.map((report) => [
       report.date,
@@ -500,7 +407,7 @@ export default function TaskManagement() {
     autoTable(doc, {
       head: [["Date", "Hours", "Tasks Completed", "Issues Faced", "Status"]],
       body: tableData,
-      startY: 60,
+      startY: startY + 5,
       styles: { fontSize: 9, font: "helvetica", cellPadding: 6, lineColor: [226, 232, 240], lineWidth: 0.1 },
       headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
       columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' }, 4: { halign: 'center' } },

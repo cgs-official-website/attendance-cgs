@@ -179,7 +179,15 @@ export const registerUser = async (name, department, programType, email, passwor
   if (dbType === "firebase") {
     let userCredential;
     try {
-      userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      let secondaryApp;
+      try {
+        secondaryApp = getApp("SecondaryAppInstance");
+      } catch (err) {
+        secondaryApp = initializeApp(firebaseConfig, "SecondaryAppInstance");
+      }
+      const secondaryAuth = getAuth(secondaryApp);
+      userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+      await signOut(secondaryAuth);
     } catch (error) {
       if (error.code === 'auth/email-already-in-use') throw new Error("Email is already registered. Please log in instead.");
       if (error.code === 'auth/invalid-email') throw new Error("Please enter a valid email address.");

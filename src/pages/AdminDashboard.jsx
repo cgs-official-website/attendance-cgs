@@ -78,6 +78,7 @@ import { jsPDF } from "jspdf";
 import { addStandardPDFHeader } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
+import ExternalLinksTab from "../components/ExternalLinksTab";
 const getBase64ImageFromUrl = async (imageUrl) => {
   const res = await fetch(imageUrl);
   const blob = await res.blob();
@@ -5346,7 +5347,17 @@ export default function AdminDashboard() {
           const special = gross - basic - hra;
           const pf = basic * 0.12;
           const esi = gross <= 21000 ? gross * 0.0075 : 0;
-          const pt = gross > 21000 ? 200 : 0; // Professional Tax applicable only if > 21000
+          
+          const getPTDeduction = (g) => {
+            if (g <= 21000) return 0;
+            if (g <= 30000) return Math.round((180 / 6) * 100) / 100;
+            if (g <= 45000) return Math.round((425 / 6) * 100) / 100;
+            if (g <= 60000) return Math.round((930 / 6) * 100) / 100;
+            if (g <= 75000) return Math.round((1025 / 6) * 100) / 100;
+            return Math.round((1250 / 6) * 100) / 100;
+          };
+          const pt = getPTDeduction(gross);
+
           const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0; // Simplified mock TDS
           const net = gross - (pf + esi + pt + tds);
           return { basic, hra, special, pf, esi, pt, tds, net };
@@ -5532,6 +5543,17 @@ export default function AdminDashboard() {
           </div>
         );
       })()}
+
+      {/* ------------------ VIEW: EXTERNAL LINKS ------------------ */}
+      {activeTab === "external-links" && (
+        <div className="animate-fade-in">
+          <ExternalLinksTab 
+            currentUser={currentUser}
+            users={users}
+            showToast={showToast}
+          />
+        </div>
+      )}
 
       {/* ------------------ MODALS ------------------ */}
       {showEditSalaryModal && selectedPayrollUser && createPortal(

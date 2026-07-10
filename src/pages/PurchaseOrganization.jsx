@@ -12,6 +12,7 @@ export default function PurchaseOrganization() {
   const [orgSize, setOrgSize] = useState("");
   const [ceoName, setCeoName] = useState("");
   const [gstNumber, setGstNumber] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState("Demo Plan");
   
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -65,6 +66,8 @@ export default function PurchaseOrganization() {
         orgSize,
         ceoName,
         gstNumber,
+        plan: selectedPlan,
+        modules: [],
         status: "pending"
       });
       const companyId = company.id;
@@ -251,6 +254,25 @@ export default function PurchaseOrganization() {
                       required
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Purchased Plan Select */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-text-sec">Purchased Plan *</label>
+                <div className="relative">
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main focus:bg-bg-card focus:border-brand-primary outline-none transition-all appearance-none font-bold"
+                    value={selectedPlan}
+                    onChange={(e) => setSelectedPlan(e.target.value)}
+                    disabled={loading}
+                    required
+                  >
+                    <option value="Demo Plan">Demo Plan (Free Trial)</option>
+                    <option value="Basic Plan">Basic Plan</option>
+                    <option value="Premium Plan">Premium Plan</option>
+                    <option value="Enterprise Plan">Enterprise Plan</option>
+                  </select>
                 </div>
               </div>
             </div>

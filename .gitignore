@@ -43,3 +43,7 @@ ui-debug.log
 
 # OS files
 Thumbs.db
+
+graphify-out
+
+.agents

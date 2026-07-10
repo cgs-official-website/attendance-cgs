@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword, 
   signOut, 
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  deleteUser
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -178,25 +179,26 @@ export const registerUser = async (name, department, programType, email, passwor
   
   if (dbType === "firebase") {
     let userCredential;
+    let secondaryAuth;
+    let secondaryApp;
     try {
-      let secondaryApp;
       try {
         secondaryApp = getApp("SecondaryAppInstance");
       } catch (err) {
         secondaryApp = initializeApp(firebaseConfig, "SecondaryAppInstance");
       }
-      const secondaryAuth = getAuth(secondaryApp);
+      secondaryAuth = getAuth(secondaryApp);
       userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-      await signOut(secondaryAuth);
     } catch (error) {
       if (error.code === 'auth/email-already-in-use') throw new Error("Email is already registered. Please log in instead.");
       if (error.code === 'auth/invalid-email') throw new Error("Please enter a valid email address.");
       if (error.code === 'auth/weak-password') throw new Error("Password must be at least 6 characters long.");
-      throw new Error("Failed to register. Please try again.");
+      throw new Error("Failed to register: " + error.message);
     }
     const user = userCredential.user;
     
     // Fallback: update display name in Auth so it is always present
+    // We do this while still authenticated in the secondary app instance
     try {
       await updateProfile(user, { displayName: name });
     } catch (e) {
@@ -216,33 +218,58 @@ export const registerUser = async (name, department, programType, email, passwor
       }
     }
     
+    // Clean all properties to prevent undefined values in Firestore
+    const cleanValue = (val, fallback = "") => (val === undefined || val === null) ? fallback : val;
+
     // Save additional details in Firestore
     const userData = {
       uid: user.uid,
-      name,
-      department,
-      programType,
+      name: cleanValue(name),
+      department: cleanValue(department),
+      programType: cleanValue(programType),
       email: email.toLowerCase(),
-      role: finalRole,
-      shiftStart,
-      shiftEnd,
-      annualLeaves: Number(annualLeaves),
-      sickLeaves: Number(sickLeaves),
-      casualLeaves: Number(casualLeaves),
+      role: cleanValue(finalRole, "user"),
+      shiftStart: cleanValue(shiftStart, "10:00"),
+      shiftEnd: cleanValue(shiftEnd, "19:00"),
+      annualLeaves: Number(cleanValue(annualLeaves, 25)),
+      sickLeaves: Number(cleanValue(sickLeaves, 10)),
+      casualLeaves: Number(cleanValue(casualLeaves, 6)),
       createdAt: new Date().toISOString(),
-      dob,
-      joiningDate,
-      projects,
-      tasks,
-      jobType,
-      designation,
-      isProjectManager,
-      employeeId,
-      companyId: finalCompanyId
+      dob: cleanValue(dob),
+      joiningDate: cleanValue(joiningDate),
+      projects: Array.isArray(projects) ? projects : [],
+      tasks: Array.isArray(tasks) ? tasks : [],
+      jobType: cleanValue(jobType, "Full-time"),
+      designation: cleanValue(designation),
+      isProjectManager: !!isProjectManager,
+      employeeId: cleanValue(employeeId),
+      companyId: cleanValue(finalCompanyId)
     };
     
-    await setDoc(doc(db, "users", user.uid), userData);
-    return userData;
+    try {
+      // Use the secondary app instance's firestore so that the write request is sent
+      // as the newly registered user (self-write), satisfying "request.auth.uid == userId" rules.
+      const secondaryDb = getFirestore(secondaryApp);
+      await setDoc(doc(secondaryDb, "users", user.uid), userData);
+      
+      // Sign out of secondary auth now that registration and profile creation is complete
+      try {
+        await signOut(secondaryAuth);
+      } catch (e) {
+        console.warn("Failed to sign out secondary auth:", e);
+      }
+      
+      return userData;
+    } catch (error) {
+      console.error("Firestore setDoc failed during registration. Rolling back Auth account:", error);
+      // Attempt to clean up the newly created Auth user so they aren't orphaned
+      try {
+        await deleteUser(user);
+      } catch (delError) {
+        console.error("Auth registration rollback failed:", delError);
+      }
+      throw new Error(`Failed to save employee profile: ${error.message}`);
+    }
   } else {
     // Local DB Mode
     const users = localDb.getUsers();
@@ -642,6 +669,33 @@ export const startBreak = async (userId, breakType, location) => {
   const recordId = `${userId}_${dateStr}`;
   const startTimeStr = new Date().toISOString();
 
+  // Find if there is any active task timer running before pausing
+  let pausedTaskId = null;
+  try {
+    let userData = null;
+    if (dbType === "firebase") {
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        userData = userSnap.data();
+      }
+    } else {
+      const users = localDb.getUsers();
+      userData = users.find(u => u.uid === userId);
+    }
+    if (userData && userData.tasks) {
+      const runningTask = userData.tasks.find(t => t.timerStartedAt);
+      if (runningTask) {
+        pausedTaskId = runningTask.id;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to query running task for break:", err);
+  }
+
+  // Stop any active task timers before starting a break
+  await stopAllTaskTimers(userId);
+
   if (dbType === "firebase") {
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
@@ -683,7 +737,8 @@ export const startBreak = async (userId, breakType, location) => {
     const updates = {
       status: "on-break",
       breaks: updatedBreaks,
-      currentBreakTimerEnd: endTimeStr
+      currentBreakTimerEnd: endTimeStr,
+      pausedTaskId: pausedTaskId || null
     };
     
     await updateDoc(docRef, updates);
@@ -730,7 +785,8 @@ export const startBreak = async (userId, breakType, location) => {
       ...currentData,
       status: "on-break",
       breaks: updatedBreaks,
-      currentBreakTimerEnd: endTimeStr
+      currentBreakTimerEnd: endTimeStr,
+      pausedTaskId: pausedTaskId || null
     };
     
     localDb.saveAttendance(logs);
@@ -793,10 +849,17 @@ export const resumeWork = async (userId, location) => {
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
       longBreakBalance: newLongBalance,
-      bioBreakBalance: newBioBalance
+      bioBreakBalance: newBioBalance,
+      pausedTaskId: null
     };
     
     await updateDoc(docRef, updates);
+    
+    // Automatically resume task timer if it was paused when starting the break
+    if (currentData.pausedTaskId) {
+      await startTaskTimer(userId, currentData.pausedTaskId);
+    }
+    
     return { ...currentData, ...updates };
   } else {
     const logs = localDb.getAttendance();
@@ -845,11 +908,18 @@ export const resumeWork = async (userId, location) => {
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
       longBreakBalance: newLongBalance,
-      bioBreakBalance: newBioBalance
+      bioBreakBalance: newBioBalance,
+      pausedTaskId: null
     };
     
     localDb.saveAttendance(logs);
     notifyAttendanceListeners();
+    
+    // Automatically resume task timer if it was paused when starting the break
+    if (currentData.pausedTaskId) {
+      await startTaskTimer(userId, currentData.pausedTaskId);
+    }
+    
     return logs[logIndex];
   }
 };
@@ -1190,7 +1260,7 @@ export const stopAllTaskTimers = async (userId) => {
               const hrs = Math.floor(elapsedMinutes / 60);
               const mins = elapsedMinutes % 60;
               const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-              await addTaskReport(task.id, userId, task.assignedBy, `Auto-stopped on check-out. Worked for ${timeStr}`);
+              await addTaskReport(task.id, userId, task.assignedBy, `Auto-paused. Worked for ${timeStr}`);
             }
           }
         }
@@ -1216,7 +1286,7 @@ export const stopAllTaskTimers = async (userId) => {
             const hrs = Math.floor(elapsedMinutes / 60);
             const mins = elapsedMinutes % 60;
             const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-            await addTaskReport(task.id, userId, task.assignedBy, `Auto-stopped on check-out. Worked for ${timeStr}`);
+            await addTaskReport(task.id, userId, task.assignedBy, `Auto-paused. Worked for ${timeStr}`);
           }
         }
       }
@@ -2249,14 +2319,47 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
   }
 
   // Try Cloudinary first
-  try {
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-    if (cloudName && uploadPreset) {
-      return await uploadFileToCloudinary(fileToUpload, companyId, folderType);
+  let cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  let uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+  let isCloudinaryEnabled = false;
+
+  if (companyId) {
+    try {
+      let company = null;
+      if (dbType === "firebase") {
+        const snap = await getDoc(doc(db, "companies", companyId));
+        if (snap.exists()) {
+          company = snap.data();
+        }
+      } else {
+        const list = getLocalCompanies();
+        company = list.find(c => c.id === companyId);
+      }
+
+      if (company && company.modules?.includes("cloudinary")) {
+        isCloudinaryEnabled = true;
+        if (company.cloudinaryCloudName) {
+          cloudName = company.cloudinaryCloudName;
+        }
+        if (company.cloudinaryUploadPreset) {
+          uploadPreset = company.cloudinaryUploadPreset;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to check company Cloudinary status, falling back to env:", e);
     }
-  } catch (cloudinaryError) {
-    console.warn("Cloudinary upload failed, falling back to other storage:", cloudinaryError);
+  } else {
+    if (cloudName && uploadPreset) {
+      isCloudinaryEnabled = true;
+    }
+  }
+
+  if (isCloudinaryEnabled && cloudName && uploadPreset) {
+    try {
+      return await uploadFileToCloudinary(fileToUpload, companyId, folderType, cloudName, uploadPreset);
+    } catch (cloudinaryError) {
+      console.warn("Cloudinary upload failed, falling back to other storage:", cloudinaryError);
+    }
   }
 
   if (isB2Configured()) {
@@ -2907,9 +3010,9 @@ export const getCompanyNameById = async (companyId) => {
   }
 };
 
-export const uploadFileToCloudinary = async (file, companyId = "", folderType = "files") => {
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dcfsh85uq";
-  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "hrms_preset";
+export const uploadFileToCloudinary = async (file, companyId = "", folderType = "files", customCloudName = "", customUploadPreset = "") => {
+  const cloudName = customCloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dcfsh85uq";
+  const uploadPreset = customUploadPreset || import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "hrms_preset";
   
   let orgName = "General";
   if (companyId) {
@@ -3118,7 +3221,109 @@ export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
   }
 };
 
-export const subscribeToExternalLinks = () => { return () => {}; };
-export const generateExternalLink = async () => {};
-export const revokeExternalLink = async () => {};
-export const getExternalLinkByToken = async () => {};
+const externalLinksListeners = new Set();
+const getLocalExternalLinks = () => {
+  const raw = localStorage.getItem("att_external_links");
+  return raw ? JSON.parse(raw) : [];
+};
+const saveLocalExternalLinks = (links) => {
+  localStorage.setItem("att_external_links", JSON.stringify(links));
+};
+const notifyExternalLinksListeners = () => {
+  externalLinksListeners.forEach(cb => cb());
+};
+
+export const subscribeToExternalLinks = (companyId, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "external_links");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = getLocalExternalLinks();
+      if (companyId) list = list.filter(l => l.companyId === companyId);
+      callback(list);
+    };
+    externalLinksListeners.add(handler);
+    handler();
+    return () => {
+      externalLinksListeners.delete(handler);
+    };
+  }
+};
+
+export const generateExternalLink = async (
+  userId,
+  companyId,
+  projectId,
+  projectName,
+  pmId,
+  pmName,
+  clientEmail,
+  clientName
+) => {
+  // Create a secure chat channel first
+  const channelName = `Client-${clientName.trim() || "Chat"}-${projectName.trim()}`;
+  const channel = await createChannel(channelName, `Secure external link client chat for project ${projectName}`, pmId, pmName, companyId);
+  const channelId = channel.id;
+  const linkToken = "link-" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+
+  const newLink = {
+    id: dbType === "firebase" ? "" : "ext-" + Math.random().toString(36).substr(2, 9),
+    userId,
+    companyId,
+    projectId,
+    projectName,
+    pmId,
+    pmName,
+    clientEmail,
+    clientName,
+    linkToken,
+    channelId,
+    status: "active",
+    createdAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "external_links"), newLink);
+    await updateDoc(docRef, { id: docRef.id });
+    return { ...newLink, id: docRef.id };
+  } else {
+    const links = getLocalExternalLinks();
+    links.push(newLink);
+    saveLocalExternalLinks(links);
+    notifyExternalLinksListeners();
+    return newLink;
+  }
+};
+
+export const revokeExternalLink = async (linkId, companyId) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "external_links", linkId);
+    await updateDoc(docRef, { status: "revoked" });
+  } else {
+    const links = getLocalExternalLinks();
+    const idx = links.findIndex(l => l.id === linkId);
+    if (idx >= 0) {
+      links[idx].status = "revoked";
+      saveLocalExternalLinks(links);
+      notifyExternalLinksListeners();
+    }
+  }
+};
+
+export const getExternalLinkByToken = async (linkToken) => {
+  if (dbType === "firebase") {
+    const qRef = query(collection(db, "external_links"), where("linkToken", "==", linkToken));
+    const snap = await getDocs(qRef);
+    if (snap.empty) return null;
+    return { ...snap.docs[0].data(), id: snap.docs[0].id };
+  } else {
+    const links = getLocalExternalLinks();
+    const link = links.find(l => l.linkToken === linkToken);
+    return link || null;
+  }
+};

@@ -26,6 +26,8 @@ export default function Profile() {
   // Organization Branding State
   const [orgName, setOrgName] = useState("");
   const [orgLogo, setOrgLogo] = useState("");
+  const [cloudinaryCloudName, setCloudinaryCloudName] = useState("");
+  const [cloudinaryUploadPreset, setCloudinaryUploadPreset] = useState("");
   const [orgLoading, setOrgLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -40,6 +42,8 @@ export default function Profile() {
           setAdminCompany(found);
           setOrgName(found.name || "");
           setOrgLogo(found.logoBase64 || "");
+          setCloudinaryCloudName(found.cloudinaryCloudName || "");
+          setCloudinaryUploadPreset(found.cloudinaryUploadPreset || "");
         }
       }).catch(console.error);
     }
@@ -117,9 +121,11 @@ export default function Profile() {
       setOrgLoading(true);
       await updateCompanyDetails(adminCompany.id, { 
         name: orgName, 
-        logoBase64: orgLogo 
+        logoBase64: orgLogo,
+        cloudinaryCloudName,
+        cloudinaryUploadPreset
       });
-      showToast("Organization branding updated!", "success");
+      showToast("Organization settings updated!", "success");
       // Force reload to update sidebar immediately without context wiring
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
@@ -519,6 +525,42 @@ export default function Profile() {
                     />
                   </div>
                 </div>
+
+                {/* Cloudinary credentials */}
+                {adminCompany.modules?.includes("cloudinary") && (
+                  <div className="grid grid-cols-2 gap-4 mt-4 border-t border-border-card pt-4 w-full">
+                    <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                      <h4 className="text-xs font-bold text-text-sec uppercase tracking-wider">Cloudinary Credentials</h4>
+                      <p className="text-[10px] text-text-mut font-semibold">Configure custom Cloudinary storage keys for organization uploads.</p>
+                    </div>
+                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                      <label className="text-xs font-bold text-text-sec" htmlFor="cloudinary-cloud-name">
+                        Cloud Name
+                      </label>
+                      <input
+                        id="cloudinary-cloud-name"
+                        type="text"
+                        className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                        value={cloudinaryCloudName}
+                        onChange={(e) => setCloudinaryCloudName(e.target.value)}
+                        placeholder="e.g. dcfsh85uq"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                      <label className="text-xs font-bold text-text-sec" htmlFor="cloudinary-upload-preset">
+                        Upload Preset
+                      </label>
+                      <input
+                        id="cloudinary-upload-preset"
+                        type="text"
+                        className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                        value={cloudinaryUploadPreset}
+                        onChange={(e) => setCloudinaryUploadPreset(e.target.value)}
+                        placeholder="e.g. hrms_preset"
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"

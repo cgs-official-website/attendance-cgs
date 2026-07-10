@@ -846,7 +846,17 @@ export default function UserDashboard() {
                 const special = gross - basic - hra;
                 const pf = basic * 0.12;
                 const esi = gross <= 21000 ? gross * 0.0075 : 0;
-                const pt = gross > 21000 ? 200 : 0;
+                
+                const getPTDeduction = (g) => {
+                  if (g <= 21000) return 0;
+                  if (g <= 30000) return Math.round((180 / 6) * 100) / 100;
+                  if (g <= 45000) return Math.round((425 / 6) * 100) / 100;
+                  if (g <= 60000) return Math.round((930 / 6) * 100) / 100;
+                  if (g <= 75000) return Math.round((1025 / 6) * 100) / 100;
+                  return Math.round((1250 / 6) * 100) / 100;
+                };
+                const pt = getPTDeduction(gross);
+
                 const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0;
                 const net = gross - (pf + esi + pt + tds);
                 return { basic, hra, special, pf, esi, pt, tds, net };

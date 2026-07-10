@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData, deleteCompany } from "../firebase";
+import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData, deleteCompany, updateCompanyDetails } from "../firebase";
 import { useToast } from "../context/ToastContext";
 import { useModal } from "../context/ModalContext";
 import { Building2, Plus, Users, ShieldAlert, Link as LinkIcon, X, CheckSquare, Calendar as CalendarIcon, Download, FileText, Trash2 } from "lucide-react";
@@ -21,6 +21,11 @@ export default function SuperAdminDashboard() {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [companyStats, setCompanyStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  const [selectedModules, setSelectedModules] = useState([]);
+  const [cloudinaryCloudName, setCloudinaryCloudName] = useState("");
+  const [cloudinaryUploadPreset, setCloudinaryUploadPreset] = useState("");
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const totalOrgs = companies.length;
   const pendingCount = companies.filter(c => c.status === "pending").length;
@@ -50,6 +55,9 @@ export default function SuperAdminDashboard() {
 
   const handleCompanyClick = async (company) => {
     setSelectedCompany(company);
+    setSelectedModules(company.modules || ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]);
+    setCloudinaryCloudName(company.cloudinaryCloudName || "");
+    setCloudinaryUploadPreset(company.cloudinaryUploadPreset || "");
     setLoadingStats(true);
     try {
       const stats = await getCompanyStats(company.id);
@@ -231,14 +239,42 @@ export default function SuperAdminDashboard() {
 
   const handleApproveCompany = async (companyId) => {
     try {
-      await approveCompany(companyId);
-      showToast("Organization approved successfully!", "success");
-      // Update local state instantly
-      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, status: "active" } : c));
-      setSelectedCompany(prev => prev ? { ...prev, status: "active" } : null);
+      await updateCompanyDetails(companyId, {
+        status: "active",
+        modules: selectedModules,
+        cloudinaryCloudName,
+        cloudinaryUploadPreset
+      });
+      showToast("Organization approved and modules configured successfully!", "success");
+      fetchCompanies();
+      setSelectedCompany(null);
     } catch (e) {
       console.error(e);
       showToast("Failed to approve organization", "error");
+    }
+  };
+
+  const handleSaveConfiguration = async (companyId) => {
+    try {
+      setSavingConfig(true);
+      await updateCompanyDetails(companyId, {
+        modules: selectedModules,
+        cloudinaryCloudName,
+        cloudinaryUploadPreset
+      });
+      showToast("Module settings saved successfully!", "success");
+      fetchCompanies();
+      setSelectedCompany(prev => ({ 
+        ...prev, 
+        modules: selectedModules, 
+        cloudinaryCloudName, 
+        cloudinaryUploadPreset 
+      }));
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to update configurations", "error");
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -570,6 +606,74 @@ export default function SuperAdminDashboard() {
                 )}
 
                 <div className="flex justify-between items-center text-sm border-t border-border-card pt-3 mt-3">
+                  <span className="text-text-mut font-semibold">Purchased Plan</span>
+                  <span className="text-brand-primary font-bold text-xs uppercase bg-brand-primary/10 px-2.5 py-1 rounded-full">{selectedCompany.plan || "Demo Plan"}</span>
+                </div>
+
+                {/* Module Checklist */}
+                <div className="border-t border-border-card pt-4 mt-4 space-y-4">
+                  <h5 className="text-xs font-extrabold text-text-main uppercase tracking-wider">Permitted Modules</h5>
+                  <div className="grid grid-cols-2 gap-3 text-left">
+                    {[
+                      { id: "attendance", label: "Attendance System" },
+                      { id: "team-hub", label: "Team Hub Chat" },
+                      { id: "projects", label: "Project Management" },
+                      { id: "tasks", label: "Task Management" },
+                      { id: "assets", label: "Asset Management" },
+                      { id: "payroll", label: "Payroll Manager" },
+                      { id: "cloudinary", label: "Cloudinary Storage" }
+                    ].map(mod => (
+                      <label key={mod.id} className="flex items-center gap-2 text-xs font-semibold text-text-sec cursor-pointer hover:text-text-main">
+                        <input 
+                          type="checkbox"
+                          checked={selectedModules.includes(mod.id)}
+                          className="rounded text-brand-primary border-border-card focus:ring-brand-primary/20 accent-brand-primary"
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedModules([...selectedModules, mod.id]);
+                            } else {
+                              setSelectedModules(selectedModules.filter(m => m !== mod.id));
+                            }
+                          }}
+                        />
+                        {mod.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cloudinary Config */}
+                {selectedModules.includes("cloudinary") && (
+                  <div className="border-t border-border-card pt-4 mt-4 space-y-3">
+                    <h5 className="text-xs font-extrabold text-brand-primary uppercase tracking-wider">Cloudinary Credentials</h5>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1 text-left">
+                        <label className="text-[10px] font-bold text-text-mut uppercase">Cloud Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={cloudinaryCloudName}
+                          onChange={(e) => setCloudinaryCloudName(e.target.value)}
+                          placeholder="e.g. dcfsh85uq"
+                          className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all font-bold"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1 text-left">
+                        <label className="text-[10px] font-bold text-text-mut uppercase">Upload Preset *</label>
+                        <input
+                          type="text"
+                          required
+                          value={cloudinaryUploadPreset}
+                          onChange={(e) => setCloudinaryUploadPreset(e.target.value)}
+                          placeholder="e.g. hrms_preset"
+                          className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center text-sm border-t border-border-card pt-3 mt-3">
                   <span className="text-text-mut font-semibold">Vendor Status</span>
                   <div className="flex items-center gap-2">
                     <select
@@ -593,6 +697,18 @@ export default function SuperAdminDashboard() {
                     Delete Organization
                   </button>
                 </div>
+
+                {selectedCompany.status === "active" && (
+                  <div className="mt-4 pt-4 border-t border-border-card">
+                    <button 
+                      onClick={() => handleSaveConfiguration(selectedCompany.id)}
+                      disabled={savingConfig}
+                      className="w-full py-2.5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors shadow-lg shadow-brand-primary/20 cursor-pointer"
+                    >
+                      {savingConfig ? "Saving Configuration..." : "Save Module Configurations"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

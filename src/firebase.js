@@ -685,10 +685,13 @@ export const startBreak = async (userId, breakType, location) => {
     }
     if (userData && userData.tasks) {
       const runningTask = userData.tasks.find(t => t.timerStartedAt);
+      console.log("[startBreak] userData.tasks found:", userData.tasks);
+      console.log("[startBreak] runningTask found:", runningTask);
       if (runningTask) {
         pausedTaskId = runningTask.id;
       }
     }
+    console.log("[startBreak] Final determined pausedTaskId:", pausedTaskId);
   } catch (err) {
     console.error("Failed to query running task for break:", err);
   }
@@ -856,7 +859,10 @@ export const resumeWork = async (userId, location) => {
     await updateDoc(docRef, updates);
     
     // Automatically resume task timer if it was paused when starting the break
+    console.log("[resumeWork - firebase] currentData read:", currentData);
+    console.log("[resumeWork - firebase] currentData.pausedTaskId:", currentData?.pausedTaskId);
     if (currentData.pausedTaskId) {
+      console.log("[resumeWork - firebase] Auto-resuming task:", currentData.pausedTaskId);
       await startTaskTimer(userId, currentData.pausedTaskId);
     }
     
@@ -916,7 +922,10 @@ export const resumeWork = async (userId, location) => {
     notifyAttendanceListeners();
     
     // Automatically resume task timer if it was paused when starting the break
+    console.log("[resumeWork - local] currentData read:", currentData);
+    console.log("[resumeWork - local] currentData.pausedTaskId:", currentData?.pausedTaskId);
     if (currentData.pausedTaskId) {
+      console.log("[resumeWork - local] Auto-resuming task:", currentData.pausedTaskId);
       await startTaskTimer(userId, currentData.pausedTaskId);
     }
     

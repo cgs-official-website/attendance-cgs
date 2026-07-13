@@ -33,7 +33,8 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   Info,
   Building2,
   IndianRupee,
-  Link2
+  Link2,
+  Globe
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -640,6 +641,12 @@ export default function DashboardLayout({ children }) {
       icon: IndianRupee,
       active: location.pathname === "/admin" && activeTabParam === "payroll",
       onClick: () => { navigate("/admin?tab=payroll"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Custom Domains",
+      icon: Globe,
+      active: location.pathname === "/admin" && activeTabParam === "domains",
+      onClick: () => { navigate("/admin?tab=domains"); setIsMobileOpen(false); }
     },
     {
       label: "Project Management",

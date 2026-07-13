@@ -711,7 +711,7 @@ export default function DashboardLayout({ children }) {
       label: "Project Calendar",
       icon: Calendar,
       active: location.pathname === "/project-calendar",
-      hidden: !currentUser?.isProjectManager,
+      hidden: !currentUser?.isProjectManager && !(currentUser?.projects?.length > 0 || currentUser?.project),
       module: "projects",
       onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
     },

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { createCompany, registerUser, assignCompanyToUser } from "../firebase";
+import { createCompany, registerUser, assignCompanyToUser, db } from "../firebase";
 import { Sparkles, ShieldCheck, BarChart, Building, User, FileText, Lock, Mail, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import Logo from "../components/Logo";
 
@@ -42,7 +42,21 @@ export default function PurchaseOrganization() {
 
     setLoading(true);
     try {
-      // 1. Create the Admin User
+      // 0. Pre-generate the Company ID client-side
+      let pregeneratedCompanyId = "";
+      try {
+        const { collection, doc } = await import("firebase/firestore");
+        if (db) {
+          const compRef = doc(collection(db, "companies"));
+          pregeneratedCompanyId = compRef.id;
+        } else {
+          pregeneratedCompanyId = "comp-" + Math.random().toString(36).substr(2, 9);
+        }
+      } catch (err) {
+        pregeneratedCompanyId = "comp-" + Math.random().toString(36).substr(2, 9);
+      }
+
+      // 1. Create the Admin User, passing the pregenerated companyId directly!
       const userObj = await registerUser(
         adminName,
         "Administration",
@@ -51,7 +65,7 @@ export default function PurchaseOrganization() {
         adminPassword,
         shiftStart,
         shiftEnd,
-        25, 10, 6, "", "", [], [], adminProgram, "Company Admin", false, "ADMIN-01", "", "admin"
+        25, 10, 6, "", "", [], [], adminProgram, "Company Admin", false, "ADMIN-01", "", "admin", pregeneratedCompanyId
       );
 
       // 2. Generate slug from org name
@@ -59,6 +73,7 @@ export default function PurchaseOrganization() {
 
       // 3. Create the Company with metadata and pending status
       const company = await createCompany({
+        id: pregeneratedCompanyId,
         name: orgName,
         slug,
         adminId: userObj.uid,
@@ -70,12 +85,8 @@ export default function PurchaseOrganization() {
         modules: [],
         status: "pending"
       });
-      const companyId = company.id;
 
-      // 4. Update the Admin User to belong to this new company
-      await assignCompanyToUser(userObj.uid, companyId);
-
-      // 5. Auto login as the new admin
+      // 4. Auto login as the new admin
       await login(adminEmail, adminPassword);
       
       showToast("Registration submitted. Your module is pending approval.", "success");

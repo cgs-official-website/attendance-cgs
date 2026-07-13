@@ -61,7 +61,14 @@ export default function TaskManagement() {
     if (getDbType() === "firebase") {
       const unsubscribe = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
         if (docSnap.exists()) {
-          setTasks(docSnap.data().tasks || []);
+          const rawTasks = docSnap.data().tasks || [];
+          const sorted = [...rawTasks].reverse().sort((a, b) => {
+            const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
+            const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
+            if (dateA && dateB) return dateB - dateA;
+            return 0;
+          });
+          setTasks(sorted);
         }
         setLoading(false);
       });
@@ -70,7 +77,16 @@ export default function TaskManagement() {
       const handler = () => {
         const users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
         const me = users.find(u => u.uid === currentUser.uid);
-        if (me) setTasks(me.tasks || []);
+        if (me) {
+          const rawTasks = me.tasks || [];
+          const sorted = [...rawTasks].reverse().sort((a, b) => {
+            const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
+            const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
+            if (dateA && dateB) return dateB - dateA;
+            return 0;
+          });
+          setTasks(sorted);
+        }
         setLoading(false);
       };
       handler();
@@ -530,7 +546,7 @@ export default function TaskManagement() {
                           </div>
                           <div className="flex items-center gap-1">
                             <MessageSquare size={12} />
-                            <span>{taskReports[task.id]?.length || 0} Updates</span>
+                            <span>{(taskReports[task.id] || []).filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).length} Updates</span>
                           </div>
                           {task.timerStartedAt && (
                             <div className="flex items-center gap-1 bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-[6px] animate-pulse">
@@ -716,7 +732,7 @@ export default function TaskManagement() {
                             </div>
                           </td>
                         </tr>
-                        {(!taskReports[task.id] || taskReports[task.id].length === 0) ? (
+                        {(!taskReports[task.id] || taskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).length === 0) ? (
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
                               No updates reported yet

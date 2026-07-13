@@ -173,6 +173,7 @@ export default function DashboardLayout({ children }) {
   const [companyStatus, setCompanyStatus] = useState("loading");
   const [companyName, setCompanyName] = useState("");
   const [companyLogo, setCompanyLogo] = useState("");
+  const [companyModules, setCompanyModules] = useState([]);
   const [channels, setChannels] = useState([]);
   const [dmThreads, setDmThreads] = useState([]);
 
@@ -186,9 +187,11 @@ export default function DashboardLayout({ children }) {
           setCompanyName(companyData.name || "");
           setCompanyLogo(companyData.logoBase64 || "");
           setCompanyStatus(companyData.status || "active");
+          setCompanyModules(companyData.modules && companyData.modules.length > 0 ? companyData.modules : ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]);
         } else {
           document.title = "Zuna | HRMS";
           setCompanyStatus("active");
+          setCompanyModules([]);
         }
       });
     } else if (currentUser) {
@@ -575,12 +578,14 @@ export default function DashboardLayout({ children }) {
       label: "Dashboard",
       icon: LayoutGrid,
       active: location.pathname === "/admin" && activeTabParam === "analytics",
+      module: "attendance",
       onClick: () => { navigate("/admin?tab=analytics"); setIsMobileOpen(false); }
     },
     {
       label: "Admin Panel",
       icon: Shield,
       active: location.pathname === "/admin" && activeTabParam === "live",
+      module: "attendance",
       onClick: () => { navigate("/admin?tab=live"); setIsMobileOpen(false); }
     },
     {
@@ -595,6 +600,7 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/admin" && activeTabParam === "logs" && (searchParams.get("sub") || "leaves") === "leaves",
       hidden: !isAdmin,
       badge: leaveRequestsList.length > 0 ? leaveRequestsList.length : null,
+      module: "attendance",
       onClick: () => { navigate("/admin?tab=logs&sub=leaves"); setIsMobileOpen(false); }
     },
     {
@@ -603,12 +609,14 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/admin" && activeTabParam === "logs" && searchParams.get("sub") === "regularization",
       hidden: !isAdmin,
       badge: regularizationRequestsList.length > 0 ? regularizationRequestsList.length : null,
+      module: "attendance",
       onClick: () => { navigate("/admin?tab=logs&sub=regularization"); setIsMobileOpen(false); }
     },
     {
       label: "Notice Board",
       icon: ClipboardList,
       active: location.pathname === "/admin" && activeTabParam === "rules",
+      module: "attendance",
       onClick: () => { navigate("/admin?tab=rules"); setIsMobileOpen(false); }
     },
     {
@@ -616,30 +624,35 @@ export default function DashboardLayout({ children }) {
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
       badge: showTeamHubBadge ? realUnreadMessagesCount : null,
+      module: "team-hub",
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
       label: "Chat Monitor",
       icon: Monitor,
       active: location.pathname === "/admin" && activeTabParam === "chat",
+      module: "team-hub",
       onClick: () => { navigate("/admin?tab=chat"); setIsMobileOpen(false); }
     },
     {
       label: "Asset Management",
       icon: HardDrive,
       active: location.pathname === "/admin" && activeTabParam === "assets",
+      module: "assets",
       onClick: () => { navigate("/admin?tab=assets"); setIsMobileOpen(false); }
     },
     {
       label: "External Links",
       icon: Link2,
       active: location.pathname === "/admin" && activeTabParam === "external-links",
+      module: "projects",
       onClick: () => { navigate("/admin?tab=external-links"); setIsMobileOpen(false); }
     },
     {
       label: "Payroll (India)",
       icon: IndianRupee,
       active: location.pathname === "/admin" && activeTabParam === "payroll",
+      module: "payroll",
       onClick: () => { navigate("/admin?tab=payroll"); setIsMobileOpen(false); }
     },
     {
@@ -653,7 +666,15 @@ export default function DashboardLayout({ children }) {
       icon: Briefcase,
       active: location.pathname === "/project-management",
       badge: location.pathname === "/project-management" ? null : (isAdmin ? null : (showProjectsBadge ? activeProjects.length : null)),
+      module: "projects",
       onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Project Calendar",
+      icon: Calendar,
+      active: location.pathname === "/project-calendar",
+      module: "projects",
+      onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
     },
     {
       label: "My Profile",
@@ -666,12 +687,14 @@ export default function DashboardLayout({ children }) {
       label: "Dashboard",
       icon: LayoutGrid,
       active: location.pathname === "/dashboard" && !searchParams.get("tab"),
+      module: "attendance",
       onClick: () => { navigate("/dashboard"); setIsMobileOpen(false); }
     },
     {
       label: "Leave Requests",
       icon: Calendar,
       active: location.pathname === "/dashboard" && searchParams.get("tab") === "leaves",
+      module: "attendance",
       onClick: () => { navigate("/dashboard?tab=leaves"); setIsMobileOpen(false); }
     },
     {
@@ -679,6 +702,7 @@ export default function DashboardLayout({ children }) {
       icon: MessageSquare,
       active: location.pathname === "/team-hub",
       badge: showTeamHubBadge ? realUnreadMessagesCount : null,
+      module: "team-hub",
       onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
     },
     {
@@ -687,31 +711,44 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/project-management",
       hidden: !currentUser?.isProjectManager,
       badge: location.pathname === "/project-management" ? null : (showProjectsBadge ? activeProjects.length : null),
+      module: "projects",
       onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Project Calendar",
+      icon: Calendar,
+      active: location.pathname === "/project-calendar",
+      hidden: !currentUser?.isProjectManager && !(currentUser?.projects?.length > 0 || currentUser?.project),
+      module: "projects",
+      onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
     },
     {
       label: "Task Management",
       icon: CheckSquare,
       active: location.pathname === "/task-management",
       badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
+      module: "tasks",
       onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
     },
     {
       label: "My Assets",
       icon: HardDrive,
       active: location.pathname === "/dashboard" && searchParams.get("tab") === "assets",
+      module: "assets",
       onClick: () => { navigate("/dashboard?tab=assets"); setIsMobileOpen(false); }
     },
     {
       label: "My Payslips",
       icon: IndianRupee,
       active: location.pathname === "/dashboard" && searchParams.get("tab") === "payslips",
+      module: "payroll",
       onClick: () => { navigate("/dashboard?tab=payslips"); setIsMobileOpen(false); }
     },
     {
       label: "My History",
       icon: Calendar,
       active: location.pathname === "/history",
+      module: "attendance",
       onClick: () => { navigate("/history"); setIsMobileOpen(false); }
     },
     {
@@ -721,6 +758,62 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
     }
   ];
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (isSuperAdmin) return true;
+    if (!item.module) return true;
+    if (!companyModules || companyModules.length === 0) return true;
+    return companyModules.includes(item.module);
+  });
+
+  const isCurrentModuleEnabled = (() => {
+    if (isSuperAdmin) return true;
+    if (!companyModules || companyModules.length === 0) return true;
+    const path = location.pathname;
+    const tab = searchParams.get("tab");
+    
+    if (path === "/project-management" || path === "/project-calendar") {
+      return companyModules.includes("projects");
+    }
+    if (path === "/task-management") {
+      return companyModules.includes("tasks");
+    }
+    if (path === "/team-hub") {
+      return companyModules.includes("team-hub");
+    }
+    if (path === "/history") {
+      return companyModules.includes("attendance");
+    }
+    if (path === "/dashboard") {
+      if (tab === "leaves" || !tab) {
+        return companyModules.includes("attendance");
+      }
+      if (tab === "assets") {
+        return companyModules.includes("assets");
+      }
+      if (tab === "payslips") {
+        return companyModules.includes("payroll");
+      }
+    }
+    if (path === "/admin") {
+      if (tab === "live" || tab === "analytics" || tab === "rules" || tab === "logs") {
+        return companyModules.includes("attendance");
+      }
+      if (tab === "chat") {
+        return companyModules.includes("team-hub");
+      }
+      if (tab === "assets") {
+        return companyModules.includes("assets");
+      }
+      if (tab === "payroll") {
+        return companyModules.includes("payroll");
+      }
+      if (tab === "external-links") {
+        return companyModules.includes("projects");
+      }
+    }
+    return true;
+  })();
 
   if (companyStatus === "no_workspace" && !isSuperAdmin) {
     return (
@@ -823,7 +916,7 @@ export default function DashboardLayout({ children }) {
   const filteredModules = (() => {
     if (!localSearch.trim()) return [];
     const query = localSearch.toLowerCase();
-    return menuItems.filter(item => 
+    return filteredMenuItems.filter(item => 
       !item.hidden && item.label.toLowerCase().includes(query)
     );
   })();
@@ -865,7 +958,7 @@ export default function DashboardLayout({ children }) {
 
         {/* Sidebar Nav links */}
         <nav className="flex-grow px-3 py-2 space-y-1.5 overflow-y-auto">
-          {menuItems.map((item, idx) => {
+          {filteredMenuItems.map((item, idx) => {
             if (item.hidden) return null;
             const Icon = item.icon;
             return (
@@ -1266,7 +1359,26 @@ export default function DashboardLayout({ children }) {
             <DashboardSkeleton />
           ) : (
             <div key={refreshKey} className="w-full h-full flex flex-col">
-              {children}
+              {isCurrentModuleEnabled ? children : (
+                <div className="flex-grow flex flex-col items-center justify-center p-6 text-center animate-fade-in my-auto">
+                  <div className="max-w-[460px] bg-bg-card border border-border-card rounded-[24px] p-10 shadow-2xl relative overflow-hidden mx-auto">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-primary to-purple-500"></div>
+                    <div className="w-16 h-16 bg-brand-primary/10 text-brand-primary rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-brand-primary/20 animate-pulse">
+                      <Lock size={28} />
+                    </div>
+                    <h2 className="text-2xl font-black text-text-main mb-2">Module Locked</h2>
+                    <p className="text-sm text-text-sec leading-relaxed mb-6">
+                      This module is not active under your organization's current plan subscription. Please contact your organization administrator or upgrade your plan to unlock this feature.
+                    </p>
+                    <button 
+                      onClick={() => navigate(isAdmin ? "/admin?tab=analytics" : "/dashboard")}
+                      className="px-6 py-2.5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-full transition-colors cursor-pointer shadow-md shadow-brand-primary/15"
+                    >
+                      Return to Dashboard
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -1301,7 +1413,7 @@ export default function DashboardLayout({ children }) {
 
             {/* Nav links */}
             <nav className="flex-grow px-3 py-4 space-y-1 overflow-y-auto">
-              {menuItems.map((item, idx) => {
+              {filteredMenuItems.map((item, idx) => {
                 if (item.hidden) return null;
                 const Icon = item.icon;
                 return (

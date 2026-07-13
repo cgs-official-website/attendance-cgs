@@ -51,3 +51,6 @@ hrms.zip
 
 .vercel
 .env*
+graphify-out
+
+.agents

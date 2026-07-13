@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 
 // Ensure environment variables exist
 const bucketName = import.meta.env.VITE_B2_BUCKET_NAME;
@@ -78,5 +78,30 @@ export const uploadFileToB2 = async (file) => {
   } catch (error) {
     console.error("Error uploading to Backblaze B2:", error);
     throw new Error("Failed to upload file to Backblaze B2. " + error.message);
+  }
+};
+
+/**
+ * Download/retrieve a file blob directly from B2 (bypassing public CDN 401 locks)
+ * @param {string} fileKey 
+ * @returns {Promise<Blob>}
+ */
+export const getFileBlobFromB2 = async (fileKey) => {
+  if (!s3Client) {
+    throw new Error("Backblaze B2 is not configured properly in .env");
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: fileKey,
+    });
+
+    const response = await s3Client.send(command);
+    const byteArray = await response.Body.transformToByteArray();
+    return new Blob([byteArray], { type: response.ContentType || "application/octet-stream" });
+  } catch (error) {
+    console.error("Error reading file from B2:", error);
+    throw error;
   }
 };

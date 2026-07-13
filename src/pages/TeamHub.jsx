@@ -24,7 +24,8 @@ import {
   getAllRegisteredUsers,
   subscribeToAllMessages,
   uploadFileToFirebase,
-  markThreadAsRead
+  markThreadAsRead,
+  getFileBlobFromB2
 } from "../firebase";
 import { formatFileSize, getFileIcon } from "../utils/fileUtils";
 
@@ -70,7 +71,31 @@ const dataURLtoBlob = (dataurl) => {
 };
 
 // ─── File Preview Modal ───────────────────────────────────────
+// ─── File Preview Modal ───────────────────────────────────────
 function FilePreviewModal({ file, displayUrl, onClose }) {
+  const [localUrl, setLocalUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (file.isB2 && file.id && !file.url?.startsWith("data:")) {
+      setLoading(true);
+      getFileBlobFromB2(file.id)
+        .then(blob => {
+          const u = URL.createObjectURL(blob);
+          setLocalUrl(u);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error("Failed to load B2 preview blob:", err);
+          setLoading(false);
+        });
+    }
+    return () => {
+      if (localUrl) URL.revokeObjectURL(localUrl);
+    };
+  }, [file.id, file.isB2]);
+
+  const activeUrl = localUrl || displayUrl;
   const isImage = file.mimeType?.startsWith("image/") || file.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
   const isVideo = file.mimeType?.startsWith("video/") || file.name?.match(/\.(mp4|webm|ogg)$/i);
   const isPdf = file.mimeType === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf");
@@ -90,6 +115,32 @@ function FilePreviewModal({ file, displayUrl, onClose }) {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
       } catch (err) {
         console.error("Failed to download local file:", err);
+      }
+    } else if (file.isB2 && file.id) {
+      try {
+        let blobUrl = localUrl;
+        if (!blobUrl) {
+          const blob = await getFileBlobFromB2(file.id);
+          blobUrl = URL.createObjectURL(blob);
+        }
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = file.name || "download";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        if (!localUrl) {
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+        }
+      } catch (err) {
+        console.error("Failed B2 direct download, falling back to public link:", err);
+        const link = document.createElement("a");
+        link.href = displayUrl;
+        link.download = file.name || "download";
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
     } else {
       try {
@@ -141,12 +192,17 @@ function FilePreviewModal({ file, displayUrl, onClose }) {
         
         {/* Content */}
         <div className="flex-1 flex items-center justify-center bg-bg-base overflow-hidden p-4 relative">
-          {isImage ? (
-            <img src={displayUrl} alt={file.name} className="max-w-full max-h-full object-contain rounded-[8px]" />
+          {loading ? (
+            <div className="flex flex-col items-center gap-2">
+              <RefreshCw size={24} className="animate-spin text-brand-primary" />
+              <span className="text-xs text-text-sec font-bold">Decrypting secure file from Backblaze B2...</span>
+            </div>
+          ) : isImage ? (
+            <img src={activeUrl} alt={file.name} className="max-w-full max-h-full object-contain rounded-[8px]" />
           ) : isVideo ? (
-            <video src={displayUrl} controls className="max-w-full max-h-full rounded-[8px]" />
+            <video src={activeUrl} controls className="max-w-full max-h-full rounded-[8px]" />
           ) : isPdf ? (
-            <iframe src={displayUrl} title={file.name} className="w-full h-full rounded-[8px] bg-white border-none" />
+            <iframe src={activeUrl} title={file.name} className="w-full h-full rounded-[8px] bg-white border-none" />
           ) : (
             <div className="flex flex-col items-center gap-4 text-center">
               <span className="text-6xl">{getFileIcon(file.mimeType, file.name)}</span>
@@ -200,9 +256,9 @@ function FileCard({ file }) {
   return (
     <>
       <a
-        href={isDataUrl ? undefined : displayUrl}
-        target={isDataUrl ? undefined : "_blank"}
-        rel={isDataUrl ? undefined : "noopener noreferrer"}
+        href={isDataUrl || file.isB2 ? undefined : displayUrl}
+        target={isDataUrl || file.isB2 ? undefined : "_blank"}
+        rel={isDataUrl || file.isB2 ? undefined : "noopener noreferrer"}
         onClick={handleOpenFile}
         style={{ cursor: "pointer" }}
         className="flex items-center gap-2 w-full max-w-[260px] px-3 py-2 mt-1 rounded-[10px] border border-border-card bg-bg-base hover:bg-bg-card hover:border-brand-primary/30 transition-all group overflow-hidden"

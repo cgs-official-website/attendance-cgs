@@ -16,6 +16,7 @@ import LandingPage from "./pages/LandingPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import PurchaseOrganization from "./pages/PurchaseOrganization";
 import ClientChat from "./pages/ClientChat";
+import ProjectCalendar from "./pages/ProjectCalendar";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -188,6 +189,16 @@ export default function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <ProjectManagement />
+              </DashboardLayout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/project-calendar" 
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <ProjectCalendar />
               </DashboardLayout>
             </ProtectedRoute>
           } 

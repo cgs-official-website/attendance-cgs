@@ -1,24 +1,25 @@
 import { initializeApp, getApp, getApps } from "firebase/app";
-import { 
-  getAuth, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  deleteUser
 } from "firebase/auth";
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  addDoc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
   getDocs,
   serverTimestamp,
   deleteDoc,
@@ -28,7 +29,7 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, uploadBytesResumable, ref as storageRef, deleteObject } from "firebase/storage";
 import { getStorage } from "firebase/storage";
-import { uploadFileToB2, isB2Configured } from "./utils/b2Storage";
+import { uploadFileToB2, isB2Configured, getFileBlobFromB2 } from "./utils/b2Storage";
 import imageCompression from 'browser-image-compression';
 
 // Firebase Configuration
@@ -43,10 +44,10 @@ const firebaseConfig = {
 };
 
 // Check if credentials are still placeholder
-const isDummy = 
-  !firebaseConfig.apiKey || 
-  firebaseConfig.apiKey === "" || 
-  firebaseConfig.apiKey.includes("YOUR_") || 
+const isDummy =
+  !firebaseConfig.apiKey ||
+  firebaseConfig.apiKey === "" ||
+  firebaseConfig.apiKey.includes("YOUR_") ||
   !firebaseConfig.projectId ||
   firebaseConfig.projectId.includes("YOUR_");
 
@@ -109,18 +110,18 @@ const localDb = {
     }
     return parsed;
   },
-  
+
   saveUser: (user) => {
     const users = localDb.getUsers();
     users.push(user);
     localStorage.setItem("att_users", JSON.stringify(users));
   },
-  
+
   getAttendance: () => {
     const logs = localStorage.getItem("att_logs");
     return logs ? JSON.parse(logs) : [];
   },
-  
+
   saveAttendance: (logs) => {
     localStorage.setItem("att_logs", JSON.stringify(logs));
   },
@@ -175,34 +176,35 @@ export const getDbType = () => dbType;
  */
 export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "") => {
   const finalRole = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : role;
-  
+
   if (dbType === "firebase") {
     let userCredential;
+    let secondaryAuth;
+    let secondaryApp;
     try {
-      let secondaryApp;
       try {
         secondaryApp = getApp("SecondaryAppInstance");
       } catch (err) {
         secondaryApp = initializeApp(firebaseConfig, "SecondaryAppInstance");
       }
-      const secondaryAuth = getAuth(secondaryApp);
+      secondaryAuth = getAuth(secondaryApp);
       userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-      await signOut(secondaryAuth);
     } catch (error) {
       if (error.code === 'auth/email-already-in-use') throw new Error("Email is already registered. Please log in instead.");
       if (error.code === 'auth/invalid-email') throw new Error("Please enter a valid email address.");
       if (error.code === 'auth/weak-password') throw new Error("Password must be at least 6 characters long.");
-      throw new Error("Failed to register. Please try again.");
+      throw new Error("Failed to register: " + error.message);
     }
     const user = userCredential.user;
-    
+
     // Fallback: update display name in Auth so it is always present
+    // We do this while still authenticated in the secondary app instance
     try {
       await updateProfile(user, { displayName: name });
     } catch (e) {
       console.warn("Failed to set displayName on auth user:", e);
     }
-    
+
     // Resolve companySlug to companyId AFTER auth is established
     let finalCompanyId = companyId || "";
     if (!finalCompanyId && companySlug) {
@@ -215,7 +217,6 @@ export const registerUser = async (name, department, programType, email, passwor
         console.warn("Failed to resolve companySlug:", e);
       }
     }
-    
     // Check if there is a verified domain auto-assignment
     if (!finalCompanyId) {
       try {
@@ -234,41 +235,65 @@ export const registerUser = async (name, department, programType, email, passwor
         console.warn("Auto-assignment by domain failed", err);
       }
     }
-    
+
+    // Clean all properties to prevent undefined values in Firestore
+    const cleanValue = (val, fallback = "") => (val === undefined || val === null) ? fallback : val;
     // Save additional details in Firestore
     const userData = {
       uid: user.uid,
-      name,
-      department,
-      programType,
+      name: cleanValue(name),
+      department: cleanValue(department),
+      programType: cleanValue(programType),
       email: email.toLowerCase(),
-      role: finalRole,
-      shiftStart,
-      shiftEnd,
-      annualLeaves: Number(annualLeaves),
-      sickLeaves: Number(sickLeaves),
-      casualLeaves: Number(casualLeaves),
+      role: cleanValue(finalRole, "user"),
+      shiftStart: cleanValue(shiftStart, "10:00"),
+      shiftEnd: cleanValue(shiftEnd, "19:00"),
+      annualLeaves: Number(cleanValue(annualLeaves, 25)),
+      sickLeaves: Number(cleanValue(sickLeaves, 10)),
+      casualLeaves: Number(cleanValue(casualLeaves, 6)),
       createdAt: new Date().toISOString(),
-      dob,
-      joiningDate,
-      projects,
-      tasks,
-      jobType,
-      designation,
-      isProjectManager,
-      employeeId,
-      companyId: finalCompanyId
+      dob: cleanValue(dob),
+      joiningDate: cleanValue(joiningDate),
+      projects: Array.isArray(projects) ? projects : [],
+      tasks: Array.isArray(tasks) ? tasks : [],
+      jobType: cleanValue(jobType, "Full-time"),
+      designation: cleanValue(designation),
+      isProjectManager: !!isProjectManager,
+      employeeId: cleanValue(employeeId),
+      companyId: cleanValue(finalCompanyId)
     };
-    
-    await setDoc(doc(db, "users", user.uid), userData);
-    return userData;
+
+    try {
+      // Use the secondary app instance's firestore so that the write request is sent
+      // as the newly registered user (self-write), satisfying "request.auth.uid == userId" rules.
+      const secondaryDb = getFirestore(secondaryApp);
+      await setDoc(doc(secondaryDb, "users", user.uid), userData);
+
+      // Sign out of secondary auth now that registration and profile creation is complete
+      try {
+        await signOut(secondaryAuth);
+      } catch (e) {
+        console.warn("Failed to sign out secondary auth:", e);
+      }
+
+      return userData;
+    } catch (error) {
+      console.error("Firestore setDoc failed during registration. Rolling back Auth account:", error);
+      // Attempt to clean up the newly created Auth user so they aren't orphaned
+      try {
+        await deleteUser(user);
+      } catch (delError) {
+        console.error("Auth registration rollback failed:", delError);
+      }
+      throw new Error(`Failed to save employee profile: ${error.message}`);
+    }
   } else {
     // Local DB Mode
     const users = localDb.getUsers();
     if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
       throw new Error("Email already registered");
     }
-    
+
     const newUser = {
       uid: "user_" + Math.random().toString(36).substr(2, 9),
       name,
@@ -293,7 +318,7 @@ export const registerUser = async (name, department, programType, email, passwor
       companyId: companySlug ? (localDb.getCompanies ? localDb.getCompanies() : (typeof getLocalCompanies === 'function' ? getLocalCompanies() : [])).find(c => c.slug?.toLowerCase() === companySlug.toLowerCase())?.id || "" : "",
       password // storing hashed or plain in local storage for local verification
     };
-    
+
     localDb.saveUser(newUser);
     localDb.setCurrentUser(newUser);
     notifyAuthListeners(newUser);
@@ -307,14 +332,14 @@ export const registerUser = async (name, department, programType, email, passwor
 export const loginUser = async (email, password) => {
   const cleanEmail = email.toLowerCase();
   const role = cleanEmail === "admin@teamcarrezza.com" ? "admin" : "user";
-  
 
-  
+
+
   if (dbType === "firebase") {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
-      
+
       // Fetch profile from Firestore
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
@@ -334,8 +359,8 @@ export const loginUser = async (email, password) => {
       }
     } catch (error) {
       // Intercept admin@teamcarrezza.com / 12345678 failure to auto-create on first run
-      if (cleanEmail === "admin@teamcarrezza.com" && password === "12345678" && 
-          (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found")) {
+      if (cleanEmail === "admin@teamcarrezza.com" && password === "12345678" &&
+        (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found")) {
         try {
           const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
           const user = userCredential.user;
@@ -359,7 +384,7 @@ export const loginUser = async (email, password) => {
   } else {
     // Local DB Mode
     const users = localDb.getUsers();
-    
+
     // Default admin checks
     if (cleanEmail === "admin@teamcarrezza.com" && password === "12345678") {
       const adminUser = users.find(u => u.email === "admin@teamcarrezza.com");
@@ -367,12 +392,12 @@ export const loginUser = async (email, password) => {
       notifyAuthListeners(adminUser);
       return adminUser;
     }
-    
+
     const foundUser = users.find(u => u.email === cleanEmail && u.password === password);
     if (!foundUser) {
       throw new Error("Invalid email or password");
     }
-    
+
     localDb.setCurrentUser(foundUser);
     notifyAuthListeners(foundUser);
     return foundUser;
@@ -418,7 +443,7 @@ export const onAuthUserChanged = (callback) => {
               programType: "Internship",
               createdAt: new Date().toISOString()
             };
-            
+
             // Auto-sync write to Firestore without overwriting existing critical data like companyId and tasks
             setDoc(doc(db, "users", firebaseUser.uid), fallbackData, { merge: true })
               .then(() => {
@@ -468,15 +493,15 @@ export const getLocalDateString = () => {
  */
 export const checkIn = async (user, location) => {
   const dateStr = getLocalDateString();
-  
+
   let checkInDate = new Date();
   if (user && user.shiftStart) {
     const [shiftH, shiftM] = user.shiftStart.split(":").map(Number);
     const shiftStartToday = new Date();
     shiftStartToday.setHours(shiftH, shiftM, 0, 0);
-    
+
     const shiftStartPlusOneHour = new Date(shiftStartToday.getTime() + 60 * 60 * 1000);
-    
+
     if (checkInDate >= shiftStartToday && checkInDate <= shiftStartPlusOneHour) {
       checkInDate = shiftStartToday;
     } else if (checkInDate > shiftStartPlusOneHour) {
@@ -484,7 +509,7 @@ export const checkIn = async (user, location) => {
     }
   }
   const timeStr = checkInDate.toISOString();
-  
+
   const recordId = `${user.uid}_${dateStr}`;
   const data = {
     id: recordId,
@@ -579,16 +604,16 @@ export const checkOut = async (userId, location) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
-    
+
     if (!docSnap.exists()) {
       throw new Error("No check-in record found for today.");
     }
-    
+
     const currentData = docSnap.data();
     if (currentData.checkOutTime) {
       throw new Error("You have already checked out today.");
     }
-    
+
     // If user is on break, resume first or close break
     let updatedBreaks = [...(currentData.breaks || [])];
     let status = "checked-out";
@@ -599,10 +624,10 @@ export const checkOut = async (userId, location) => {
         updatedBreaks[activeBreakIndex].resumeLocation = location;
       }
     }
-    
+
     // Calculate total working minutes
     const workingMinutes = calculateWorkingMinutes(currentData.checkInTime, timeStr, updatedBreaks);
-    
+
     const updates = {
       checkOutTime: timeStr,
       checkOutLocation: location,
@@ -610,22 +635,22 @@ export const checkOut = async (userId, location) => {
       breaks: updatedBreaks,
       totalWorkingMinutes: workingMinutes
     };
-    
+
     await updateDoc(docRef, updates);
     return { ...currentData, ...updates };
   } else {
     const logs = localDb.getAttendance();
     const logIndex = logs.findIndex(log => log.id === recordId);
-    
+
     if (logIndex === -1) {
       throw new Error("No check-in record found for today.");
     }
-    
+
     const currentData = logs[logIndex];
     if (currentData.checkOutTime) {
       throw new Error("You have already checked out today.");
     }
-    
+
     let updatedBreaks = [...(currentData.breaks || [])];
     if (currentData.status === "on-break") {
       const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
@@ -634,9 +659,9 @@ export const checkOut = async (userId, location) => {
         updatedBreaks[activeBreakIndex].resumeLocation = location;
       }
     }
-    
+
     const workingMinutes = calculateWorkingMinutes(currentData.checkInTime, timeStr, updatedBreaks);
-    
+
     logs[logIndex] = {
       ...currentData,
       checkOutTime: timeStr,
@@ -645,7 +670,7 @@ export const checkOut = async (userId, location) => {
       breaks: updatedBreaks,
       totalWorkingMinutes: workingMinutes
     };
-    
+
     localDb.saveAttendance(logs);
     notifyAttendanceListeners();
     return logs[logIndex];
@@ -661,14 +686,44 @@ export const startBreak = async (userId, breakType, location) => {
   const recordId = `${userId}_${dateStr}`;
   const startTimeStr = new Date().toISOString();
 
+  // Find if there is any active task timer running before pausing
+  let pausedTaskId = null;
+  try {
+    let userData = null;
+    if (dbType === "firebase") {
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        userData = userSnap.data();
+      }
+    } else {
+      const users = localDb.getUsers();
+      userData = users.find(u => u.uid === userId);
+    }
+    if (userData && userData.tasks) {
+      const runningTask = userData.tasks.find(t => t.timerStartedAt);
+      console.log("[startBreak] userData.tasks found:", userData.tasks);
+      console.log("[startBreak] runningTask found:", runningTask);
+      if (runningTask) {
+        pausedTaskId = runningTask.id;
+      }
+    }
+    console.log("[startBreak] Final determined pausedTaskId:", pausedTaskId);
+  } catch (err) {
+    console.error("Failed to query running task for break:", err);
+  }
+
+  // Stop any active task timers before starting a break
+  await stopAllTaskTimers(userId);
+
   if (dbType === "firebase") {
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
-    
+
     if (!docSnap.exists()) {
       throw new Error("No active attendance record to start a break.");
     }
-    
+
     const currentData = docSnap.data();
     if (currentData.status !== "checked-in") {
       throw new Error("Must be checked in to start a break.");
@@ -688,7 +743,7 @@ export const startBreak = async (userId, breakType, location) => {
     }
 
     const endTimeStr = new Date(new Date(startTimeStr).getTime() + balance * 1000).toISOString();
-    
+
     const newBreak = {
       type: breakType,
       startTime: startTimeStr,
@@ -697,24 +752,25 @@ export const startBreak = async (userId, breakType, location) => {
       resumeLocation: null,
       initialBalance: balance
     };
-    
+
     const updatedBreaks = [...(currentData.breaks || []), newBreak];
     const updates = {
       status: "on-break",
       breaks: updatedBreaks,
-      currentBreakTimerEnd: endTimeStr
+      currentBreakTimerEnd: endTimeStr,
+      pausedTaskId: pausedTaskId || null
     };
-    
+
     await updateDoc(docRef, updates);
     return { ...currentData, ...updates };
   } else {
     const logs = localDb.getAttendance();
     const logIndex = logs.findIndex(log => log.id === recordId);
-    
+
     if (logIndex === -1) {
       throw new Error("No active attendance record to start a break.");
     }
-    
+
     const currentData = logs[logIndex];
     if (currentData.status !== "checked-in") {
       throw new Error("Must be checked in to start a break.");
@@ -734,7 +790,7 @@ export const startBreak = async (userId, breakType, location) => {
     }
 
     const endTimeStr = new Date(new Date(startTimeStr).getTime() + balance * 1000).toISOString();
-    
+
     const newBreak = {
       type: breakType,
       startTime: startTimeStr,
@@ -743,15 +799,16 @@ export const startBreak = async (userId, breakType, location) => {
       resumeLocation: null,
       initialBalance: balance
     };
-    
+
     const updatedBreaks = [...(currentData.breaks || []), newBreak];
     logs[logIndex] = {
       ...currentData,
       status: "on-break",
       breaks: updatedBreaks,
-      currentBreakTimerEnd: endTimeStr
+      currentBreakTimerEnd: endTimeStr,
+      pausedTaskId: pausedTaskId || null
     };
-    
+
     localDb.saveAttendance(logs);
     notifyAttendanceListeners();
     return logs[logIndex];
@@ -769,23 +826,23 @@ export const resumeWork = async (userId, location) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
-    
+
     if (!docSnap.exists()) {
       throw new Error("No active attendance record found.");
     }
-    
+
     const currentData = docSnap.data();
     if (currentData.status !== "on-break") {
       throw new Error("You are not currently on a break.");
     }
-    
+
     const updatedBreaks = [...(currentData.breaks || [])];
     const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
-    
+
     if (activeBreakIndex === -1) {
       throw new Error("No active break record found.");
     }
-    
+
     const activeBreak = updatedBreaks[activeBreakIndex];
     activeBreak.resumeTime = timeStr;
     activeBreak.resumeLocation = location;
@@ -805,38 +862,48 @@ export const resumeWork = async (userId, location) => {
     } else if (activeBreak.type === "bio") {
       newBioBalance = Math.max(0, newBioBalance - durationSeconds);
     }
-    
+
     const updates = {
       status: "checked-in",
       breaks: updatedBreaks,
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
       longBreakBalance: newLongBalance,
-      bioBreakBalance: newBioBalance
+      bioBreakBalance: newBioBalance,
+      pausedTaskId: null
     };
-    
+
     await updateDoc(docRef, updates);
+
+    // Automatically resume task timer if it was paused when starting the break
+    console.log("[resumeWork - firebase] currentData read:", currentData);
+    console.log("[resumeWork - firebase] currentData.pausedTaskId:", currentData?.pausedTaskId);
+    if (currentData.pausedTaskId) {
+      console.log("[resumeWork - firebase] Auto-resuming task:", currentData.pausedTaskId);
+      await startTaskTimer(userId, currentData.pausedTaskId);
+    }
+
     return { ...currentData, ...updates };
   } else {
     const logs = localDb.getAttendance();
     const logIndex = logs.findIndex(log => log.id === recordId);
-    
+
     if (logIndex === -1) {
       throw new Error("No active attendance record found.");
     }
-    
+
     const currentData = logs[logIndex];
     if (currentData.status !== "on-break") {
       throw new Error("You are not currently on a break.");
     }
-    
+
     const updatedBreaks = [...(currentData.breaks || [])];
     const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
-    
+
     if (activeBreakIndex === -1) {
       throw new Error("No active break record found.");
     }
-    
+
     const activeBreak = updatedBreaks[activeBreakIndex];
     activeBreak.resumeTime = timeStr;
     activeBreak.resumeLocation = location;
@@ -856,7 +923,7 @@ export const resumeWork = async (userId, location) => {
     } else if (activeBreak.type === "bio") {
       newBioBalance = Math.max(0, newBioBalance - durationSeconds);
     }
-    
+
     logs[logIndex] = {
       ...currentData,
       status: "checked-in",
@@ -864,11 +931,21 @@ export const resumeWork = async (userId, location) => {
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
       longBreakBalance: newLongBalance,
-      bioBreakBalance: newBioBalance
+      bioBreakBalance: newBioBalance,
+      pausedTaskId: null
     };
-    
+
     localDb.saveAttendance(logs);
     notifyAttendanceListeners();
+
+    // Automatically resume task timer if it was paused when starting the break
+    console.log("[resumeWork - local] currentData read:", currentData);
+    console.log("[resumeWork - local] currentData.pausedTaskId:", currentData?.pausedTaskId);
+    if (currentData.pausedTaskId) {
+      console.log("[resumeWork - local] Auto-resuming task:", currentData.pausedTaskId);
+      await startTaskTimer(userId, currentData.pausedTaskId);
+    }
+
     return logs[logIndex];
   }
 };
@@ -879,7 +956,7 @@ export const resumeWork = async (userId, location) => {
 export const getTodayAttendanceLog = async (userId) => {
   const dateStr = getLocalDateString();
   const recordId = `${userId}_${dateStr}`;
-  
+
   if (dbType === "firebase") {
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
@@ -896,7 +973,7 @@ export const getTodayAttendanceLog = async (userId) => {
 export const getUserAttendanceLogs = async (userId) => {
   if (dbType === "firebase") {
     const qRef = query(
-      collection(db, "attendance"), 
+      collection(db, "attendance"),
       where("userId", "==", userId),
       orderBy("date", "desc")
     );
@@ -977,20 +1054,20 @@ export const updateUserRecord = async (uid, name, department, programType, shift
       if (employeeId !== undefined) updatedData.employeeId = employeeId;
       users[idx] = updatedData;
       localStorage.setItem("att_users", JSON.stringify(users));
-      
+
       // Update local storage current user profile if currently logged in user is updated
       const cur = localDb.getCurrentUser();
       if (cur && cur.uid === uid) {
-        const updatedUser = { 
-          ...cur, 
-          name, 
-          department, 
-          programType, 
-          shiftStart, 
-          shiftEnd, 
-          annualLeaves: Number(annualLeaves), 
-          sickLeaves: Number(sickLeaves), 
-          casualLeaves: Number(casualLeaves) 
+        const updatedUser = {
+          ...cur,
+          name,
+          department,
+          programType,
+          shiftStart,
+          shiftEnd,
+          annualLeaves: Number(annualLeaves),
+          sickLeaves: Number(sickLeaves),
+          casualLeaves: Number(casualLeaves)
         };
         if (avatar !== undefined) updatedUser.avatar = avatar;
         if (dob !== undefined) updatedUser.dob = dob;
@@ -1044,7 +1121,7 @@ export const getAllAttendanceLogs = async (companyId = "") => {
 export const subscribeToUserLogs = (userId, callback) => {
   if (dbType === "firebase") {
     const qRef = query(
-      collection(db, "attendance"), 
+      collection(db, "attendance"),
       where("userId", "==", userId)
     );
     return onSnapshot(qRef, (snapshot) => {
@@ -1122,7 +1199,7 @@ export const startTaskTimer = async (userId, taskId) => {
       if (tIdx !== -1) {
         users[uIdx].tasks[tIdx].timerStartedAt = timestamp;
         localStorage.setItem("att_users", JSON.stringify(users));
-        
+
         const cur = localDb.getCurrentUser();
         if (cur && cur.uid === userId) {
           cur.tasks[tIdx].timerStartedAt = timestamp;
@@ -1146,11 +1223,11 @@ export const stopTaskTimer = async (userId, taskId, pmId) => {
         if (taskIdx !== -1 && userData.tasks[taskIdx].timerStartedAt) {
           const startedAt = new Date(userData.tasks[taskIdx].timerStartedAt).getTime();
           elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
-          
+
           userData.tasks[taskIdx].timerStartedAt = null;
           await updateDoc(userRef, { tasks: userData.tasks });
           window.dispatchEvent(new Event("local-auth-updated"));
-          
+
           if (elapsedMinutes > 0) {
             const hrs = Math.floor(elapsedMinutes / 60);
             const mins = elapsedMinutes % 60;
@@ -1168,17 +1245,17 @@ export const stopTaskTimer = async (userId, taskId, pmId) => {
       if (tIdx !== -1 && users[uIdx].tasks[tIdx].timerStartedAt) {
         const startedAt = new Date(users[uIdx].tasks[tIdx].timerStartedAt).getTime();
         elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
-        
+
         users[uIdx].tasks[tIdx].timerStartedAt = null;
         localStorage.setItem("att_users", JSON.stringify(users));
-        
+
         const cur = localDb.getCurrentUser();
         if (cur && cur.uid === userId) {
           cur.tasks[tIdx].timerStartedAt = null;
           localDb.setCurrentUser(cur);
           window.dispatchEvent(new Event("local-auth-updated"));
         }
-        
+
         if (elapsedMinutes > 0) {
           const hrs = Math.floor(elapsedMinutes / 60);
           const mins = elapsedMinutes % 60;
@@ -1204,12 +1281,12 @@ export const stopAllTaskTimers = async (userId) => {
             const elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
             task.timerStartedAt = null;
             updated = true;
-            
+
             if (elapsedMinutes > 0) {
               const hrs = Math.floor(elapsedMinutes / 60);
               const mins = elapsedMinutes % 60;
               const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-              await addTaskReport(task.id, userId, task.assignedBy, `Auto-stopped on check-out. Worked for ${timeStr}`);
+              await addTaskReport(task.id, userId, task.assignedBy, `Auto-paused. Worked for ${timeStr}`);
             }
           }
         }
@@ -1230,12 +1307,12 @@ export const stopAllTaskTimers = async (userId) => {
           const elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
           task.timerStartedAt = null;
           updated = true;
-          
+
           if (elapsedMinutes > 0) {
             const hrs = Math.floor(elapsedMinutes / 60);
             const mins = elapsedMinutes % 60;
             const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-            await addTaskReport(task.id, userId, task.assignedBy, `Auto-stopped on check-out. Worked for ${timeStr}`);
+            await addTaskReport(task.id, userId, task.assignedBy, `Auto-paused. Worked for ${timeStr}`);
           }
         }
       }
@@ -1264,13 +1341,13 @@ function calculateWorkingMinutes(checkInTime, checkOutTime, breaks) {
   const checkInDate = new Date(checkInTime);
   const checkOutDate = new Date(checkOutTime);
   let diffMs = checkOutDate.getTime() - checkInDate.getTime();
-  
+
   // If the user forgets to check out and the elapsed time exceeds 9 hours,
   // automatically record exactly 8 hours of working time.
   if (diffMs > 9 * 60 * 60 * 1000) {
     return 480; // 8 hours in minutes
   }
-  
+
   let breakMs = 0;
   if (breaks && breaks.length > 0) {
     breaks.forEach(b => {
@@ -1281,7 +1358,7 @@ function calculateWorkingMinutes(checkInTime, checkOutTime, breaks) {
       }
     });
   }
-  
+
   const workingMs = diffMs - breakMs;
   return Math.max(0, parseFloat((workingMs / 60000).toFixed(1)));
 }
@@ -1307,8 +1384,8 @@ export const uploadPaidLeave = async (title, startDate, endDate, description, st
     const docRef = await addDoc(collection(db, "paid_leaves"), newLeave);
     await updateDoc(docRef, { id: docRef.id });
   } else {
-    const current = localStorage.getItem("att_paid_leaves") 
-      ? JSON.parse(localStorage.getItem("att_paid_leaves")) 
+    const current = localStorage.getItem("att_paid_leaves")
+      ? JSON.parse(localStorage.getItem("att_paid_leaves"))
       : [];
     current.push(newLeave);
     localStorage.setItem("att_paid_leaves", JSON.stringify(current));
@@ -1320,8 +1397,8 @@ export const updatePaidLeaveStatus = async (id, status) => {
   if (dbType === "firebase") {
     await updateDoc(doc(db, "paid_leaves", id), { status });
   } else {
-    const current = localStorage.getItem("att_paid_leaves") 
-      ? JSON.parse(localStorage.getItem("att_paid_leaves")) 
+    const current = localStorage.getItem("att_paid_leaves")
+      ? JSON.parse(localStorage.getItem("att_paid_leaves"))
       : [];
     const index = current.findIndex(item => item.id === id);
     if (index !== -1) {
@@ -1336,8 +1413,8 @@ export const deletePaidLeave = async (id) => {
   if (dbType === "firebase") {
     await deleteDoc(doc(db, "paid_leaves", id));
   } else {
-    const current = localStorage.getItem("att_paid_leaves") 
-      ? JSON.parse(localStorage.getItem("att_paid_leaves")) 
+    const current = localStorage.getItem("att_paid_leaves")
+      ? JSON.parse(localStorage.getItem("att_paid_leaves"))
       : [];
     const filtered = current.filter(item => item.id !== id);
     localStorage.setItem("att_paid_leaves", JSON.stringify(filtered));
@@ -1359,8 +1436,8 @@ export const subscribeToPaidLeaves = (companyId, callback) => {
       const list = localStorage.getItem("att_paid_leaves")
         ? JSON.parse(localStorage.getItem("att_paid_leaves"))
         : [
-            { id: "pl-default-1", title: "New Year Paid Holiday", startDate: "2026-01-01", endDate: "2026-01-01", status: "active", description: "Official paid leave for New Year Day celebration.", createdAt: new Date().toISOString() }
-          ];
+          { id: "pl-default-1", title: "New Year Paid Holiday", startDate: "2026-01-01", endDate: "2026-01-01", status: "active", description: "Official paid leave for New Year Day celebration.", createdAt: new Date().toISOString() }
+        ];
       list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(list);
     };
@@ -1397,7 +1474,7 @@ export const subscribeToAttendanceRules = (callback) => {
       if (data) {
         callback(JSON.parse(data).rules);
       } else {
-        const defaultRules = 
+        const defaultRules =
           "1. Working Hours: Standard working hours are standard based on employee profiles. Be punctual.\n" +
           "2. Late Threshold: Checking in 15+ minutes after shift start marks your shift as Late.\n" +
           "3. Break Limits: Short break is capped at 20 mins. Long break is capped at 40 mins. Overstays affect metrics.\n" +
@@ -1585,19 +1662,19 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
   if (dbType === "firebase") {
     const docRef = doc(db, "regularization_requests", id);
     await updateDoc(docRef, updates);
-    
+
     if (status === "approved") {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const reqData = docSnap.data();
-        
+
         // Write standard attendance record
         const recordId = `${reqData.userId}_${reqData.date}`;
         const checkInIso = new Date(`${reqData.date}T${reqData.checkInTime}:00`).toISOString();
         const checkOutIso = new Date(`${reqData.date}T${reqData.checkOutTime}:00`).toISOString();
         const rawDiff = (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) / 60000;
         const workingMinutes = Math.min(rawDiff >= 540 ? rawDiff - 60 : rawDiff, 480);
-        
+
         const attRef = doc(db, "attendance", recordId);
         const attSnap = await getDoc(attRef);
         let existingBreaks = [];
@@ -1620,7 +1697,7 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           longBreakBalance: 1800,
           bioBreakBalance: 900
         };
-        
+
         await setDoc(attRef, attendanceData, { merge: true });
       }
     }
@@ -1636,7 +1713,7 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
         current[index].managerComment = managerComment;
       }
       localStorage.setItem("att_regularizations", JSON.stringify(current));
-      
+
       if (status === "approved") {
         const reqData = current[index];
         const recordId = `${reqData.userId}_${reqData.date}`;
@@ -1644,7 +1721,7 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
         const checkOutIso = new Date(`${reqData.date}T${reqData.checkOutTime}:00`).toISOString();
         const rawDiff = (new Date(checkOutIso).getTime() - new Date(checkInIso).getTime()) / 60000;
         const workingMinutes = Math.min(rawDiff >= 540 ? rawDiff - 60 : rawDiff, 480);
-        
+
         const logs = localDb.getAttendance();
         const logIdx = logs.findIndex(log => log.id === recordId);
         let existingBreaks = [];
@@ -1667,7 +1744,7 @@ export const updateRegularizationRequest = async (id, status, managerComment) =>
           longBreakBalance: 1800,
           bioBreakBalance: 900
         };
-        
+
         if (logIdx !== -1) {
           logs[logIdx] = { ...logs[logIdx], ...attendanceData };
         } else {
@@ -1951,9 +2028,9 @@ export const sendChatMessage = async (threadId, threadType, senderId, senderName
         if (thread) otherId = thread.participantIds.find(id => id !== senderId);
       }
       if (otherId) {
-        createNotification(otherId, "New Message", `New message from ${senderName}`, "message", "/attendance/team-hub").catch(() => {});
+        createNotification(otherId, "New Message", `New message from ${senderName}`, "message", "/attendance/team-hub").catch(() => { });
       }
-    } catch(e) {}
+    } catch (e) { }
   } else if (threadType === "channel") {
     try {
       let memberIds = [];
@@ -1966,10 +2043,10 @@ export const sendChatMessage = async (threadId, threadType, senderId, senderName
       }
       memberIds.forEach(mId => {
         if (mId !== senderId) {
-          createNotification(mId, "New Channel Message", `New message in channel by ${senderName}`, "message", "/attendance/team-hub").catch(() => {});
+          createNotification(mId, "New Channel Message", `New message in channel by ${senderName}`, "message", "/attendance/team-hub").catch(() => { });
         }
       });
-    } catch(e) {}
+    } catch (e) { }
   }
 
   return createdMsg;
@@ -2069,7 +2146,7 @@ export const subscribeToAllMessages = (companyId, callback) => {
 export const markThreadAsRead = async (userId, threadId) => {
   if (!userId || !threadId) return;
   const timestamp = new Date().toISOString();
-  
+
   if (dbType === "firebase") {
     try {
       const docRef = doc(db, "users", userId);
@@ -2089,7 +2166,7 @@ export const markThreadAsRead = async (userId, threadId) => {
         }
         users[idx].teamHubReadReceipts[threadId] = timestamp;
         localStorage.setItem("att_users", JSON.stringify(users));
-        
+
         // Ensure local current user gets the live update
         const cur = localDb.getCurrentUser();
         if (cur && cur.uid === userId) {
@@ -2268,14 +2345,47 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
   }
 
   // Try Cloudinary first
-  try {
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-    if (cloudName && uploadPreset) {
-      return await uploadFileToCloudinary(fileToUpload, companyId, folderType);
+  let cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  let uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+  let isCloudinaryEnabled = false;
+
+  if (companyId) {
+    try {
+      let company = null;
+      if (dbType === "firebase") {
+        const snap = await getDoc(doc(db, "companies", companyId));
+        if (snap.exists()) {
+          company = snap.data();
+        }
+      } else {
+        const list = getLocalCompanies();
+        company = list.find(c => c.id === companyId);
+      }
+
+      if (company && company.modules?.includes("cloudinary")) {
+        isCloudinaryEnabled = true;
+        if (company.cloudinaryCloudName) {
+          cloudName = company.cloudinaryCloudName;
+        }
+        if (company.cloudinaryUploadPreset) {
+          uploadPreset = company.cloudinaryUploadPreset;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to check company Cloudinary status, falling back to env:", e);
     }
-  } catch (cloudinaryError) {
-    console.warn("Cloudinary upload failed, falling back to other storage:", cloudinaryError);
+  } else {
+    if (cloudName && uploadPreset) {
+      isCloudinaryEnabled = true;
+    }
+  }
+
+  if (isCloudinaryEnabled && cloudName && uploadPreset) {
+    try {
+      return await uploadFileToCloudinary(fileToUpload, companyId, folderType, cloudName, uploadPreset);
+    } catch (cloudinaryError) {
+      console.warn("Cloudinary upload failed, falling back to other storage:", cloudinaryError);
+    }
   }
 
   if (isB2Configured()) {
@@ -2292,10 +2402,10 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
       const fileExtension = fileToUpload.name ? fileToUpload.name.split(".").pop() : "bin";
       const filePath = `chat_files/${uniqueId}.${fileExtension}`;
       const fileRef = storageRef(storage, filePath);
-      
+
       // Upload bytes with resumable task so we can cancel it on timeout
       const uploadTask = uploadBytesResumable(fileRef, fileToUpload);
-      
+
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => {
           try {
@@ -2309,10 +2419,10 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
 
       // Race the upload task against the timeout
       await Promise.race([uploadTask, timeoutPromise]);
-      
+
       // Get public/read download URL
       const downloadUrl = await getDownloadURL(fileRef);
-      
+
       return {
         id: uniqueId,
         name: fileToUpload.name || "image.jpg",
@@ -2382,7 +2492,7 @@ export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
 
   if (dbType === "firebase") {
     await addDoc(collection(db, "task_reports"), reportData);
-    
+
     // Update lastReportedAt on the user's task
     const userRef = doc(db, "users", employeeId);
     const userSnap = await getDoc(userRef);
@@ -2403,7 +2513,7 @@ export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
     reportData.id = "report_" + Date.now();
     current.push(reportData);
     localStorage.setItem("att_task_reports", JSON.stringify(current));
-    
+
     // Update lastReportedAt locally
     const users = localDb.getUsers();
     const uIdx = users.findIndex(u => u.uid === employeeId);
@@ -2412,7 +2522,7 @@ export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
       if (tIdx !== -1) {
         users[uIdx].tasks[tIdx].lastReportedAt = timestamp;
         localStorage.setItem("att_users", JSON.stringify(users));
-        
+
         const cur = localDb.getCurrentUser();
         if (cur && cur.uid === employeeId) {
           cur.tasks[tIdx].lastReportedAt = timestamp;
@@ -2420,7 +2530,7 @@ export const addTaskReport = async (taskId, employeeId, pmId, reportText) => {
         }
       }
     }
-    
+
     // Provide an event listener hook if we need real-time local updates
     window.dispatchEvent(new Event("local-reports-updated"));
     window.dispatchEvent(new Event("local-auth-updated"));
@@ -2450,7 +2560,7 @@ export const updateTaskWarningSent = async (employeeId, taskId) => {
       if (tIdx !== -1) {
         users[uIdx].tasks[tIdx].lastWarningSentAt = timestamp;
         localStorage.setItem("att_users", JSON.stringify(users));
-        
+
         const cur = localDb.getCurrentUser();
         if (cur && cur.uid === employeeId) {
           cur.tasks[tIdx].lastWarningSentAt = timestamp;
@@ -2567,8 +2677,8 @@ export const listenToCompany = (companyId, callback) => {
   if (typeof companyId === 'object' && companyId !== null) {
     actualCompanyId = companyId.id;
   }
-  if (!actualCompanyId || typeof actualCompanyId !== 'string') return () => {};
-  
+  if (!actualCompanyId || typeof actualCompanyId !== 'string') return () => { };
+
   if (dbType === "firebase") {
     return onSnapshot(doc(db, "companies", actualCompanyId), (docSnap) => {
       if (docSnap.exists()) {
@@ -2588,17 +2698,22 @@ export const listenToCompany = (companyId, callback) => {
 };
 
 export const createCompany = async (companyData) => {
+  const companyId = companyData.id || (dbType === "firebase" ? "" : "comp-" + Math.random().toString(36).substr(2, 9));
   const company = {
     ...companyData,
-    id: dbType === "firebase" ? "" : "comp-" + Math.random().toString(36).substr(2, 9),
+    id: companyId,
     status: companyData.status || "pending",
     createdAt: new Date().toISOString()
   };
 
   if (dbType === "firebase") {
-    const docRef = await addDoc(collection(db, "companies"), company);
-    await updateDoc(docRef, { id: docRef.id });
-    company.id = docRef.id;
+    if (companyId) {
+      await setDoc(doc(db, "companies", companyId), company);
+    } else {
+      const docRef = await addDoc(collection(db, "companies"), company);
+      await updateDoc(docRef, { id: docRef.id });
+      company.id = docRef.id;
+    }
   } else {
     const companies = getLocalCompanies();
     companies.push(company);
@@ -2613,20 +2728,20 @@ export const getCompanyStats = async (companyId = null) => {
       let usersCount = 0;
       let tasksCount = 0;
       let attCount = 0;
-      
+
       try {
         const usersSnap = await getDocs(query(collection(db, "users"), where("companyId", "==", companyId)));
         usersCount = usersSnap.size;
-        
+
         const tasksSnap = await getDocs(query(collection(db, "tasks"), where("companyId", "==", companyId)));
         tasksCount = tasksSnap.docs.filter(d => d.data().status !== "Completed").length;
-        
+
         const attSnap = await getDocs(query(collection(db, "attendanceLogs"), where("companyId", "==", companyId)));
         attCount = attSnap.size;
       } catch (err) {
         console.error("Error fetching specific company stats", err);
       }
-      
+
       return {
         totalUsers: usersCount,
         totalTasks: tasksCount,
@@ -2638,7 +2753,7 @@ export const getCompanyStats = async (companyId = null) => {
       const tasks = tasksStr ? JSON.parse(tasksStr).filter(t => t.companyId === companyId && t.status !== "Completed") : [];
       const logsStr = localStorage.getItem("att_attendanceLogs");
       const logs = logsStr ? JSON.parse(logsStr).filter(l => l.companyId === companyId) : [];
-      
+
       return {
         totalUsers: users.length,
         totalTasks: tasks.length,
@@ -2690,12 +2805,12 @@ export const assignCompanyToUser = async (userId, companyId) => {
 
 export const recoverLostData = async () => {
   if (dbType !== "firebase") return { success: false, msg: "Not in firebase mode" };
-  
+
   try {
     const companiesSnapshot = await getDocs(collection(db, "companies"));
     const companies = companiesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     const carrezza = companies.find(c => c.name.toLowerCase().includes("carrezza"));
-    
+
     if (!carrezza) throw new Error("Carrezza company not found");
     const targetId = carrezza.id;
 
@@ -2759,12 +2874,12 @@ export const recoverLostData = async () => {
 
 export const recoverChatData = async () => {
   if (dbType !== "firebase") return { success: false, msg: "Not in firebase mode" };
-  
+
   try {
     const companiesSnapshot = await getDocs(collection(db, "companies"));
     const companies = companiesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     const carrezza = companies.find(c => c.name.toLowerCase().includes("carrezza"));
-    
+
     if (!carrezza) throw new Error("Carrezza company not found");
     const targetId = carrezza.id;
 
@@ -2926,35 +3041,35 @@ export const getCompanyNameById = async (companyId) => {
   }
 };
 
-export const uploadFileToCloudinary = async (file, companyId = "", folderType = "files") => {
-  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dcfsh85uq";
-  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "hrms_preset";
-  
+export const uploadFileToCloudinary = async (file, companyId = "", folderType = "files", customCloudName = "", customUploadPreset = "") => {
+  const cloudName = customCloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dcfsh85uq";
+  const uploadPreset = customUploadPreset || import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "hrms_preset";
+
   let orgName = "General";
   if (companyId) {
     orgName = await getCompanyNameById(companyId);
   }
-  
+
   const cleanOrgName = orgName.replace(/[^a-zA-Z0-9\s-_]/g, "").trim();
   const folderPath = `HRMS/${cleanOrgName}/${folderType}`;
-  
+
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", uploadPreset);
   formData.append("folder", folderPath);
-  
+
   const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
     method: "POST",
     body: formData
   });
-  
+
   if (!response.ok) {
     const errText = await response.text();
     throw new Error(`Cloudinary upload failed: ${errText}`);
   }
-  
+
   const data = await response.json();
-  
+
   return {
     id: data.public_id,
     name: file.name || data.original_filename || "file",
@@ -3137,10 +3252,7 @@ export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
   }
 };
 
-export const subscribeToExternalLinks = () => { return () => {}; };
-export const generateExternalLink = async () => {};
-export const revokeExternalLink = async () => {};
-export const getExternalLinkByToken = async () => {};
+
 
 export const checkDomainAuthorization = async (email, companySlug) => {
   try {
@@ -3188,3 +3300,253 @@ export const checkDomainAuthorization = async (email, companySlug) => {
     return { allowed: true }; // Fail open if error
   }
 };
+
+const externalLinksListeners = new Set();
+const getLocalExternalLinks = () => {
+  const raw = localStorage.getItem("att_external_links");
+  return raw ? JSON.parse(raw) : [];
+};
+const saveLocalExternalLinks = (links) => {
+  localStorage.setItem("att_external_links", JSON.stringify(links));
+};
+const notifyExternalLinksListeners = () => {
+  externalLinksListeners.forEach(cb => cb());
+};
+
+export const subscribeToExternalLinks = (companyId, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "external_links");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = getLocalExternalLinks();
+      if (companyId) list = list.filter(l => l.companyId === companyId);
+      callback(list);
+    };
+    externalLinksListeners.add(handler);
+    handler();
+    return () => {
+      externalLinksListeners.delete(handler);
+    };
+  }
+};
+
+export const generateExternalLink = async (
+  userId,
+  companyId,
+  projectId,
+  projectName,
+  pmId,
+  pmName,
+  clientEmail,
+  clientName
+) => {
+  // Create a secure chat channel first
+  const channelName = `Client-${clientName.trim() || "Chat"}-${projectName.trim()}`;
+  const channel = await createChannel(channelName, `Secure external link client chat for project ${projectName}`, pmId, pmName, companyId);
+  const channelId = channel.id;
+  const linkToken = "link-" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+
+  const newLink = {
+    id: dbType === "firebase" ? "" : "ext-" + Math.random().toString(36).substr(2, 9),
+    userId,
+    companyId,
+    projectId,
+    projectName,
+    pmId,
+    pmName,
+    clientEmail,
+    clientName,
+    linkToken,
+    channelId,
+    status: "active",
+    createdAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "external_links"), newLink);
+    await updateDoc(docRef, { id: docRef.id });
+    return { ...newLink, id: docRef.id };
+  } else {
+    const links = getLocalExternalLinks();
+    links.push(newLink);
+    saveLocalExternalLinks(links);
+    notifyExternalLinksListeners();
+    return newLink;
+  }
+};
+
+export const revokeExternalLink = async (linkId, companyId) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "external_links", linkId);
+    await updateDoc(docRef, { status: "revoked" });
+  } else {
+    const links = getLocalExternalLinks();
+    const idx = links.findIndex(l => l.id === linkId);
+    if (idx >= 0) {
+      links[idx].status = "revoked";
+      saveLocalExternalLinks(links);
+      notifyExternalLinksListeners();
+    }
+  }
+};
+
+export const getExternalLinkByToken = async (linkToken) => {
+  if (dbType === "firebase") {
+    const qRef = query(collection(db, "external_links"), where("linkToken", "==", linkToken));
+    const snap = await getDocs(qRef);
+    if (snap.empty) return null;
+    return { ...snap.docs[0].data(), id: snap.docs[0].id };
+  } else {
+    const links = getLocalExternalLinks();
+    const link = links.find(l => l.linkToken === linkToken);
+    return link || null;
+  }
+};
+
+// ----------------------------------------------------
+// PROJECT MANAGEMENT HELPERS
+// ----------------------------------------------------
+
+const projectListeners = new Set();
+const notifyProjectListeners = () => {
+  projectListeners.forEach(cb => cb());
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === "att_projects") {
+      notifyProjectListeners();
+    }
+  });
+}
+
+export const createProject = async (projectData) => {
+  const newProj = {
+    id: dbType === "firebase" ? "" : "proj-" + Math.random().toString(36).substr(2, 9),
+    name: projectData.name,
+    startDate: projectData.startDate,
+    endDate: projectData.endDate,
+    managerId: projectData.managerId,
+    teamMembers: projectData.teamMembers || [projectData.managerId],
+    companyId: projectData.companyId,
+    createdAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "projects"), newProj);
+    await updateDoc(docRef, { id: docRef.id });
+    return { ...newProj, id: docRef.id };
+  } else {
+    const current = localStorage.getItem("att_projects")
+      ? JSON.parse(localStorage.getItem("att_projects"))
+      : [];
+    current.push(newProj);
+    localStorage.setItem("att_projects", JSON.stringify(current));
+    notifyProjectListeners();
+    return newProj;
+  }
+};
+
+export const subscribeToProjects = (companyId, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "projects");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => doc.data());
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = localStorage.getItem("att_projects")
+        ? JSON.parse(localStorage.getItem("att_projects"))
+        : [];
+      if (companyId) list = list.filter(p => p.companyId === companyId);
+      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      callback(list);
+    };
+    projectListeners.add(handler);
+    handler();
+    return () => {
+      projectListeners.delete(handler);
+    };
+  }
+};
+
+export const updateProjectTeam = async (projectId, teamMembers) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "projects", projectId);
+    await updateDoc(docRef, { teamMembers });
+  } else {
+    const current = localStorage.getItem("att_projects")
+      ? JSON.parse(localStorage.getItem("att_projects"))
+      : [];
+    const idx = current.findIndex(p => p.id === projectId);
+    if (idx !== -1) {
+      current[idx].teamMembers = teamMembers;
+      localStorage.setItem("att_projects", JSON.stringify(current));
+      notifyProjectListeners();
+    }
+  }
+};
+
+export const addTeamMemberToProject = async (projectId, userId, projectName) => {
+  if (dbType === "firebase") {
+    const projRef = doc(db, "projects", projectId);
+    const projSnap = await getDoc(projRef);
+    if (projSnap.exists()) {
+      const projData = projSnap.data();
+      const currentTeam = projData.teamMembers || [];
+      if (!currentTeam.includes(userId)) {
+        const newTeam = [...currentTeam, userId];
+        await updateDoc(projRef, { teamMembers: newTeam });
+      }
+    }
+
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const uData = userSnap.data();
+      const currentProjects = uData.projects?.length ? uData.projects : (uData.project ? [uData.project] : []);
+      if (!currentProjects.includes(projectName)) {
+        const newProjects = [...currentProjects, projectName];
+        await updateDoc(userRef, { projects: newProjects, project: newProjects[0] || "" });
+        window.dispatchEvent(new Event("local-auth-updated"));
+      }
+    }
+  } else {
+    const currentProjs = localStorage.getItem("att_projects")
+      ? JSON.parse(localStorage.getItem("att_projects"))
+      : [];
+    const pIdx = currentProjs.findIndex(p => p.id === projectId);
+    if (pIdx !== -1) {
+      const currentTeam = currentProjs[pIdx].teamMembers || [];
+      if (!currentTeam.includes(userId)) {
+        currentProjs[pIdx].teamMembers = [...currentTeam, userId];
+        localStorage.setItem("att_projects", JSON.stringify(currentProjs));
+        notifyProjectListeners();
+      }
+    }
+
+    const users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
+    const uIdx = users.findIndex(u => u.uid === userId);
+    if (uIdx !== -1) {
+      const currentProjects = users[uIdx].projects?.length ? users[uIdx].projects : (users[uIdx].project ? [users[uIdx].project] : []);
+      if (!currentProjects.includes(projectName)) {
+        const newProjects = [...currentProjects, projectName];
+        users[uIdx].projects = newProjects;
+        users[uIdx].project = newProjects[0] || "";
+        localStorage.setItem("att_users", JSON.stringify(users));
+        window.dispatchEvent(new Event("local-auth-updated"));
+      }
+    }
+  }
+};
+
+export { getFileBlobFromB2 };
+

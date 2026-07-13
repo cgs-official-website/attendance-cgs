@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { createCompany, registerUser, assignCompanyToUser } from "../firebase";
+import { createCompany, registerUser, assignCompanyToUser, db } from "../firebase";
 import { Sparkles, ShieldCheck, BarChart, Building, User, FileText, Lock, Mail, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import Logo from "../components/Logo";
 
@@ -12,6 +12,7 @@ export default function PurchaseOrganization() {
   const [orgSize, setOrgSize] = useState("");
   const [ceoName, setCeoName] = useState("");
   const [gstNumber, setGstNumber] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState("Demo Plan");
   
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -41,7 +42,21 @@ export default function PurchaseOrganization() {
 
     setLoading(true);
     try {
-      // 1. Create the Admin User
+      // 0. Pre-generate the Company ID client-side
+      let pregeneratedCompanyId = "";
+      try {
+        const { collection, doc } = await import("firebase/firestore");
+        if (db) {
+          const compRef = doc(collection(db, "companies"));
+          pregeneratedCompanyId = compRef.id;
+        } else {
+          pregeneratedCompanyId = "comp-" + Math.random().toString(36).substr(2, 9);
+        }
+      } catch (err) {
+        pregeneratedCompanyId = "comp-" + Math.random().toString(36).substr(2, 9);
+      }
+
+      // 1. Create the Admin User, passing the pregenerated companyId directly!
       const userObj = await registerUser(
         adminName,
         "Administration",
@@ -50,7 +65,7 @@ export default function PurchaseOrganization() {
         adminPassword,
         shiftStart,
         shiftEnd,
-        25, 10, 6, "", "", [], [], adminProgram, "Company Admin", false, "ADMIN-01", "", "admin"
+        25, 10, 6, "", "", [], [], adminProgram, "Company Admin", false, "ADMIN-01", "", "admin", pregeneratedCompanyId
       );
 
       // 2. Generate slug from org name
@@ -58,6 +73,7 @@ export default function PurchaseOrganization() {
 
       // 3. Create the Company with metadata and pending status
       const company = await createCompany({
+        id: pregeneratedCompanyId,
         name: orgName,
         slug,
         adminId: userObj.uid,
@@ -65,14 +81,12 @@ export default function PurchaseOrganization() {
         orgSize,
         ceoName,
         gstNumber,
+        plan: selectedPlan,
+        modules: [],
         status: "pending"
       });
-      const companyId = company.id;
 
-      // 4. Update the Admin User to belong to this new company
-      await assignCompanyToUser(userObj.uid, companyId);
-
-      // 5. Auto login as the new admin
+      // 4. Auto login as the new admin
       await login(adminEmail, adminPassword);
       
       showToast("Registration submitted. Your module is pending approval.", "success");
@@ -251,6 +265,25 @@ export default function PurchaseOrganization() {
                       required
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Purchased Plan Select */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-text-sec">Purchased Plan *</label>
+                <div className="relative">
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main focus:bg-bg-card focus:border-brand-primary outline-none transition-all appearance-none font-bold"
+                    value={selectedPlan}
+                    onChange={(e) => setSelectedPlan(e.target.value)}
+                    disabled={loading}
+                    required
+                  >
+                    <option value="Demo Plan">Demo Plan (Free Trial)</option>
+                    <option value="Basic Plan">Basic Plan</option>
+                    <option value="Premium Plan">Premium Plan</option>
+                    <option value="Enterprise Plan">Enterprise Plan</option>
+                  </select>
                 </div>
               </div>
             </div>

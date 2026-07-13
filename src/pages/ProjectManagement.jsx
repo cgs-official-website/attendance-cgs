@@ -9,10 +9,12 @@ import {
   createNotification, 
   subscribeToTaskReports,
   subscribeToDailyReports,
-  updateDailyReport
+  updateDailyReport,
+  subscribeToProjects,
+  createProject
 } from "../firebase";
 import { useModal } from "../context/ModalContext";
-import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare } from "lucide-react";
+import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase } from "lucide-react";
 import jsPDF from "jspdf";
 import logoImg from '../assets/zuna-logo.png';
 import { addStandardPDFHeader } from "../utils/pdfHeader";
@@ -23,6 +25,13 @@ export default function ProjectManagement() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
   const { showConfirm } = useModal();
+  
+  const [projects, setProjects] = useState([]);
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [projectNameInput, setProjectNameInput] = useState("");
+  const [projectStartDate, setProjectStartDate] = useState("");
+  const [projectEndDate, setProjectEndDate] = useState("");
+  const [projectManagerId, setProjectManagerId] = useState("");
   
   const [teamMembers, setTeamMembers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -64,7 +73,7 @@ export default function ProjectManagement() {
   const [memberFilterProject, setMemberFilterProject] = useState("All");
 
   // Daily Activity Log States
-  const [activeSubTab, setActiveSubTab] = useState("team"); // "team" | "daily-logs"
+  const [activeSubTab, setActiveSubTab] = useState("projects"); // "projects" | "team" | "daily-logs"
   const [dailyReports, setDailyReports] = useState([]);
   const [logFilterEmployee, setLogFilterEmployee] = useState("All");
   const [logFilterMonth, setLogFilterMonth] = useState("All");
@@ -138,6 +147,14 @@ export default function ProjectManagement() {
       return () => window.removeEventListener("local-auth-updated", handler);
     }
   }, [currentUser, taskTargetUser?.uid]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsubscribe = subscribeToProjects(currentUser.companyId, (data) => {
+      setProjects(data || []);
+    });
+    return unsubscribe;
+  }, [currentUser]);
 
   useEffect(() => {
     if (teamMembers.length > 0) {
@@ -457,7 +474,7 @@ export default function ProjectManagement() {
     return selectedMemberForReports.tasks.map(task => {
       const reports = allTaskReports[task.id] || [];
       const filteredReports = reports.filter(r => {
-        if (r.reportText.startsWith("Worked for") || r.reportText.startsWith("Auto-stopped")) return false;
+        if (r.reportText.startsWith("Worked for") || r.reportText.startsWith("Auto-stopped") || r.reportText.startsWith("Auto-paused")) return false;
         
         const reportDateObj = new Date(r.timestamp);
         
@@ -598,6 +615,63 @@ export default function ProjectManagement() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Member Reports");
     XLSX.writeFile(wb, `Reports_${selectedMemberForReports.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleCreateProject = async (e) => {
+    e.preventDefault();
+    if (!projectNameInput || !projectStartDate || !projectEndDate || !projectManagerId) {
+      return showToast("Please fill in all fields", "warning");
+    }
+
+    try {
+      const selectedManager = allUsers.find(u => u.uid === projectManagerId);
+      if (!selectedManager) return showToast("Selected manager not found", "error");
+
+      const newProj = {
+        name: projectNameInput,
+        startDate: projectStartDate,
+        endDate: projectEndDate,
+        managerId: projectManagerId,
+        teamMembers: [projectManagerId], // Manager is automatically a team member
+        companyId: currentUser.companyId
+      };
+
+      await createProject(newProj);
+
+      // Assign the project to the manager's profile, making them project manager
+      if (getDbType() === "firebase") {
+        const userRef = doc(db, "users", projectManagerId);
+        const currentProjects = selectedManager.projects?.length ? selectedManager.projects : (selectedManager.project ? [selectedManager.project] : []);
+        const newProjects = [...new Set([...currentProjects, projectNameInput])];
+        await updateDoc(userRef, { 
+          projects: newProjects, 
+          project: newProjects[0] || "",
+          isProjectManager: true 
+        });
+      } else {
+        const users = JSON.parse(localStorage.getItem("att_users") || "[]");
+        const idx = users.findIndex(u => u.uid === projectManagerId);
+        if (idx !== -1) {
+          const currentProjects = users[idx].projects?.length ? users[idx].projects : (users[idx].project ? [users[idx].project] : []);
+          const newProjects = [...new Set([...currentProjects, projectNameInput])];
+          users[idx].projects = newProjects;
+          users[idx].project = newProjects[0] || "";
+          users[idx].isProjectManager = true;
+          localStorage.setItem("att_users", JSON.stringify(users));
+          window.dispatchEvent(new Event("local-auth-updated"));
+        }
+      }
+
+      showToast("Project created successfully", "success");
+      setShowCreateProjectModal(false);
+      setProjectNameInput("");
+      setProjectStartDate("");
+      setProjectEndDate("");
+      setProjectManagerId("");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to create project", "error");
+    }
   };
 
   const handleAddTeamMember = async (e) => {
@@ -845,6 +919,10 @@ export default function ProjectManagement() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedTeam = filteredTeam.slice(startIndex, startIndex + itemsPerPage);
 
+  const visibleProjects = currentUser?.role === "admin"
+    ? projects
+    : projects.filter(p => p.managerId === currentUser?.uid);
+
   const filteredReports = dailyReports.filter(r => {
     const isManaged = currentUser?.role === "admin" || teamMembers.some(member => member.uid === r.userId);
     if (!isManaged) return false;
@@ -870,7 +948,7 @@ export default function ProjectManagement() {
         return !uProjects.some(p => currentUserProjects.includes(p));
       });
 
-  if (!currentUser?.isProjectManager && currentUser?.role !== "admin") {
+  if (currentUser?.role !== "admin" && !currentUser?.isProjectManager) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] text-center">
         <h2 className="text-xl font-bold text-text-main mb-2">Access Denied</h2>
@@ -898,21 +976,41 @@ export default function ProjectManagement() {
             <FileText size={16} className="text-brand-primary" />
             <span>Project Reports</span>
           </button>
-          <button 
-            onClick={() => {
-              setSelectedPmProjects(pmProjects.length > 0 ? [pmProjects[0]] : []);
-              setShowAddTeamModal(true);
-            }}
-            className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2.5 px-5 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-primary/20 hover:shadow-brand-primary/40 cursor-pointer"
-          >
-            <UserPlus size={16} />
-            <span>{currentUser?.role === "admin" ? "Assign Project" : "Add Team Member"}</span>
-          </button>
+          {currentUser?.role === "admin" ? (
+            <button 
+              onClick={() => setShowCreateProjectModal(true)}
+              className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2.5 px-5 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-primary/20 hover:shadow-brand-primary/40 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Create Project</span>
+            </button>
+          ) : (
+            <button 
+              onClick={() => {
+                setSelectedPmProjects(pmProjects.length > 0 ? [pmProjects[0]] : []);
+                setShowAddTeamModal(true);
+              }}
+              className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2.5 px-5 rounded-[12px] flex items-center justify-center gap-2 transition-all shadow-md shadow-brand-primary/20 hover:shadow-brand-primary/40 cursor-pointer"
+            >
+              <UserPlus size={16} />
+              <span>Add Team Member</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Tabs Switcher */}
       <div className="flex border-b border-border-card mb-6">
+        <button
+          onClick={() => setActiveSubTab("projects")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "projects"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          Projects
+        </button>
         <button
           onClick={() => setActiveSubTab("team")}
           className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
@@ -947,6 +1045,52 @@ export default function ProjectManagement() {
 
       {activeSubTab === "client-chats" ? (
         <ClientChatsPMTab currentUser={currentUser} />
+      ) : activeSubTab === "projects" ? (
+        <div className="bg-bg-card border border-border-card rounded-[24px] shadow-sm overflow-hidden text-left mb-6">
+          <div className="p-6 border-b border-border-card bg-bg-base/30 flex items-center justify-between">
+            <h3 className="font-extrabold text-base text-text-main tracking-tight">Active Projects</h3>
+            <span className="text-[11px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full">{visibleProjects.length} Total</span>
+          </div>
+          <div className="overflow-x-auto w-full custom-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                  <th className="p-4 font-bold text-center w-12">#</th>
+                  <th className="p-4 font-bold">Project Name</th>
+                  <th className="p-4 font-bold text-center">Start Date</th>
+                  <th className="p-4 font-bold text-center">End Date</th>
+                  <th className="p-4 font-bold">Assigned Manager</th>
+                  <th className="p-4 font-bold text-center">Teammates</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleProjects.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="p-8 text-center text-xs text-text-mut italic">No projects created yet. Click "Create Project" to start.</td>
+                  </tr>
+                ) : (
+                  visibleProjects.map((proj, idx) => {
+                    const manager = allUsers.find(u => u.uid === proj.managerId);
+                    return (
+                      <tr key={proj.id || idx} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors text-xs text-text-sec">
+                        <td className="p-4 text-center font-bold text-text-mut">{idx + 1}</td>
+                        <td className="p-4 font-bold text-text-main">{proj.name}</td>
+                        <td className="p-4 text-center">{proj.startDate}</td>
+                        <td className="p-4 text-center">{proj.endDate}</td>
+                        <td className="p-4 font-semibold text-brand-primary">{manager?.name || "Unknown Manager"}</td>
+                        <td className="p-4 text-center">
+                          <span className="bg-brand-primary/10 text-brand-primary font-bold px-2 py-0.5 rounded-full text-[10px]">
+                            {proj.teamMembers?.length || 0} Members
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : activeSubTab === "team" ? (
         <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
         <div className="p-4 border-b border-border-card bg-bg-base/30 flex flex-col sm:flex-row items-center gap-4">
@@ -1712,7 +1856,7 @@ export default function ProjectManagement() {
                             </div>
                           </td>
                         </tr>
-                        {(!allTaskReports[task.id] || allTaskReports[task.id].length === 0) ? (
+                        {(!allTaskReports[task.id] || allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).length === 0) ? (
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30 text-center text-[10px] text-text-mut italic">
                               No updates reported yet
@@ -1722,7 +1866,7 @@ export default function ProjectManagement() {
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped")).map(r => (
+                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).map(r => (
                                   <div key={r.id} className="text-[10px]">
                                     <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
                                     <span className="text-text-main ml-2">{r.reportText}</span>
@@ -1966,6 +2110,81 @@ export default function ProjectManagement() {
                   className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors cursor-pointer"
                 >
                   Save Remarks
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Create Project Modal */}
+      {showCreateProjectModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[420px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <Briefcase size={18} className="text-brand-primary" />
+                Create New Project
+              </h3>
+              <button onClick={() => setShowCreateProjectModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+            </div>
+            
+            <form onSubmit={handleCreateProject} className="space-y-4 text-left">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Project Name</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter project name..."
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={projectNameInput}
+                  onChange={(e) => setProjectNameInput(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Start Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={projectStartDate}
+                    onChange={(e) => setProjectStartDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">End Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={projectEndDate}
+                    onChange={(e) => setProjectEndDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Assign Manager</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={projectManagerId}
+                  onChange={(e) => setProjectManagerId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose an employee --</option>
+                  {allUsers.filter(u => u.role !== "admin").map(u => (
+                    <option key={u.uid} value={u.uid}>{u.name} ({u.designation || u.department || 'No dept'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-border-card mt-4">
+                <button type="button" onClick={() => setShowCreateProjectModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={!projectNameInput || !projectStartDate || !projectEndDate || !projectManagerId} className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
+                  Create Project
                 </button>
               </div>
             </form>

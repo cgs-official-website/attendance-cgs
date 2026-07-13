@@ -9,7 +9,7 @@ export default function DomainManager({ companyId }) {
   const [newDomain, setNewDomain] = useState('');
   const [loading, setLoading] = useState(false);
   const [verifyingId, setVerifyingId] = useState(null);
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
   const { showToast } = useToast();
   const db = getFirestore();
 
@@ -59,7 +59,7 @@ export default function DomainManager({ companyId }) {
         companyId,
         status: 'PENDING',
         verificationToken: token,
-        createdBy: user?.uid,
+        createdBy: currentUser?.uid,
         createdAt: new Date().toISOString()
       };
 

@@ -1,17 +1,17 @@
 import dns from 'dns';
 import util from 'util';
-import admin from 'firebase-admin';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 const resolveTxt = util.promisify(dns.resolveTxt);
 
 // Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
     // Attempt to initialize using standard FIREBASE_ environment variables that Firebase Admin expects
-    // Usually on Vercel you'd set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
     if (process.env.FIREBASE_PRIVATE_KEY) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+      initializeApp({
+        credential: cert({
           projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
           // Replace escaped newlines so the key parses correctly
@@ -19,8 +19,8 @@ if (!admin.apps.length) {
         }),
       });
     } else {
-      // Fallback: If no env vars, attempt to use default credentials (will fail in Vercel production without vars)
-      admin.initializeApp();
+      // Fallback: If no env vars, attempt to use default credentials
+      initializeApp();
     }
   } catch (error) {
     console.error('Firebase Admin Initialization Error:', error);
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     }
 
     // 1. Fetch the domain document from Firestore
-    const db = admin.firestore();
+    const db = getFirestore();
     const domainDocRef = db.collection('companyDomains').doc(domainId);
     const domainDoc = await domainDocRef.get();
 
@@ -76,7 +76,7 @@ export default async function handler(req, res) {
     if (isVerified) {
       await domainDocRef.update({
         status: 'VERIFIED',
-        verifiedAt: admin.firestore.FieldValue.serverTimestamp()
+        verifiedAt: FieldValue.serverTimestamp()
       });
       return res.status(200).json({ success: true, message: 'Domain successfully verified!' });
     } else {

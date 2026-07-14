@@ -44,6 +44,13 @@ ui-debug.log
 # OS files
 Thumbs.db
 
+# Firebase Backup Files
+serviceAccountKey.json
+hrms/
+hrms.zip
+
+.vercel
+.env*
 graphify-out
 
 .agents

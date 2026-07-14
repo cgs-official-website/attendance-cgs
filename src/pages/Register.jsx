@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { User, Mail, Lock, Building, Briefcase, Clock, Sparkles, EyeOff, Eye, Hash } from "lucide-react";
 import Logo from "../components/Logo";
-import { getCompanyBySlug } from "../firebase";
+import { getCompanyBySlug, checkDomainAuthorization } from "../firebase";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -39,6 +39,12 @@ export default function Register() {
 
     setLoading(true);
     try {
+      const authCheck = await checkDomainAuthorization(email, companySlug);
+      if (!authCheck.allowed) {
+        setLoading(false);
+        return showToast(authCheck.reason, "error");
+      }
+
       await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd, employeeId, companySlug);
       showToast("Account registered successfully! Welcome to the portal.", "success");
 

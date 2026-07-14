@@ -78,6 +78,7 @@ import { jsPDF } from "jspdf";
 import { addStandardPDFHeader } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
+import DomainManager from "../components/DomainManager";
 import ExternalLinksTab from "../components/ExternalLinksTab";
 const getBase64ImageFromUrl = async (imageUrl) => {
   const res = await fetch(imageUrl);
@@ -5757,6 +5758,10 @@ export default function AdminDashboard() {
           </div>
         </div>,
         document.body
+      )}
+
+      {activeTab === "domains" && (
+        <DomainManager companyId={currentUser.companyId} />
       )}
 
     </div>

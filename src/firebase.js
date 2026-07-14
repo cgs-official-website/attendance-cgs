@@ -217,10 +217,27 @@ export const registerUser = async (name, department, programType, email, passwor
         console.warn("Failed to resolve companySlug:", e);
       }
     }
+    // Check if there is a verified domain auto-assignment
+    if (!finalCompanyId) {
+      try {
+        const domainParts = email.split('@');
+        if (domainParts.length === 2) {
+          const userDomain = domainParts[1].toLowerCase();
+          // Check public domains collection
+          const domainsRef = collection(db, "companyDomains");
+          const q = query(domainsRef, where("domain", "==", userDomain), where("status", "==", "VERIFIED"));
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            finalCompanyId = snapshot.docs[0].data().companyId;
+          }
+        }
+      } catch (err) {
+        console.warn("Auto-assignment by domain failed", err);
+      }
+    }
 
     // Clean all properties to prevent undefined values in Firestore
     const cleanValue = (val, fallback = "") => (val === undefined || val === null) ? fallback : val;
-
     // Save additional details in Firestore
     const userData = {
       uid: user.uid,
@@ -3235,6 +3252,55 @@ export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
   }
 };
 
+
+
+export const checkDomainAuthorization = async (email, companySlug) => {
+  try {
+    const domainParts = email.split('@');
+    if (domainParts.length !== 2) return { allowed: true };
+    const userDomain = domainParts[1].toLowerCase();
+    
+    let targetCompanyId = null;
+    if (companySlug) {
+      const company = await getCompanyBySlug(companySlug);
+      if (company) targetCompanyId = company.id;
+    }
+
+    if (dbType === "firebase") {
+      // Find who owns this domain
+      const domainsRef = collection(db, "companyDomains");
+      const q = query(domainsRef, where("domain", "==", userDomain), where("status", "==", "VERIFIED"));
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const ownerCompanyId = snapshot.docs[0].data().companyId;
+        // The domain is claimed.
+        if (targetCompanyId && targetCompanyId !== ownerCompanyId) {
+          // They are on Company A's page, but email belongs to Company B
+          return { allowed: false, reason: "This email domain belongs to a different organization." };
+        }
+        // If targetCompanyId matches, or there is no targetCompanyId (auto-assign), it's fine.
+        return { allowed: true };
+      }
+
+      // If the domain is NOT claimed, but they are trying to join a specific company
+      if (targetCompanyId) {
+        // We must check if the target company has ANY verified domains.
+        const q2 = query(domainsRef, where("companyId", "==", targetCompanyId), where("status", "==", "VERIFIED"));
+        const snapshot2 = await getDocs(q2);
+        if (!snapshot2.empty) {
+          // The company has restricted domains, and the user's domain is not one of them (since it's not claimed)
+          return { allowed: false, reason: "Only users with authorized email domains can join this organization." };
+        }
+      }
+    }
+    return { allowed: true };
+  } catch (error) {
+    console.warn("Domain authorization check failed:", error);
+    return { allowed: true }; // Fail open if error
+  }
+};
+
 const externalLinksListeners = new Set();
 const getLocalExternalLinks = () => {
   const raw = localStorage.getItem("att_external_links");
@@ -3488,3 +3554,4 @@ export const addTeamMemberToProject = async (projectId, userId, projectName) => 
 };
 
 export { getFileBlobFromB2 };
+

@@ -65,6 +65,12 @@ export default function ProjectCalendar() {
   const [remarksText, setRemarksText] = useState("");
   const [remarksStatus, setRemarksStatus] = useState("Completed");
 
+  // Task Logs section filters
+  const [logsFilterProject, setLogsFilterProject] = useState("All");
+  const [logsFilterUser, setLogsFilterUser] = useState("All");
+  const [logsPage, setLogsPage] = useState(1);
+  const LOGS_PER_PAGE = 15;
+
   const isAdmin = currentUser?.role === "admin";
   
   // Memoized managed projects list for the current user
@@ -492,8 +498,10 @@ export default function ProjectCalendar() {
                 })();
 
                 const cellProjects = activity?.dateStr ? projects.filter(proj => {
-                  const isInvolved = proj.managerId === currentUser.uid || proj.teamMembers?.includes(currentUser.uid);
-                  if (!isInvolved) return false;
+                  if (!isAdmin) {
+                    const isInvolved = proj.managerId === currentUser.uid || proj.teamMembers?.includes(currentUser.uid);
+                    if (!isInvolved) return false;
+                  }
                   return activity.dateStr >= proj.startDate && activity.dateStr <= proj.endDate;
                 }) : [];
                 
@@ -553,7 +561,8 @@ export default function ProjectCalendar() {
               </span>
             </div>
 
-            {/* Daily logs section */}
+            {/* Daily logs section — visible to Admin & Project Managers only */}
+            {(isAdmin || isProjectManager) && (
             <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl space-y-4">
               <h4 className="font-extrabold text-base text-text-main flex items-center gap-2 border-b border-border-card pb-3">
                 <FileText size={18} className="text-brand-primary" />
@@ -623,6 +632,7 @@ export default function ProjectCalendar() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Tasks and Task Reports Section */}
             <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl space-y-4">
@@ -841,6 +851,172 @@ export default function ProjectCalendar() {
           </div>
         </div>
       )}
+
+      {/* ─── Team Task Logs Section (PM + Admin) ─────────────────────────── */}
+      {(isProjectManager || isAdmin) && (() => {
+        // Build grouped structure: { projectName → { memberId → { memberName, tasks: [ { task, logs[] } ] } } }
+        const grouped = {};
+
+        teamMembers.forEach(member => {
+          (member.tasks || []).forEach(task => {
+            // Apply user filter early
+            if (logsFilterUser !== "All" && member.uid !== logsFilterUser) return;
+            // Apply project filter
+            if (logsFilterProject !== "All" && task.project !== logsFilterProject) return;
+
+            const reps = allTaskReports[task.id] || [];
+            const manualReps = reps
+              .filter(r =>
+                !r.reportText.startsWith("Worked for") &&
+                !r.reportText.startsWith("Auto-stopped") &&
+                !r.reportText.startsWith("Auto-paused")
+              )
+              .sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+
+            if (manualReps.length === 0) return; // skip tasks with no logs
+
+            const proj = task.project || "Unassigned";
+            if (!grouped[proj]) grouped[proj] = {};
+            if (!grouped[proj][member.uid]) grouped[proj][member.uid] = { memberName: member.name, tasks: [] };
+            grouped[proj][member.uid].tasks.push({ task, logs: manualReps });
+          });
+        });
+
+        const projectKeys = Object.keys(grouped).sort();
+        const totalEntries = projectKeys.reduce((sum, proj) =>
+          sum + Object.values(grouped[proj]).reduce((s, m) =>
+            s + m.tasks.reduce((t, tk) => t + tk.logs.length, 0), 0), 0);
+
+        // Members available for filter dropdown
+        const filterableMembers = logsFilterProject === "All"
+          ? teamMembers
+          : teamMembers.filter(m => (m.tasks || []).some(t => t.project === logsFilterProject));
+
+        return (
+          <div className="mt-8 space-y-4 text-left">
+            <div className="bg-bg-card border border-border-card rounded-[24px] shadow-xl overflow-hidden relative">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+
+              {/* Header + Filters */}
+              <div className="p-6 border-b border-border-card bg-bg-base/30">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight flex items-center gap-2">
+                      <FileText size={18} className="text-emerald-500" />
+                      Team Task Logs
+                    </h3>
+                    <p className="text-[11px] text-text-mut font-semibold mt-0.5">Progress updates submitted by team members via Task Manager, grouped by project and member.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-black text-text-mut uppercase tracking-wider">Project</label>
+                      <select
+                        className="bg-bg-base border border-border-card rounded-[10px] px-3 py-2 text-xs font-bold text-text-main focus:border-brand-primary outline-none cursor-pointer min-w-[150px]"
+                        value={logsFilterProject}
+                        onChange={e => { setLogsFilterProject(e.target.value); setLogsFilterUser("All"); setLogsPage(1); }}
+                      >
+                        <option value="All">All Projects</option>
+                        {pmProjects.map((p, i) => <option key={i} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-black text-text-mut uppercase tracking-wider">Member</label>
+                      <select
+                        className="bg-bg-base border border-border-card rounded-[10px] px-3 py-2 text-xs font-bold text-text-main focus:border-brand-primary outline-none cursor-pointer min-w-[150px]"
+                        value={logsFilterUser}
+                        onChange={e => { setLogsFilterUser(e.target.value); setLogsPage(1); }}
+                      >
+                        <option value="All">All Members</option>
+                        {filterableMembers.map(m => <option key={m.uid} value={m.uid}>{m.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1 justify-end">
+                      <span className="text-[9px] font-black text-text-mut uppercase tracking-wider invisible">count</span>
+                      <span className="text-[11px] font-bold bg-emerald-500/10 text-emerald-500 px-2.5 py-2 rounded-[10px]">{totalEntries} Log Entries</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grouped Content */}
+              <div className="divide-y divide-border-card">
+                {projectKeys.length === 0 ? (
+                  <div className="p-10 text-center text-xs text-text-mut italic">
+                    <AlertCircle size={28} className="mx-auto mb-2 text-text-mut/30" />
+                    No task logs found for the selected filters.
+                  </div>
+                ) : projectKeys.map(projName => (
+                  <div key={projName}>
+                    {/* ── Project header ── */}
+                    <div className="px-6 py-3 bg-brand-primary/5 border-b border-brand-primary/10 flex items-center gap-2">
+                      <Briefcase size={14} className="text-brand-primary shrink-0" />
+                      <span className="text-xs font-extrabold text-brand-primary uppercase tracking-wide">{projName}</span>
+                    </div>
+
+                    {/* Members in this project */}
+                    {Object.entries(grouped[projName]).map(([memberId, memberData]) => (
+                      <div key={memberId} className="border-b border-border-card/40 last:border-b-0">
+                        {/* Member + their tasks */}
+                        {memberData.tasks.map(({ task, logs }) => (
+                          <div key={task.id} className="p-5 hover:bg-bg-base/20 transition-colors">
+                            {/* Member + Task header row */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-600 font-black flex items-center justify-center text-sm shrink-0">
+                                  {memberData.memberName?.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="text-sm font-black text-text-main">{memberData.memberName}</div>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <ClipboardList size={11} className="text-text-mut" />
+                                    <span className="text-[11px] font-bold text-text-sec">{task.title}</span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-1 ${
+                                      task.completed
+                                        ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                        : "bg-brand-primary/10 text-brand-primary border border-brand-primary/20"
+                                    }`}>
+                                      {task.completed ? "Completed" : "In Progress"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="text-[10px] text-text-mut font-semibold bg-bg-base px-2 py-1 rounded-[6px] border border-border-card shrink-0">
+                                {logs.length} update{logs.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+
+                            {/* Logs timeline */}
+                            <div className="space-y-2 ml-11">
+                              {logs.map((log, li) => (
+                                <div key={log.id || li} className="flex gap-3 items-start group">
+                                  {/* Timeline dot */}
+                                  <div className="flex flex-col items-center shrink-0 mt-1.5">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500/60 group-hover:bg-emerald-500 transition-colors"></div>
+                                    {li < logs.length - 1 && <div className="w-px flex-1 bg-border-card mt-1" style={{minHeight: '16px'}}></div>}
+                                  </div>
+                                  {/* Log content */}
+                                  <div className="flex-1 bg-bg-base/40 border border-border-card/50 rounded-[10px] px-3 py-2.5 group-hover:border-emerald-500/20 transition-colors">
+                                    <p className="text-xs text-text-sec leading-relaxed">"{log.reportText}"</p>
+                                    <span className="text-[10px] text-text-mut font-semibold mt-1 block">
+                                      {new Date(log.timestamp || log.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                      {" · "}
+                                      {new Date(log.timestamp || log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add Teammate Modal */}
       {showAddTeamModal && createPortal(

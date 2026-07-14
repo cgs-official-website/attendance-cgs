@@ -486,10 +486,10 @@ export const checkIn = async (user, location) => {
     const shiftStartPlusOneHour = new Date(shiftStartToday.getTime() + 60 * 60 * 1000);
 
     if (checkInDate >= shiftStartToday && checkInDate <= shiftStartPlusOneHour) {
+      // Within grace period → snap to shift start
       checkInDate = shiftStartToday;
-    } else if (checkInDate > shiftStartPlusOneHour) {
-      checkInDate = shiftStartPlusOneHour;
     }
+    // If more than 1 hour late → keep actual check-in time (checkInDate unchanged)
   }
   const timeStr = checkInDate.toISOString();
 
@@ -3447,11 +3447,14 @@ export const addTeamMemberToProject = async (projectId, userId, projectName) => 
     if (userSnap.exists()) {
       const uData = userSnap.data();
       const currentProjects = uData.projects?.length ? uData.projects : (uData.project ? [uData.project] : []);
+      const updates = { isProjectManager: false };
       if (!currentProjects.includes(projectName)) {
         const newProjects = [...currentProjects, projectName];
-        await updateDoc(userRef, { projects: newProjects, project: newProjects[0] || "" });
-        window.dispatchEvent(new Event("local-auth-updated"));
+        updates.projects = newProjects;
+        updates.project = newProjects[0] || "";
       }
+      await updateDoc(userRef, updates);
+      window.dispatchEvent(new Event("local-auth-updated"));
     }
   } else {
     const currentProjs = localStorage.getItem("att_projects")
@@ -3471,13 +3474,15 @@ export const addTeamMemberToProject = async (projectId, userId, projectName) => 
     const uIdx = users.findIndex(u => u.uid === userId);
     if (uIdx !== -1) {
       const currentProjects = users[uIdx].projects?.length ? users[uIdx].projects : (users[uIdx].project ? [users[uIdx].project] : []);
+      // Always ensure team members do not gain project manager access
+      users[uIdx].isProjectManager = false;
       if (!currentProjects.includes(projectName)) {
         const newProjects = [...currentProjects, projectName];
         users[uIdx].projects = newProjects;
         users[uIdx].project = newProjects[0] || "";
-        localStorage.setItem("att_users", JSON.stringify(users));
-        window.dispatchEvent(new Event("local-auth-updated"));
       }
+      localStorage.setItem("att_users", JSON.stringify(users));
+      window.dispatchEvent(new Event("local-auth-updated"));
     }
   }
 };

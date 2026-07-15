@@ -1,16 +1,16 @@
-const fs = require('fs');
+import fs from 'fs';
 let content = fs.readFileSync('src/firebase.js', 'utf8');
 
-const broken = if (typeof window !== "undefined") {
+const broken = `if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key === "att_projects") {
     localStorage.setItem("att_projects", JSON.stringify(current));
     notifyProjectListeners();
     return newProj;
   }
-};;
+};`;
 
-const fixed = if (typeof window !== "undefined") {
+const fixed = `if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key === "att_projects") {
       notifyProjectListeners();
@@ -44,7 +44,7 @@ export const createProject = async (projectData) => {
     notifyProjectListeners();
     return newProj;
   }
-};;
+};`;
 
 content = content.replace(broken, fixed);
 fs.writeFileSync('src/firebase.js', content);

@@ -13,7 +13,8 @@ import {
   stopTaskTimer,
   subscribeToMyDailyReports,
   addDailyReport,
-  deleteDailyReport
+  deleteDailyReport,
+  subscribeToProjects
 } from "../firebase";
 import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity, Plus, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
@@ -21,6 +22,8 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import logoImg from '../assets/zuna-logo.png';
 import { addStandardPDFHeader } from "../utils/pdfHeader";
+import { uploadFileToFirebase } from "../firebase";
+import FileCard from "../components/FileCard";
 export default function TaskManagement() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
@@ -45,6 +48,18 @@ export default function TaskManagement() {
   const [logTasksCompleted, setLogTasksCompleted] = useState("");
   const [logIssuesFaced, setLogIssuesFaced] = useState("");
   const [logStatus, setLogStatus] = useState("Completed");
+  const [pendingFile, setPendingFile] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [logProjectId, setLogProjectId] = useState("");
+  const [projects, setProjects] = useState([]);
+
+  useEffect(() => {
+    if (!currentUser?.companyId) return;
+    const unsub = subscribeToProjects(currentUser.companyId, (data) => {
+      setProjects(data || []);
+    });
+    return unsub;
+  }, [currentUser]);
 
   // For storing fetched reports per task ID
   const [taskReports, setTaskReports] = useState({});
@@ -136,40 +151,57 @@ export default function TaskManagement() {
     }
 
     setSubmitting(true);
+    let fileData = null;
     try {
-      const pmId = tasks[0]?.assignedBy || "";
+      if (pendingFile) {
+        setUploadingFile(true);
+        fileData = await uploadFileToFirebase(pendingFile, currentUser?.companyId || "", "Daily reports Attachments");
+        setUploadingFile(false);
+      }
+
+      const selectedProj = projects.find(p => p.id === logProjectId);
+      const pmId = selectedProj?.managerId || "";
+      const pocId = selectedProj?.pocId || "";
+      const projectName = selectedProj?.name || "";
+
       await addDailyReport({
         userId: currentUser.uid,
         userName: currentUser.name,
         companyId: currentUser.companyId,
+        projectId: logProjectId,
+        projectName,
         pmId,
+        pocId,
         date: logDate,
         day: getDayOfWeek(logDate),
         hours: Number(logHours),
         tasksCompleted: logTasksCompleted,
         issuesFaced: logIssuesFaced,
+        fileData: fileData || null,
         status: logStatus
       });
 
+      const notifyMsg = `${currentUser.name} submitted a daily activity log for ${projectName} on ${logDate}.`;
       if (pmId) {
-        await createNotification(
-          pmId,
-          "New Daily Activity Log",
-          `${currentUser.name} submitted a daily activity log for ${logDate}.`,
-          "info",
-          "/project-management"
-        );
+        await createNotification(pmId, "New Daily Activity Log", notifyMsg, "info", "/project-management");
+      }
+      if (pocId && pocId !== pmId) {
+        await createNotification(pocId, "New Daily Activity Log", notifyMsg, "info", "/project-management");
       }
 
       showToast("Daily log submitted successfully!", "success");
       setShowAddLogModal(false);
       setLogDate(new Date().toISOString().split("T")[0]);
       setLogHours(8);
+      setLogProjectId("");
       setLogTasksCompleted("");
       setLogIssuesFaced("");
       setLogStatus("Completed");
+      setPendingFile(null);
     } catch (err) {
-      showToast("Failed to submit daily log.", "error");
+      console.error(err);
+      showToast("Failed to save daily log.", "error");
+      setUploadingFile(false);
     } finally {
       setSubmitting(false);
     }
@@ -821,6 +853,7 @@ export default function TaskManagement() {
                       <th className="px-6 py-4 text-left">Tasks Completed</th>
                       <th className="px-6 py-4 text-left">Issues Faced</th>
                       <th className="px-6 py-4 text-left">Supervisor Remarks</th>
+                      <th className="px-6 py-4 text-left">Attachment</th>
                       <th className="px-6 py-4 w-28 text-center">Status</th>
                       <th className="px-6 py-4 w-16 text-center">Action</th>
                     </tr>
@@ -855,6 +888,13 @@ export default function TaskManagement() {
                                 <span className="text-text-mut/40 italic">No remarks yet</span>
                               )}
                             </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            {report.fileData ? (
+                              <FileCard file={report.fileData} />
+                            ) : (
+                              <span className="text-text-mut/40 italic">None</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge}`}>
@@ -968,9 +1008,26 @@ export default function TaskManagement() {
             </div>
             
             <form onSubmit={handleSaveDailyLog} className="flex-grow overflow-y-auto pr-1 space-y-4 pb-2 custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-text-sec">Date</label>
+                  <label className="text-xs font-bold text-text-sec">Project</label>
+                  <select 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
+                    value={logProjectId}
+                    onChange={(e) => setLogProjectId(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Select Project --</option>
+                    {projects
+                      .filter(p => (p.teamMembers || []).includes(currentUser?.uid) || p.managerId === currentUser?.uid)
+                      .map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-text-sec">Date</label>
                   <input 
                     type="date"
                     className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
@@ -1039,6 +1096,32 @@ export default function TaskManagement() {
                 />
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec">Attachment (Optional)</label>
+                <div className="relative">
+                  <input 
+                    type="file"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all file:mr-4 file:py-1 file:px-3 file:rounded-[8px] file:border-0 file:text-xs file:font-semibold file:bg-brand-primary/10 file:text-brand-primary hover:file:bg-brand-primary/20"
+                    onChange={(e) => setPendingFile(e.target.files[0] || null)}
+                  />
+                  {pendingFile && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingFile(null)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-mut hover:text-red-500 rounded-full hover:bg-bg-card transition-colors"
+                      title="Remove file"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                {uploadingFile && (
+                  <p className="text-[10px] text-brand-primary font-bold mt-1 animate-pulse">
+                    File will be securely uploaded when saving...
+                  </p>
+                )}
+              </div>
+
               <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
                 <button
                   type="button"
@@ -1052,7 +1135,7 @@ export default function TaskManagement() {
                   disabled={submitting}
                   className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {submitting ? "Submitting..." : "Save Log"}
+                  {submitting ? (uploadingFile ? "Uploading..." : "Submitting...") : "Save Log"}
                 </button>
               </div>
             </form>
@@ -1064,3 +1147,4 @@ export default function TaskManagement() {
     </div>
   );
 }
+

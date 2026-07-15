@@ -29,7 +29,6 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, uploadBytesResumable, ref as storageRef, deleteObject } from "firebase/storage";
 import { getStorage } from "firebase/storage";
-import { uploadFileToB2, isB2Configured, getFileBlobFromB2 } from "./utils/b2Storage";
 import imageCompression from 'browser-image-compression';
 
 // Firebase Configuration
@@ -3553,5 +3552,30 @@ export const addTeamMemberToProject = async (projectId, userId, projectName) => 
   }
 };
 
-export { getFileBlobFromB2 };
 
+
+
+export const deleteProject = async (projectId) => {
+  if (getDbType() === 'firebase') {
+    await deleteDoc(doc(db, 'projects', projectId));
+  } else {
+    let projs = JSON.parse(localStorage.getItem('att_projects') || '[]');
+    projs = projs.filter(p => p.id !== projectId);
+    localStorage.setItem('att_projects', JSON.stringify(projs));
+    notifyProjectListeners();
+  }
+};
+
+export const updateProject = async (projectId, updates) => {
+  if (getDbType() === 'firebase') {
+    await updateDoc(doc(db, 'projects', projectId), updates);
+  } else {
+    let projs = JSON.parse(localStorage.getItem('att_projects') || '[]');
+    const idx = projs.findIndex(p => p.id === projectId);
+    if (idx !== -1) {
+      projs[idx] = { ...projs[idx], ...updates };
+      localStorage.setItem('att_projects', JSON.stringify(projs));
+      notifyProjectListeners();
+    }
+  }
+};

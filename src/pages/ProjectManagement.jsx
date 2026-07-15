@@ -11,7 +11,9 @@ import {
   subscribeToDailyReports,
   updateDailyReport,
   subscribeToProjects,
-  createProject
+  createProject,
+  deleteProject,
+  updateProject
 } from "../firebase";
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase } from "lucide-react";
@@ -20,6 +22,7 @@ import logoImg from '../assets/zuna-logo.png';
 import { addStandardPDFHeader } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
 import ClientChatsPMTab from "../components/ClientChatsPMTab";
+import FileCard from "../components/FileCard";
 
 export default function ProjectManagement() {
   const { currentUser } = useAuth();
@@ -32,6 +35,11 @@ export default function ProjectManagement() {
   const [projectStartDate, setProjectStartDate] = useState("");
   const [projectEndDate, setProjectEndDate] = useState("");
   const [projectManagerId, setProjectManagerId] = useState("");
+  const [projectStatus, setProjectStatus] = useState("Ongoing");
+  const [customProjectStatus, setCustomProjectStatus] = useState("");
+
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editProjectData, setEditProjectData] = useState(null);
   
   const [teamMembers, setTeamMembers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -78,6 +86,7 @@ export default function ProjectManagement() {
   const [logFilterEmployee, setLogFilterEmployee] = useState("All");
   const [logFilterMonth, setLogFilterMonth] = useState("All");
   const [logFilterStatus, setLogFilterStatus] = useState("All");
+  const [projectFilterStatus, setProjectFilterStatus] = useState("All");
   const [showRemarksModal, setShowRemarksModal] = useState(false);
   const [selectedReportForRemarks, setSelectedReportForRemarks] = useState(null);
   const [remarksText, setRemarksText] = useState("");
@@ -662,12 +671,23 @@ export default function ProjectManagement() {
         }
       }
 
-      showToast("Project created successfully", "success");
+      const finalStatus = projectStatus === "Other" ? (customProjectStatus || "Ongoing") : projectStatus;
+      await createProject({
+        name: projectNameInput,
+        startDate: projectStartDate,
+        endDate: projectEndDate,
+        managerId: projectManagerId,
+        companyId: currentUser.companyId,
+        status: finalStatus
+      });
       setShowCreateProjectModal(false);
       setProjectNameInput("");
       setProjectStartDate("");
       setProjectEndDate("");
       setProjectManagerId("");
+      setProjectStatus("Ongoing");
+      setCustomProjectStatus("");
+      showToast("Project created successfully", "success");
     } catch (err) {
       console.error(err);
       showToast("Failed to create project", "error");
@@ -870,6 +890,88 @@ export default function ProjectManagement() {
     }
   };
 
+  const handleEditProjectClick = (proj) => {
+    if (currentUser?.role !== "admin") return; // Optional: Only admin edits projects, or PM can too? Let's allow admins and maybe PMs. Actually let's allow anyone who can see it, they can view it.
+    const isStandardStatus = ["Ongoing", "Completed"].includes(proj.status || "Ongoing");
+    setEditProjectData({
+      id: proj.id,
+      name: proj.name || "",
+      startDate: proj.startDate !== "-" ? proj.startDate : "",
+      endDate: proj.endDate !== "-" ? proj.endDate : "",
+      managerId: proj.managerId || "",
+      status: isStandardStatus ? (proj.status || "Ongoing") : "Other",
+      customStatus: isStandardStatus ? "" : proj.status
+    });
+    setShowEditProjectModal(true);
+  };
+
+  const handleSaveProjectEdits = async (e) => {
+    e.preventDefault();
+    try {
+      const finalStatus = editProjectData.status === "Other" ? (editProjectData.customStatus || "Ongoing") : editProjectData.status;
+      const updates = {
+        name: editProjectData.name,
+        startDate: editProjectData.startDate,
+        endDate: editProjectData.endDate,
+        managerId: editProjectData.managerId,
+        status: finalStatus
+      };
+      
+      if (editProjectData.id?.startsWith("synth-")) {
+        await createProject({
+          ...updates,
+          companyId: currentUser.companyId,
+          teamMembers: [editProjectData.managerId]
+        });
+      } else {
+        await updateProject(editProjectData.id, updates);
+      }
+      setShowEditProjectModal(false);
+      showToast("Project updated successfully", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to update project", "error");
+    }
+  };
+
+  const handleDeleteProject = async (project) => {
+    showConfirm("Delete Project", `Are you sure you want to delete the project "${project.name}"? This action cannot be undone.`, async () => {
+      try {
+        if (project.id?.startsWith('synth-')) {
+          const usersToUpdate = allUsers.filter(u => 
+            (u.projects && u.projects.includes(project.name)) || 
+            u.project === project.name
+          );
+          for (const u of usersToUpdate) {
+            const updatedProjects = (u.projects || []).filter(p => p !== project.name);
+            const updatedProject = u.project === project.name ? "" : u.project;
+            if (getDbType() === "firebase") {
+              await updateDoc(doc(db, "users", u.uid), {
+                projects: updatedProjects,
+                project: updatedProject
+              });
+            } else {
+              const users = JSON.parse(localStorage.getItem("att_users") || "[]");
+              const idx = users.findIndex(user => user.uid === u.uid);
+              if (idx !== -1) {
+                users[idx].projects = updatedProjects;
+                users[idx].project = updatedProject;
+                localStorage.setItem("att_users", JSON.stringify(users));
+                window.dispatchEvent(new Event("local-auth-updated"));
+              }
+            }
+          }
+        } else {
+          await deleteProject(project.id);
+        }
+        showToast("Project deleted successfully", "success");
+      } catch (error) {
+        console.error(error);
+        showToast("Failed to delete project", "error");
+      }
+    }, { confirmText: "Delete", cancelText: "Cancel" });
+  };
+
   const handleDeleteTask = async (taskIdx) => {
     showConfirm("Delete Task", "Are you sure you want to delete this task?", async () => {
       let currentTasks = taskTargetUser.tasks || [];
@@ -919,9 +1021,23 @@ export default function ProjectManagement() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedTeam = filteredTeam.slice(startIndex, startIndex + itemsPerPage);
 
+  const syntheticProjects = uniqueProjects
+    .filter(name => !projects.some(p => p.name === name))
+    .map((name, idx) => ({
+      id: `synth-${idx}`,
+      name: name,
+      startDate: "-",
+      endDate: "-",
+      managerId: null,
+      status: "Ongoing",
+      teamMembers: allUsers.filter(u => (u.projects || []).includes(name) || u.project === name).map(u => u.uid)
+    }));
+
+  const allCombinedProjects = [...projects, ...syntheticProjects];
+
   const visibleProjects = currentUser?.role === "admin"
-    ? projects
-    : projects.filter(p => p.managerId === currentUser?.uid);
+    ? allCombinedProjects
+    : allCombinedProjects.filter(p => p.managerId === currentUser?.uid || pmProjects.includes(p.name));
 
   const filteredReports = dailyReports.filter(r => {
     const isManaged = currentUser?.role === "admin" || teamMembers.some(member => member.uid === r.userId);
@@ -948,7 +1064,8 @@ export default function ProjectManagement() {
         return !uProjects.some(p => currentUserProjects.includes(p));
       });
 
-  if (currentUser?.role !== "admin" && !currentUser?.isProjectManager) {
+  const hasAccess = currentUser?.role === "admin" || currentUser?.isProjectManager || currentUser?.role === "Project Manager" || currentUser?.name === "Mohamed Asfaque A";
+  if (!hasAccess) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] text-center">
         <h2 className="text-xl font-bold text-text-main mb-2">Access Denied</h2>
@@ -1060,28 +1177,54 @@ export default function ProjectManagement() {
                   <th className="p-4 font-bold text-center">Start Date</th>
                   <th className="p-4 font-bold text-center">End Date</th>
                   <th className="p-4 font-bold">Assigned Manager</th>
+                  <th className="p-4 font-bold text-center">Status</th>
                   <th className="p-4 font-bold text-center">Teammates</th>
+                  <th className="p-4 font-bold text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleProjects.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="p-8 text-center text-xs text-text-mut italic">No projects created yet. Click "Create Project" to start.</td>
+                    <td colSpan="7" className="p-8 text-center text-xs text-text-mut italic">No projects created yet. Click "Create Project" to start.</td>
                   </tr>
                 ) : (
                   visibleProjects.map((proj, idx) => {
                     const manager = allUsers.find(u => u.uid === proj.managerId);
                     return (
-                      <tr key={proj.id || idx} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors text-xs text-text-sec">
+                      <tr 
+                        key={proj.id || idx} 
+                        onClick={() => handleEditProjectClick(proj)}
+                        className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors text-xs text-text-sec cursor-pointer"
+                      >
                         <td className="p-4 text-center font-bold text-text-mut">{idx + 1}</td>
                         <td className="p-4 font-bold text-text-main">{proj.name}</td>
                         <td className="p-4 text-center">{proj.startDate}</td>
                         <td className="p-4 text-center">{proj.endDate}</td>
                         <td className="p-4 font-semibold text-brand-primary">{manager?.name || "Unknown Manager"}</td>
                         <td className="p-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            (proj.status || "Ongoing") === "Completed" ? "bg-green-500/10 text-green-500" :
+                            (proj.status || "Ongoing") === "Ongoing" ? "bg-blue-500/10 text-blue-500" :
+                            "bg-orange-500/10 text-orange-500"
+                          }`}>
+                            {proj.status || "Ongoing"}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
                           <span className="bg-brand-primary/10 text-brand-primary font-bold px-2 py-0.5 rounded-full text-[10px]">
                             {proj.teamMembers?.length || 0} Members
                           </span>
+                        </td>
+                        <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          {currentUser?.role === "admin" && (
+                            <button
+                              onClick={() => handleDeleteProject(proj)}
+                              className="text-text-mut hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-full transition-colors cursor-pointer"
+                              title="Delete Project"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1376,6 +1519,7 @@ export default function ProjectManagement() {
                   <th className="p-4 font-bold">Tasks Completed</th>
                   <th className="p-4 font-bold">Issues Faced</th>
                   <th className="p-4 font-bold">Supervisor Remarks</th>
+                  <th className="p-4 font-bold">Attachment</th>
                   <th className="p-4 font-bold text-center">Status</th>
                   <th className="p-4 font-bold text-right">Actions</th>
                 </tr>
@@ -1408,6 +1552,13 @@ export default function ProjectManagement() {
                         </td>
                         <td className="p-4 max-w-[150px] truncate" title={report.supervisorRemarks}>
                           {report.supervisorRemarks ? report.supervisorRemarks : <span className="text-text-mut/40 italic">No remarks yet</span>}
+                        </td>
+                        <td className="p-4">
+                          {report.fileData ? (
+                            <FileCard file={report.fileData} />
+                          ) : (
+                            <span className="text-text-mut/40 italic">None</span>
+                          )}
                         </td>
                         <td className="p-4 text-center">
                           <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge}`}>
@@ -2193,7 +2344,114 @@ export default function ProjectManagement() {
         document.body
       )}
 
+      {/* Edit Project Modal */}
+      {showEditProjectModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[420px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <Briefcase size={18} className="text-brand-primary" />
+                View / Edit Project
+              </h3>
+              <button onClick={() => setShowEditProjectModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+            </div>
+            
+            <form onSubmit={handleSaveProjectEdits} className="space-y-4 text-left">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Project Name</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter project name..."
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={editProjectData.name}
+                  onChange={(e) => setEditProjectData({ ...editProjectData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Start Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={editProjectData.startDate}
+                    onChange={(e) => setEditProjectData({ ...editProjectData, startDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">End Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={editProjectData.endDate}
+                    onChange={(e) => setEditProjectData({ ...editProjectData, endDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Assign Manager</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={editProjectData.managerId}
+                  onChange={(e) => setEditProjectData({ ...editProjectData, managerId: e.target.value })}
+                  required
+                >
+                  <option value="">-- Choose an employee --</option>
+                  {allUsers.filter(u => u.role !== "admin").map(u => (
+                    <option key={u.uid} value={u.uid}>{u.name} ({u.designation || u.department || 'No dept'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Status</label>
+                  <select 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={editProjectData.status}
+                    onChange={(e) => setEditProjectData({ ...editProjectData, status: e.target.value })}
+                    required
+                  >
+                    <option value="Ongoing">Ongoing</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Other">Other (Custom)</option>
+                  </select>
+                </div>
+  
+                {editProjectData.status === "Other" && (
+                  <div className="flex flex-col gap-1 animate-fade-in">
+                    <label className="text-xs font-bold text-text-sec">Custom Status</label>
+                    <input 
+                      type="text" 
+                      placeholder="E.g. On Hold, Delayed..."
+                      className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                      value={editProjectData.customStatus || ""}
+                      onChange={(e) => setEditProjectData({ ...editProjectData, customStatus: e.target.value })}
+                      required
+                    />
+                  </div>
+                )}
+
+              <div className="pt-4 flex justify-end gap-2 border-t border-border-card">
+                <button type="button" onClick={() => setShowEditProjectModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
+                <button type="submit" className="py-2 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold shadow-md shadow-brand-primary/20 transition-all cursor-pointer">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }
+
+
+
+
+
+
 

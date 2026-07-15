@@ -34,7 +34,8 @@ export const AuthProvider = ({ children }) => {
   const signup = async (name, department, programType, email, password, shiftStart, shiftEnd, employeeId = "", companySlug = "") => {
     setLoading(true);
     try {
-      const user = await registerUser(name, department, programType, email, password, shiftStart, shiftEnd, 25, 10, 6, "", "", "", [], "Full-time", "", false, employeeId, companySlug);
+      await registerUser(name, department, programType, email, password, shiftStart, shiftEnd, 25, 10, 6, "", "", "", [], "Full-time", "", false, employeeId, companySlug);
+      const user = await loginUser(email, password);
       setCurrentUser(user);
       return user;
     } finally {

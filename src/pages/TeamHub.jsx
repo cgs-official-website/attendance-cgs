@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
   Users, ChevronRight, LogIn, LogOut, Trash2, ExternalLink,
-  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download
+  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -24,10 +24,10 @@ import {
   getAllRegisteredUsers,
   subscribeToAllMessages,
   uploadFileToFirebase,
-  markThreadAsRead,
-  getFileBlobFromB2
+  markThreadAsRead
 } from "../firebase";
 import { formatFileSize, getFileIcon } from "../utils/fileUtils";
+import FileCard from "../components/FileCard";
 
 // ─── Helpers ─────────────────────────────────────────────────
 const getInitials = (name = "") =>
@@ -52,241 +52,13 @@ function Avatar({ src, name, size = "w-8 h-8", textSize = "text-xs" }) {
   );
 }
 
-// Helper to convert Base64 Data URL to Blob
-const dataURLtoBlob = (dataurl) => {
-  try {
-    const arr = dataurl.split(',');
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
-  } catch (err) {
-    console.error("Error parsing base64 data URL to Blob:", err);
-    return null;
-  }
-};
-
-// ─── File Preview Modal ───────────────────────────────────────
-function FilePreviewModal({ file, displayUrl, onClose }) {
-  const [localUrl, setLocalUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (file.isB2 && file.id && !file.url?.startsWith("data:")) {
-      setLoading(true);
-      getFileBlobFromB2(file.id)
-        .then(blob => {
-          const u = URL.createObjectURL(blob);
-          setLocalUrl(u);
-          setLoading(false);
-        })
-        .catch(err => {
-          console.error("Failed to load B2 preview blob:", err);
-          setLoading(false);
-        });
-    }
-    return () => {
-      if (localUrl) URL.revokeObjectURL(localUrl);
-    };
-  }, [file.id, file.isB2]);
-
-  const activeUrl = localUrl || displayUrl;
-  const isImage = file.mimeType?.startsWith("image/") || file.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-  const isVideo = file.mimeType?.startsWith("video/") || file.name?.match(/\.(mp4|webm|ogg)$/i);
-  const isPdf = file.mimeType === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf");
-
-  const handleDownload = async () => {
-    if (file.url && file.url.startsWith("data:")) {
-      try {
-        const blob = dataURLtoBlob(file.url);
-        if (!blob) throw new Error("Could not parse file data.");
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = file.name;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
-      } catch (err) {
-        console.error("Failed to download local file:", err);
-      }
-    } else if (file.isB2 && file.id) {
-      try {
-        let blobUrl = localUrl;
-        if (!blobUrl) {
-          const blob = await getFileBlobFromB2(file.id);
-          blobUrl = URL.createObjectURL(blob);
-        }
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = file.name || "download";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        if (!localUrl) {
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
-        }
-      } catch (err) {
-        console.error("Failed B2 direct download, falling back to public link:", err);
-        const link = document.createElement("a");
-        link.href = displayUrl;
-        link.download = file.name || "download";
-        link.target = "_blank";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } else {
-      try {
-        const response = await fetch(displayUrl);
-        if (!response.ok) throw new Error("Network response was not ok");
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = file.name || "download";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
-      } catch (err) {
-        console.error("Failed to download remote file:", err);
-        const link = document.createElement("a");
-        link.href = displayUrl;
-        link.download = file.name || "download";
-        link.target = "_blank";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    }
-  };
-
-  return createPortal(
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-[9999] p-4 sm:p-8 animate-fade-in">
-      <div className="relative w-full max-w-5xl h-full max-h-[90vh] bg-bg-card border border-border-card rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border-card bg-bg-base/50 flex-shrink-0">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <span className="text-2xl flex-shrink-0">{getFileIcon(file.mimeType, file.name)}</span>
-            <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold text-text-main truncate block">{file.name}</span>
-              <span className="text-xs text-text-mut truncate block">{formatFileSize(file.size)}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 bg-brand-primary hover:bg-brand-hover text-white text-sm font-bold rounded-[10px] transition-colors cursor-pointer shadow-sm">
-              <Download size={16} /> <span className="hidden sm:inline">Download</span>
-            </button>
-            <button onClick={onClose} className="p-2 text-text-mut hover:text-text-main hover:bg-bg-base rounded-[10px] transition-colors cursor-pointer">
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-        
-        {/* Content */}
-        <div className="flex-1 flex items-center justify-center bg-bg-base overflow-hidden p-4 relative">
-          {loading ? (
-            <div className="flex flex-col items-center gap-2">
-              <RefreshCw size={24} className="animate-spin text-brand-primary" />
-              <span className="text-xs text-text-sec font-bold">Decrypting secure file from Backblaze B2...</span>
-            </div>
-          ) : isImage ? (
-            <img src={activeUrl} alt={file.name} className="max-w-full max-h-full object-contain rounded-[8px]" />
-          ) : isVideo ? (
-            <video src={activeUrl} controls className="max-w-full max-h-full rounded-[8px]" />
-          ) : isPdf ? (
-            <iframe src={activeUrl} title={file.name} className="w-full h-full rounded-[8px] bg-white border-none" />
-          ) : (
-            <div className="flex flex-col items-center gap-4 text-center">
-              <span className="text-6xl">{getFileIcon(file.mimeType, file.name)}</span>
-              <p className="text-text-sec text-sm">No preview available for this file type.</p>
-              <button onClick={handleDownload} className="px-6 py-2.5 bg-brand-primary text-white text-sm font-bold rounded-[10px] hover:bg-brand-hover transition-colors cursor-pointer shadow-md">
-                Download to view
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ─── File Card ────────────────────────────────────────────────
-function FileCard({ file }) {
-  const [showPreview, setShowPreview] = useState(false);
-  const icon = getFileIcon(file.mimeType, file.name);
-
-  const handleOpenFile = (e) => {
-    e.preventDefault();
-    setShowPreview(true);
-  };
-
-  const isDataUrl = file.url && file.url.startsWith("data:");
-  let displayUrl = file.url;
-  if (!isDataUrl && displayUrl) {
-    if (!displayUrl.startsWith("http")) displayUrl = `https://${displayUrl}`;
-    
-    // Retroactively fix old S3 URLs in the database to B2 native URLs
-    if (displayUrl.includes("s3.") && displayUrl.includes(".backblazeb2.com") && !displayUrl.includes("/file/")) {
-      try {
-        const urlObj = new URL(displayUrl);
-        const parts = urlObj.hostname.split("s3.")[1].split(".")[0];
-        const regionNum = parts.split("-").pop();
-        urlObj.hostname = `f${regionNum}.backblazeb2.com`;
-        
-        // Ensure path starts with /file/
-        const pathSegments = urlObj.pathname.split("/").filter(Boolean);
-        urlObj.pathname = `/file/${pathSegments.join("/")}`;
-        
-        displayUrl = urlObj.toString();
-      } catch (err) {
-        // ignore parsing errors
-      }
-    }
-  }
-
-  return (
-    <>
-      <a
-        href={isDataUrl || file.isB2 ? undefined : displayUrl}
-        target={isDataUrl || file.isB2 ? undefined : "_blank"}
-        rel={isDataUrl || file.isB2 ? undefined : "noopener noreferrer"}
-        onClick={handleOpenFile}
-        style={{ cursor: "pointer" }}
-        className="flex items-center gap-2 w-full max-w-[260px] px-3 py-2 mt-1 rounded-[10px] border border-border-card bg-bg-base hover:bg-bg-card hover:border-brand-primary/30 transition-all group overflow-hidden"
-      >
-        <span className="flex-shrink-0 flex items-center justify-center text-xl">
-          {icon}
-        </span>
-        <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-xs font-semibold text-text-main truncate block w-full">{file.name}</span>
-          <span className="text-[10px] text-text-mut truncate block w-full">{formatFileSize(file.size)}</span>
-        </div>
-        <ExternalLink size={12} className="text-text-mut group-hover:text-brand-primary flex-shrink-0 ml-auto" />
-      </a>
-      {showPreview && (
-        <FilePreviewModal
-          file={file}
-          displayUrl={displayUrl}
-          onClose={() => setShowPreview(false)}
-        />
-      )}
-    </>
-  );
-}
 
 // ─── Single Message Bubble ────────────────────────────────────
 function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
   const isOwn = msg.senderId === currentUserId;
   const [showActions, setShowActions] = useState(false);
   const pressTimer = React.useRef(null);
+  const { showToast } = useToast();
 
   if (msg.isDeleted) {
     return (
@@ -364,15 +136,29 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
       </div>
 
       {/* Message actions */}
-      {showActions && (isAdmin || isOwn) && (
+      {showActions && (
         <div className={`absolute top-1 ${isOwn ? "left-2" : "right-2"} flex items-center gap-1 bg-bg-card border border-border-card rounded-[8px] shadow-md p-1`}>
           <button
-            onClick={() => onDelete(msg.id)}
-            className="p-1 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
-            title="Delete message"
+            onClick={() => {
+              if (msg.text) {
+                navigator.clipboard.writeText(msg.text);
+                showToast("Message copied", "success");
+              }
+            }}
+            className="p-1 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer"
+            title="Copy message"
           >
-            <Trash2 size={12} />
+            <Copy size={12} />
           </button>
+          {(isAdmin || isOwn) && (
+            <button
+              onClick={() => onDelete(msg.id)}
+              className="p-1 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+              title="Delete message"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
       )}
     </motion.div>
@@ -886,6 +672,7 @@ export default function TeamHub() {
   const [sidebarTab, setSidebarTab]       = useState("channels"); // 'channels' | 'dms'
   const [refreshKey, setRefreshKey]       = useState(0);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showViewMembers, setShowViewMembers] = useState(false);
   const [allMessages, setAllMessages]     = useState([]);
 
   // Subscribe to channels
@@ -1013,6 +800,16 @@ export default function TeamHub() {
 
   const myChannels   = filteredChannels.filter(ch => ch.id === "general" || ch.memberIds?.includes(currentUser.uid));
   const otherChannels = filteredChannels.filter(ch => ch.id !== "general" && !ch.memberIds?.includes(currentUser.uid));
+
+  const handleRemoveMemberFromChannel = async (userToRemove) => {
+    try {
+      await leaveChannel(activeThread.id, userToRemove.uid);
+      showToast(`${userToRemove.name} removed from channel`, "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to remove user", "error");
+    }
+  };
 
   return (
     <div className="flex h-[calc(100vh-100px)] sm:h-[calc(100vh-120px)] lg:h-[calc(100vh-140px)] bg-bg-base overflow-hidden rounded-[20px] border border-border-card shadow-sm">
@@ -1242,9 +1039,12 @@ export default function TeamHub() {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {activeThread.type === "channel" && (
-                  <span className="text-[10px] font-bold text-text-mut bg-bg-base px-2 py-1 rounded-full border border-border-card">
+                  <button
+                    onClick={() => setShowViewMembers(true)}
+                    className="text-[10px] font-bold text-text-mut hover:text-brand-primary bg-bg-base hover:bg-brand-primary/10 px-2 py-1 rounded-full border border-border-card hover:border-brand-primary/30 transition-all cursor-pointer"
+                  >
                     {activeThread.memberIds?.length || 0} members
-                  </span>
+                  </button>
                 )}
                 {activeThread.type === "channel" && (
                   <button
@@ -1331,6 +1131,16 @@ export default function TeamHub() {
             allUsers={allUsers}
             onClose={() => setShowAddMember(false)}
             onAdd={handleAddMember}
+          />
+        )}
+        {showViewMembers && activeThread?.type === "channel" && (
+          <ViewMembersModal
+            channel={activeThread}
+            allUsers={allUsers}
+            onClose={() => setShowViewMembers(false)}
+            isAdmin={isAdmin || activeThread.createdBy === currentUser.uid}
+            currentUserId={currentUser.uid}
+            onRemoveMember={handleRemoveMemberFromChannel}
           />
         )}
       </AnimatePresence>
@@ -1445,6 +1255,72 @@ function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
               >
                 Add
               </button>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── View Members Modal ──────────────────────────────────────────
+function ViewMembersModal({ channel, allUsers, onClose, isAdmin, currentUserId, onRemoveMember }) {
+  const [search, setSearch] = useState("");
+  
+  const members = allUsers.filter(
+    u => channel.memberIds?.includes(u.uid) &&
+    (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[100] p-4 animate-fade-in">
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="w-full max-w-sm bg-bg-card border border-border-card rounded-[20px] p-5 shadow-2xl"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-extrabold text-base text-text-main flex items-center gap-2">
+            <Users size={16} className="text-brand-primary" /> Channel Members
+          </h3>
+          <button onClick={onClose} className="text-text-mut hover:text-text-main cursor-pointer"><X size={18} /></button>
+        </div>
+        <p className="text-[10px] text-text-mut mb-3">#{channel.displayName || channel.name} ({channel.memberIds?.length || 0} members)</p>
+        
+        <div className="flex items-center gap-2 border border-border-card rounded-[10px] px-3 py-2 mb-3 bg-bg-base focus-within:border-brand-primary/50">
+          <Search size={14} className="text-text-mut" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search members..."
+            className="flex-1 bg-transparent text-sm text-text-main outline-none"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto space-y-1">
+          {members.length === 0 ? (
+            <p className="text-xs text-text-mut text-center py-4">No members found</p>
+          ) : members.map(u => (
+            <div
+              key={u.uid}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-[10px] hover:bg-bg-base transition-colors"
+            >
+              <Avatar src={u.avatar} name={u.name} />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-text-main truncate">{u.name}</div>
+                <div className="text-[9px] text-text-mut truncate">{u.department} · {u.email}</div>
+              </div>
+              {isAdmin && u.uid !== currentUserId && channel.id !== "general" && (
+                <button
+                  onClick={() => onRemoveMember(u)}
+                  className="flex-shrink-0 text-text-mut hover:text-red-500 p-1.5 hover:bg-red-500/10 rounded-full transition-colors cursor-pointer"
+                  title="Remove from channel"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -2346,7 +2346,7 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
   // Try Cloudinary first
   let cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
   let uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-  let isCloudinaryEnabled = false;
+  let isCloudinaryEnabled = !!(cloudName && uploadPreset);
 
   if (companyId) {
     try {
@@ -2372,10 +2372,6 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
       }
     } catch (e) {
       console.warn("Failed to check company Cloudinary status, falling back to env:", e);
-    }
-  } else {
-    if (cloudName && uploadPreset) {
-      isCloudinaryEnabled = true;
     }
   }
 

@@ -180,27 +180,42 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     let unsubscribe = () => {};
 
+    const updateFavicon = (url) => {
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = url || "/favicon.png";
+    };
+
     if (currentUser?.companyId) {
       unsubscribe = listenToCompany(currentUser.companyId, (companyData) => {
         if (companyData) {
           document.title = companyData.name;
           setCompanyName(companyData.name || "");
           setCompanyLogo(companyData.logoBase64 || "");
+          updateFavicon(companyData.logoBase64);
           setCompanyStatus(companyData.status || "active");
           setCompanyModules(companyData.modules && companyData.modules.length > 0 ? companyData.modules : ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]);
         } else {
           document.title = "Zuna | HRMS";
+          updateFavicon("/favicon.png");
           setCompanyStatus("active");
           setCompanyModules([]);
         }
       });
     } else if (currentUser) {
       document.title = "Zuna | HRMS";
+      updateFavicon("/favicon.png");
       setCompanyStatus(isSuperAdmin ? "active" : "no_workspace");
     }
     
     return () => {
       document.title = "Zuna | HRMS";
+      let link = document.querySelector("link[rel~='icon']");
+      if (link) link.href = "/favicon.png";
       unsubscribe();
     };
   }, [currentUser]);

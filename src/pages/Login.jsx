@@ -22,6 +22,36 @@ export default function Login() {
     }
   }, [currentUser, logout]);
 
+  React.useEffect(() => {
+    const updateFavicon = (url) => {
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = url || "/favicon.png";
+    };
+
+    if (companySlug) {
+      import("../firebase").then(({ getCompanyBySlug }) => {
+        getCompanyBySlug(companySlug).then(company => {
+          if (company && company.logoBase64) {
+            updateFavicon(company.logoBase64);
+          } else {
+            updateFavicon("/favicon.png");
+          }
+        }).catch(() => {
+          updateFavicon("/favicon.png");
+        });
+      });
+    } else {
+      updateFavicon("/favicon.png");
+    }
+    
+    return () => updateFavicon("/favicon.png");
+  }, [companySlug]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) {

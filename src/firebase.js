@@ -3021,6 +3021,91 @@ export const deleteDailyReport = async (id) => {
   }
 };
 
+// ----------------------------------------------------
+// WEEKLY REPORTS APIs
+// ----------------------------------------------------
+
+export const subscribeToWeeklyReports = (companyId, callback) => {
+  if (dbType === "firebase") {
+    let qRef = collection(db, "weekly_reports");
+    if (companyId) qRef = query(qRef, where("companyId", "==", companyId));
+    return onSnapshot(qRef, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate));
+      callback(list);
+    });
+  } else {
+    const handler = () => {
+      let list = localStorage.getItem("att_weekly_reports")
+        ? JSON.parse(localStorage.getItem("att_weekly_reports"))
+        : [];
+      if (companyId) list = list.filter(l => l.companyId === companyId);
+      list.sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate));
+      callback(list);
+    };
+    noticeListeners.add(handler);
+    handler();
+    return () => {
+      noticeListeners.delete(handler);
+    };
+  }
+};
+
+export const addWeeklyReport = async (reportData) => {
+  const newReport = {
+    id: dbType === "firebase" ? "" : "weekly-" + Math.random().toString(36).substr(2, 9),
+    createdAt: new Date().toISOString(),
+    ...reportData
+  };
+
+  if (dbType === "firebase") {
+    const docRef = await addDoc(collection(db, "weekly_reports"), newReport);
+    await updateDoc(docRef, { id: docRef.id });
+  } else {
+    const current = localStorage.getItem("att_weekly_reports")
+      ? JSON.parse(localStorage.getItem("att_weekly_reports"))
+      : [];
+    current.push(newReport);
+    localStorage.setItem("att_weekly_reports", JSON.stringify(current));
+    notifyNoticeListeners();
+  }
+};
+
+export const updateWeeklyReport = async (id, updates) => {
+  const dataToUpdate = {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+
+  if (dbType === "firebase") {
+    const docRef = doc(db, "weekly_reports", id);
+    await updateDoc(docRef, dataToUpdate);
+  } else {
+    const current = localStorage.getItem("att_weekly_reports")
+      ? JSON.parse(localStorage.getItem("att_weekly_reports"))
+      : [];
+    const index = current.findIndex(r => r.id === id);
+    if (index !== -1) {
+      current[index] = { ...current[index], ...dataToUpdate };
+      localStorage.setItem("att_weekly_reports", JSON.stringify(current));
+      notifyNoticeListeners();
+    }
+  }
+};
+
+export const deleteWeeklyReport = async (id) => {
+  if (dbType === "firebase") {
+    await deleteDoc(doc(db, "weekly_reports", id));
+  } else {
+    const current = localStorage.getItem("att_weekly_reports")
+      ? JSON.parse(localStorage.getItem("att_weekly_reports"))
+      : [];
+    const filtered = current.filter(r => r.id !== id);
+    localStorage.setItem("att_weekly_reports", JSON.stringify(filtered));
+    notifyNoticeListeners();
+  }
+};
+
 export const getCompanyNameById = async (companyId) => {
   if (!companyId) return "General";
   try {

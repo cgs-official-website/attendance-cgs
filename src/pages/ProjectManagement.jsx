@@ -13,7 +13,11 @@ import {
   subscribeToProjects,
   createProject,
   deleteProject,
-  updateProject
+  updateProject,
+  subscribeToWeeklyReports,
+  addWeeklyReport,
+  updateWeeklyReport,
+  deleteWeeklyReport
 } from "../firebase";
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase } from "lucide-react";
@@ -84,7 +88,8 @@ export default function ProjectManagement() {
   const [activeSubTab, setActiveSubTab] = useState("projects"); // "projects" | "team" | "daily-logs"
   const [dailyReports, setDailyReports] = useState([]);
   const [logFilterEmployee, setLogFilterEmployee] = useState("All");
-  const [logFilterMonth, setLogFilterMonth] = useState("All");
+  const [logFilterFromDate, setLogFilterFromDate] = useState("");
+  const [logFilterToDate, setLogFilterToDate] = useState("");
   const [logFilterStatus, setLogFilterStatus] = useState("All");
   const [projectFilterStatus, setProjectFilterStatus] = useState("All");
   const [showRemarksModal, setShowRemarksModal] = useState(false);
@@ -92,6 +97,19 @@ export default function ProjectManagement() {
   const [remarksText, setRemarksText] = useState("");
   const [remarksStatus, setRemarksStatus] = useState("Completed");
   const [logCurrentPage, setLogCurrentPage] = useState(1);
+
+  // Weekly Reports States
+  const [weeklyReports, setWeeklyReports] = useState([]);
+  const [showAddWeeklyReportModal, setShowAddWeeklyReportModal] = useState(false);
+  const [showViewWeeklyReportModal, setShowViewWeeklyReportModal] = useState(false);
+  const [selectedWeeklyReport, setSelectedWeeklyReport] = useState(null);
+  
+  const [weeklyReportEmployee, setWeeklyReportEmployee] = useState("");
+  const [weeklyReportStartDate, setWeeklyReportStartDate] = useState("");
+  const [weeklyReportEndDate, setWeeklyReportEndDate] = useState("");
+  const [weeklyReportRating, setWeeklyReportRating] = useState("Good");
+  const [weeklyReportTasks, setWeeklyReportTasks] = useState("");
+  const [weeklyReportRemarks, setWeeklyReportRemarks] = useState("");
 
   const pmProjects = currentUser?.projects?.length ? currentUser.projects : (currentUser?.project ? [currentUser.project] : []);
 
@@ -188,6 +206,15 @@ export default function ProjectManagement() {
     if (!currentUser) return;
     const unsubscribe = subscribeToDailyReports(currentUser.companyId, (data) => {
       setDailyReports(data || []);
+    });
+    return unsubscribe;
+  }, [currentUser]);
+
+  // Subscribe to weekly reports
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsubscribe = subscribeToWeeklyReports(currentUser.companyId, (data) => {
+      setWeeklyReports(data || []);
     });
     return unsubscribe;
   }, [currentUser]);
@@ -1015,7 +1042,7 @@ export default function ProjectManagement() {
 
   useEffect(() => {
     setLogCurrentPage(1);
-  }, [logFilterEmployee, logFilterMonth, logFilterStatus]);
+  }, [logFilterEmployee, logFilterStatus, logFilterFromDate, logFilterToDate]);
 
   const totalPages = Math.ceil(filteredTeam.length / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1044,10 +1071,11 @@ export default function ProjectManagement() {
     if (!isManaged) return false;
 
     const matchEmployee = logFilterEmployee === "All" || r.userId === logFilterEmployee;
-    const matchMonth = logFilterMonth === "All" || new Date(r.date).getMonth() === parseInt(logFilterMonth, 10);
     const matchStatus = logFilterStatus === "All" || r.status === logFilterStatus;
+    const matchFromDate = !logFilterFromDate || r.date >= logFilterFromDate;
+    const matchToDate = !logFilterToDate || r.date <= logFilterToDate;
 
-    return matchEmployee && matchMonth && matchStatus;
+    return matchEmployee && matchStatus && matchFromDate && matchToDate;
   });
 
   const logsPerPage = 10;
@@ -1066,6 +1094,33 @@ export default function ProjectManagement() {
       </div>
     );
   }
+
+  const handleAddWeeklyReport = async (e) => {
+    e.preventDefault();
+    if (!weeklyReportEmployee || !weeklyReportStartDate || !weeklyReportEndDate) return;
+    try {
+      const employee = allUsers.find(u => u.uid === weeklyReportEmployee);
+      await addWeeklyReport({
+        companyId: currentUser.companyId,
+        managerId: currentUser.uid,
+        employeeId: weeklyReportEmployee,
+        employeeName: employee?.name || "Unknown",
+        weekStartDate: weeklyReportStartDate,
+        weekEndDate: weeklyReportEndDate,
+        rating: weeklyReportRating,
+        tasksCompleted: weeklyReportTasks,
+        supervisorRemarks: weeklyReportRemarks,
+      });
+      setShowAddWeeklyReportModal(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const filteredWeeklyReports = weeklyReports.filter(r => {
+    if (!teamMembers.some(m => m.uid === r.employeeId)) return false;
+    return true;
+  });
 
   return (
     <div className="animate-fade-in pb-10">
@@ -1140,6 +1195,16 @@ export default function ProjectManagement() {
           }`}
         >
           Daily Activity Logs
+        </button>
+        <button
+          onClick={() => setActiveSubTab("weekly-reports")}
+          className={`pb-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
+            activeSubTab === "weekly-reports"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-text-mut hover:text-text-main"
+          }`}
+        >
+          Weekly Reports
         </button>
         <button
           onClick={() => setActiveSubTab("client-chats")}
@@ -1433,10 +1498,87 @@ export default function ProjectManagement() {
           </div>
         )}
       </div>
+      ) : activeSubTab === "weekly-reports" ? (
+        <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
+          <div className="p-4 border-b border-border-card bg-bg-base/30 flex items-center justify-between">
+            <h3 className="font-extrabold text-base text-text-main tracking-tight">Weekly Reports</h3>
+            <button
+              onClick={() => {
+                setWeeklyReportEmployee("");
+                setWeeklyReportStartDate("");
+                setWeeklyReportEndDate("");
+                setWeeklyReportRating("Good");
+                setWeeklyReportTasks("");
+                setWeeklyReportRemarks("");
+                setShowAddWeeklyReportModal(true);
+              }}
+              className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2 px-4 rounded-[10px] flex items-center gap-2 transition-all shadow-md cursor-pointer whitespace-nowrap"
+            >
+              <Plus size={14} /> Add Report
+            </button>
+          </div>
+          <div className="overflow-x-auto w-full custom-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
+                  <th className="p-4 font-bold">Week</th>
+                  <th className="p-4 font-bold">Employee</th>
+                  <th className="p-4 font-bold text-center">Rating</th>
+                  <th className="p-4 font-bold">Tasks / Remarks</th>
+                  <th className="p-4 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm divide-y divide-border-card">
+                {filteredWeeklyReports.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-8 text-center text-text-mut text-xs">
+                      No weekly reports found matching selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredWeeklyReports.map((report) => (
+                      <tr key={report.id} className="hover:bg-bg-base/30 transition-colors">
+                        <td className="p-4 text-text-main">
+                          <div className="font-bold text-xs">{report.weekStartDate} to {report.weekEndDate}</div>
+                        </td>
+                        <td className="p-4">
+                          <div className="font-semibold text-text-main text-xs">{report.employeeName}</div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            report.rating === "Excellent" ? "bg-green-500/10 text-green-500" :
+                            report.rating === "Good" ? "bg-blue-500/10 text-blue-500" :
+                            report.rating === "Average" ? "bg-yellow-500/10 text-yellow-500" :
+                            "bg-red-500/10 text-red-500"
+                          }`}>
+                            {report.rating}
+                          </span>
+                        </td>
+                        <td className="p-4 text-text-sec text-xs max-w-[200px] truncate">
+                          {report.tasksCompleted}
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => {
+                              setSelectedWeeklyReport(report);
+                              setShowViewWeeklyReportModal(true);
+                            }}
+                            className="py-1 px-2.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-[6px] text-[10px] font-bold transition-all cursor-pointer"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
-          <div className="p-4 border-b border-border-card bg-bg-base/30 flex flex-col md:flex-row items-center gap-4">
-            <div className="relative w-full md:max-w-[200px]">
+          <div className="p-4 border-b border-border-card bg-bg-base/30 flex flex-col md:flex-row md:items-center gap-4 overflow-x-auto custom-scrollbar">
+            <div className="relative w-full md:w-auto md:min-w-[180px] flex-shrink-0">
               <select
                 value={logFilterEmployee}
                 onChange={(e) => setLogFilterEmployee(e.target.value)}
@@ -1448,28 +1590,24 @@ export default function ProjectManagement() {
                 ))}
               </select>
             </div>
-            <div className="relative w-full md:max-w-[180px] mt-2 md:mt-0">
-              <select
-                value={logFilterMonth}
-                onChange={(e) => setLogFilterMonth(e.target.value)}
-                className="w-full px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
-              >
-                <option value="All">All Months</option>
-                <option value="0">January</option>
-                <option value="1">February</option>
-                <option value="2">March</option>
-                <option value="3">April</option>
-                <option value="4">May</option>
-                <option value="5">June</option>
-                <option value="6">July</option>
-                <option value="7">August</option>
-                <option value="8">September</option>
-                <option value="9">October</option>
-                <option value="10">November</option>
-                <option value="11">December</option>
-              </select>
+            <div className="relative w-full md:w-auto mt-2 md:mt-0 flex items-center gap-2 flex-shrink-0">
+              <input
+                type="date"
+                value={logFilterFromDate}
+                onChange={(e) => setLogFilterFromDate(e.target.value)}
+                className="w-full md:w-auto px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                title="From Date"
+              />
+              <span className="text-xs text-text-mut font-medium">to</span>
+              <input
+                type="date"
+                value={logFilterToDate}
+                onChange={(e) => setLogFilterToDate(e.target.value)}
+                className="w-full md:w-auto px-4 py-2.5 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                title="To Date"
+              />
             </div>
-            <div className="relative w-full md:max-w-[180px] mt-2 md:mt-0">
+            <div className="relative w-full md:w-auto md:min-w-[140px] mt-2 md:mt-0 flex-shrink-0">
               <select
                 value={logFilterStatus}
                 onChange={(e) => setLogFilterStatus(e.target.value)}
@@ -1482,7 +1620,7 @@ export default function ProjectManagement() {
               </select>
             </div>
 
-            <div className="flex gap-3 w-full md:w-auto md:ml-auto mt-2 md:mt-0 justify-end">
+            <div className="flex gap-3 w-full md:w-auto md:ml-auto mt-2 md:mt-0 justify-end flex-shrink-0">
               <button
                 onClick={handleDownloadDailyLogsExcel}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3.5 rounded-[10px] flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer w-full sm:w-auto"
@@ -2433,6 +2571,172 @@ export default function ProjectManagement() {
                 <button type="submit" className="py-2 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold shadow-md shadow-brand-primary/20 transition-all cursor-pointer">Save Changes</button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Add Weekly Report Modal */}
+      {showAddWeeklyReportModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <FileText size={18} className="text-brand-primary" />
+                Add Weekly Report
+              </h3>
+              <button onClick={() => setShowAddWeeklyReportModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+            </div>
+            
+            <form onSubmit={handleAddWeeklyReport} className="space-y-4 text-left">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Select Employee</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={weeklyReportEmployee}
+                  onChange={(e) => setWeeklyReportEmployee(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose an employee --</option>
+                  {teamMembers.map(u => (
+                    <option key={u.uid} value={u.uid}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Week Start Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={weeklyReportStartDate}
+                    onChange={(e) => setWeeklyReportStartDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-sec">Week End Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={weeklyReportEndDate}
+                    onChange={(e) => setWeeklyReportEndDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Performance Rating</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  value={weeklyReportRating}
+                  onChange={(e) => setWeeklyReportRating(e.target.value)}
+                  required
+                >
+                  <option value="Excellent">Excellent</option>
+                  <option value="Good">Good</option>
+                  <option value="Average">Average</option>
+                  <option value="Needs Improvement">Needs Improvement</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Tasks Completed / Notes</label>
+                <textarea 
+                  placeholder="Summarize the employee's week..."
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[80px]"
+                  value={weeklyReportTasks}
+                  onChange={(e) => setWeeklyReportTasks(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-sec">Supervisor Remarks</label>
+                <textarea 
+                  placeholder="Any extra remarks..."
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[80px]"
+                  value={weeklyReportRemarks}
+                  onChange={(e) => setWeeklyReportRemarks(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-border-card mt-4">
+                <button type="button" onClick={() => setShowAddWeeklyReportModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={!weeklyReportEmployee || !weeklyReportStartDate || !weeklyReportEndDate} className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
+                  Submit Report
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* View Weekly Report Modal */}
+      {showViewWeeklyReportModal && selectedWeeklyReport && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <FileText size={18} className="text-brand-primary" />
+                Weekly Report Details
+              </h3>
+              <button onClick={() => setShowViewWeeklyReportModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+            </div>
+            
+            <div className="space-y-4 text-left text-sm text-text-main">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-xs font-bold text-text-sec mb-1">Employee</span>
+                  <span className="font-semibold">{selectedWeeklyReport.employeeName}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-text-sec mb-1">Rating</span>
+                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                    selectedWeeklyReport.rating === "Excellent" ? "bg-green-500/10 text-green-500" :
+                    selectedWeeklyReport.rating === "Good" ? "bg-blue-500/10 text-blue-500" :
+                    selectedWeeklyReport.rating === "Average" ? "bg-yellow-500/10 text-yellow-500" :
+                    "bg-red-500/10 text-red-500"
+                  }`}>
+                    {selectedWeeklyReport.rating}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-xs font-bold text-text-sec mb-1">Start Date</span>
+                  <span>{selectedWeeklyReport.weekStartDate}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-text-sec mb-1">End Date</span>
+                  <span>{selectedWeeklyReport.weekEndDate}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-xs font-bold text-text-sec mb-1">Tasks Completed / Notes</span>
+                <div className="bg-bg-base/50 p-3 rounded-[10px] whitespace-pre-wrap text-sm border border-border-card">
+                  {selectedWeeklyReport.tasksCompleted || "None"}
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-xs font-bold text-text-sec mb-1">Supervisor Remarks</span>
+                <div className="bg-bg-base/50 p-3 rounded-[10px] whitespace-pre-wrap text-sm border border-border-card">
+                  {selectedWeeklyReport.supervisorRemarks || "None"}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 mt-4 border-t border-border-card flex justify-end">
+              <button onClick={() => setShowViewWeeklyReportModal(false)} className="py-2 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-all cursor-pointer">
+                Close
+              </button>
+            </div>
           </div>
         </div>,
         document.body

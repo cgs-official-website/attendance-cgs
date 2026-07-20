@@ -2387,9 +2387,6 @@ export const uploadFileToFirebase = async (file, companyId = "", folderType = "f
     }
   }
 
-  if (isB2Configured()) {
-    return await uploadFileToB2(fileToUpload);
-  }
 
   if (dbType === "firebase") {
     try {

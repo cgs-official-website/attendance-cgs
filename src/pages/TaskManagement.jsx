@@ -1018,7 +1018,7 @@ export default function TaskManagement() {
                   >
                     <option value="">-- Select Project --</option>
                     {projects
-                      .filter(p => (p.teamMembers || []).includes(currentUser?.uid) || p.managerId === currentUser?.uid)
+                      .filter(p => (p.teamMembers || []).includes(currentUser?.uid) || p.managerId === currentUser?.uid || (currentUser?.projects || []).includes(p.name))
                       .map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}

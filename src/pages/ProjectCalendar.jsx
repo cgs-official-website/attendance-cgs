@@ -499,7 +499,7 @@ export default function ProjectCalendar() {
 
                 const cellProjects = activity?.dateStr ? projects.filter(proj => {
                   if (!isAdmin) {
-                    const isInvolved = proj.managerId === currentUser.uid || proj.teamMembers?.includes(currentUser.uid);
+                    const isInvolved = proj.managerId === currentUser.uid || proj.teamMembers?.includes(currentUser.uid) || (currentUser?.projects || []).includes(proj.name);
                     if (!isInvolved) return false;
                   }
                   return activity.dateStr >= proj.startDate && activity.dateStr <= proj.endDate;
@@ -762,7 +762,7 @@ export default function ProjectCalendar() {
                     </tr>
                   ) : (
                     teamMembers.map((member) => {
-                      const memberProjects = managedProjects.filter(p => p.teamMembers?.includes(member.uid));
+                      const memberProjects = managedProjects.filter(p => p.teamMembers?.includes(member.uid) || (member.projects || []).includes(p.name));
                       
                       return memberProjects.map((proj) => {
                         const projTasks = (member.tasks || []).filter(t => t.project === proj.name);

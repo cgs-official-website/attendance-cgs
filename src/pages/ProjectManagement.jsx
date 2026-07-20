@@ -1055,14 +1055,7 @@ export default function ProjectManagement() {
   const logStartIndex = (logCurrentPage - 1) * logsPerPage;
   const paginatedLogs = filteredReports.slice(logStartIndex, logStartIndex + logsPerPage);
 
-  const availableUsersToAdd = currentUser?.role === "admin"
-    ? allUsers.filter(u => u.uid !== currentUser?.uid && u.role !== "admin")
-    : allUsers.filter(u => {
-        if (u.uid === currentUser?.uid || u.role === "admin") return false;
-        const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
-        const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
-        return !uProjects.some(p => currentUserProjects.includes(p));
-      });
+  const availableUsersToAdd = allUsers.filter(u => u.uid !== currentUser?.uid && u.role !== "admin");
 
   const hasAccess = currentUser?.role === "admin" || currentUser?.isProjectManager || currentUser?.role === "Project Manager" || currentUser?.name === "Mohamed Asfaque A";
   if (!hasAccess) {

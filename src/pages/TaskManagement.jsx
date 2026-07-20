@@ -644,31 +644,33 @@ export default function TaskManagement() {
                     No completed tasks yet.
                   </div>
                 ) : (
-                  completedTasks.map((task) => {
-                    const taskIdx = tasks.findIndex(t => t.id === task.id);
-                    return (
-                      <div key={task.id} className="bg-bg-base/30 border border-border-card rounded-[16px] p-4 relative overflow-hidden opacity-70 hover:opacity-100 transition-opacity text-left">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <h3 className="font-bold text-text-sec line-through">{task.title}</h3>
-                              {task.project && <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-[4px] bg-bg-card border border-border-card text-text-mut uppercase">{task.project}</span>}
-                              <p className="text-[10px] text-text-mut mt-1">
-                                Est: {task.duration || 0}h | <span className="text-brand-primary font-bold">Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
-                              </p>
+                  <div className="space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2 pb-2">
+                    {completedTasks.map((task) => {
+                      const taskIdx = tasks.findIndex(t => t.id === task.id);
+                      return (
+                        <div key={task.id} className="bg-bg-base/30 border border-border-card rounded-[16px] p-4 relative overflow-hidden opacity-70 hover:opacity-100 transition-opacity text-left">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-start gap-3">
+                              <CheckCircle size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <h3 className="font-bold text-text-sec line-through">{task.title}</h3>
+                                {task.project && <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-[4px] bg-bg-card border border-border-card text-text-mut uppercase">{task.project}</span>}
+                                <p className="text-[10px] text-text-mut mt-1">
+                                  Est: {task.duration || 0}h | <span className="text-brand-primary font-bold">Rem: {parseFloat(Math.max(0, (task.duration || 0) - calculateTimeSpent(taskReports[task.id] || [])).toFixed(1))}h</span>
+                                </p>
+                              </div>
                             </div>
+                            <button 
+                              onClick={() => handleMarkComplete(taskIdx, false)}
+                              className="text-[10px] font-bold text-brand-primary hover:underline cursor-pointer flex-shrink-0 ml-2"
+                            >
+                              Re-open
+                            </button>
                           </div>
-                          <button 
-                            onClick={() => handleMarkComplete(taskIdx, false)}
-                            className="text-[10px] font-bold text-brand-primary hover:underline cursor-pointer"
-                          >
-                            Re-open
-                          </button>
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>

@@ -1021,7 +1021,7 @@ export default function DashboardLayout({ children }) {
               {currentUser?.avatar ? (
                 <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                <img src="/logo.png" alt="Profile" className="w-full h-full object-contain p-1" onError={(e) => { e.target.style.display='none'; }} />
+                <div className="w-full h-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-sm uppercase">{currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "U"}</div>
               )}
             </div>
             <div className="flex flex-col text-left min-w-0 pr-2">
@@ -1362,7 +1362,7 @@ export default function DashboardLayout({ children }) {
               {currentUser?.avatar ? (
                 <img src={currentUser.avatar} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                <img src="/logo.png" alt="Profile" className="w-full h-full object-contain p-1" onError={(e) => { e.target.style.display='none'; }} />
+                <div className="w-full h-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-sm uppercase">{currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "U"}</div>
               )}
             </button>
           </div>

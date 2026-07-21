@@ -50,7 +50,7 @@ export default function TaskManagement() {
   const [logStatus, setLogStatus] = useState("Completed");
   const [pendingFile, setPendingFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
-  const [logProjectId, setLogProjectId] = useState("");
+  const [logProjectIds, setLogProjectIds] = useState([]);
   const [projects, setProjects] = useState([]);
 
   useEffect(() => {
@@ -149,6 +149,9 @@ export default function TaskManagement() {
     if (!logTasksCompleted.trim()) {
       return showToast("Tasks Completed is required.", "warning");
     }
+    if (logProjectIds.length === 0) {
+      return showToast("Please select at least one project.", "warning");
+    }
 
     setSubmitting(true);
     let fileData = null;
@@ -159,19 +162,20 @@ export default function TaskManagement() {
         setUploadingFile(false);
       }
 
-      const selectedProj = projects.find(p => p.id === logProjectId);
-      const pmId = selectedProj?.managerId || "";
-      const pocId = selectedProj?.pocId || "";
-      const projectName = selectedProj?.name || "";
+      const selectedProjs = projects.filter(p => logProjectIds.includes(p.id));
+      const projectName = selectedProjs.map(p => p.name).join(", ");
+
+      const pmIdsToNotify = [...new Set(selectedProjs.map(p => p.managerId).filter(Boolean))];
+      const pocIdsToNotify = [...new Set(selectedProjs.map(p => p.pocId).filter(Boolean))];
 
       await addDailyReport({
         userId: currentUser.uid,
         userName: currentUser.name,
         companyId: currentUser.companyId,
-        projectId: logProjectId,
+        projectId: logProjectIds.join(","),
         projectName,
-        pmId,
-        pocId,
+        pmId: pmIdsToNotify.join(","),
+        pocId: pocIdsToNotify.join(","),
         date: logDate,
         day: getDayOfWeek(logDate),
         hours: Number(logHours),
@@ -182,18 +186,22 @@ export default function TaskManagement() {
       });
 
       const notifyMsg = `${currentUser.name} submitted a daily activity log for ${projectName} on ${logDate}.`;
-      if (pmId) {
+      
+      for (const pmId of pmIdsToNotify) {
         await createNotification(pmId, "New Daily Activity Log", notifyMsg, "info", "/project-management");
       }
-      if (pocId && pocId !== pmId) {
-        await createNotification(pocId, "New Daily Activity Log", notifyMsg, "info", "/project-management");
+      
+      for (const pocId of pocIdsToNotify) {
+        if (!pmIdsToNotify.includes(pocId)) {
+          await createNotification(pocId, "New Daily Activity Log", notifyMsg, "info", "/project-management");
+        }
       }
 
       showToast("Daily log submitted successfully!", "success");
       setShowAddLogModal(false);
       setLogDate(new Date().toISOString().split("T")[0]);
       setLogHours(8);
-      setLogProjectId("");
+      setLogProjectIds([]);
       setLogTasksCompleted("");
       setLogIssuesFaced("");
       setLogStatus("Completed");
@@ -1011,20 +1019,31 @@ export default function TaskManagement() {
             
             <form onSubmit={handleSaveDailyLog} className="flex-grow overflow-y-auto pr-1 space-y-4 pb-2 custom-scrollbar">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-text-sec">Project</label>
-                  <select 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
-                    value={logProjectId}
-                    onChange={(e) => setLogProjectId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Select Project --</option>
+                  <label className="text-xs font-bold text-text-sec">Projects (Select one or more)</label>
+                  <div className="flex flex-col gap-2 max-h-32 overflow-y-auto bg-bg-base/30 p-3 rounded-[12px] border border-border-card custom-scrollbar">
                     {projects
                       .filter(p => (p.teamMembers || []).includes(currentUser?.uid) || p.managerId === currentUser?.uid || (currentUser?.projects || []).includes(p.name))
                       .map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                        <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="accent-brand-primary"
+                            checked={logProjectIds.includes(p.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setLogProjectIds(prev => [...prev, p.id]);
+                              } else {
+                                setLogProjectIds(prev => prev.filter(id => id !== p.id));
+                              }
+                            }}
+                          />
+                          <span className="text-xs text-text-main">{p.name}</span>
+                        </label>
                     ))}
-                  </select>
+                    {projects.filter(p => (p.teamMembers || []).includes(currentUser?.uid) || p.managerId === currentUser?.uid || (currentUser?.projects || []).includes(p.name)).length === 0 && (
+                      <span className="text-xs text-text-mut italic">No projects assigned</span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

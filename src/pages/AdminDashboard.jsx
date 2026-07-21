@@ -1857,9 +1857,7 @@ export default function AdminDashboard() {
                               onClick={() => { setSelectedUser(user); setShowDetailModal(true); }}
                               title="View Records"
                             >
-                              <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                                {user.name ? getInitials(user.name) : "U"}
-                              </div>
+                              <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{user.avatar ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" /> : (user.name ? getInitials(user.name) : "U")}</div>
                               <span className="font-bold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{user.name}</span>
                             </td>
                             <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
@@ -1969,9 +1967,7 @@ export default function AdminDashboard() {
                           }}
                           title="View Records"
                         >
-                          <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                            {req.userName ? getInitials(req.userName) : "U"}
-                          </div>
+                          <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{(users.find(u => u.uid === req.userId)?.avatar) ? <img src={users.find(u => u.uid === req.userId).avatar} alt={req.userName} className="w-full h-full object-cover" /> : (req.userName ? getInitials(req.userName) : "U")}</div>
                           <div>
                             <span className="font-extrabold text-xs text-text-main block hover:text-brand-primary transition-colors">{req.userName || req.name}</span>
                             <span className="text-[10px] text-text-mut font-semibold">{req.type} • {req.duration}</span>
@@ -2172,9 +2168,7 @@ export default function AdminDashboard() {
                             onClick={() => { setSelectedUser(user); setShowDetailModal(true); }}
                             title="View Details"
                           >
-                            <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                              {user.name ? getInitials(user.name) : "U"}
-                            </div>
+                            <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{user.avatar ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" /> : (user.name ? getInitials(user.name) : "U")}</div>
                             <div className="flex flex-col text-left">
                               <span className="font-extrabold text-text-main hover:text-brand-primary transition-colors">{user.name}</span>
                               <span className="text-[10px] text-text-mut font-semibold mt-0.5">{user.email}</span>
@@ -2528,9 +2522,7 @@ export default function AdminDashboard() {
                                   }}
                                   title="View Records"
                                 >
-                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                                    {req.userName ? getInitials(req.userName) : "U"}
-                                  </div>
+                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{(users.find(u => u.uid === req.userId)?.avatar) ? <img src={users.find(u => u.uid === req.userId).avatar} alt={req.userName} className="w-full h-full object-cover" /> : (req.userName ? getInitials(req.userName) : "U")}</div>
                                   <div className="flex flex-col">
                                     <span className="font-extrabold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{req.userName}</span>
                                     <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
@@ -2629,9 +2621,7 @@ export default function AdminDashboard() {
                     <>
                       <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-6">
                         <div className="flex items-center gap-3 pb-4 border-b border-border-card">
-                          <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0">
-                            {selectedRequest.userName ? getInitials(selectedRequest.userName) : "U"}
-                          </div>
+                          <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0 overflow-hidden">{(users.find(u => u.uid === selectedRequest.userId)?.avatar) ? <img src={users.find(u => u.uid === selectedRequest.userId).avatar} alt={selectedRequest.userName} className="w-full h-full object-cover" /> : (selectedRequest.userName ? getInitials(selectedRequest.userName) : "U")}</div>
                           <div className="flex-grow text-left">
                             <div className="flex justify-between items-center">
                               <span className="font-extrabold text-sm text-text-main flex items-center gap-1.5">
@@ -2886,9 +2876,7 @@ export default function AdminDashboard() {
                                   }}
                                   title="View Records"
                                 >
-                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                                    {req.userName ? getInitials(req.userName) : "U"}
-                                  </div>
+                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{(users.find(u => u.uid === req.userId)?.avatar) ? <img src={users.find(u => u.uid === req.userId).avatar} alt={req.userName} className="w-full h-full object-cover" /> : (req.userName ? getInitials(req.userName) : "U")}</div>
                                   <div className="flex flex-col">
                                     <span className="font-extrabold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{req.userName}</span>
                                     <span className="text-[10px] text-text-mut font-semibold mt-0.5">{getMockDesignation(req.userName)}</span>
@@ -2977,9 +2965,7 @@ export default function AdminDashboard() {
                   {selectedRegRequest ? (
                     <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm space-y-6 text-left">
                       <div className="flex items-center gap-3 pb-4 border-b border-border-card">
-                        <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0">
-                          {selectedRegRequest.userName ? getInitials(selectedRegRequest.userName) : "U"}
-                        </div>
+                        <div className="w-10 h-10 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-sm uppercase shadow-sm flex-shrink-0 overflow-hidden">{(users.find(u => u.uid === selectedRegRequest.userId)?.avatar) ? <img src={users.find(u => u.uid === selectedRegRequest.userId).avatar} alt={selectedRegRequest.userName} className="w-full h-full object-cover" /> : (selectedRegRequest.userName ? getInitials(selectedRegRequest.userName) : "U")}</div>
                         <div className="flex-grow text-left">
                           <div className="flex justify-between items-center">
                             <span className="font-extrabold text-sm text-text-main">{selectedRegRequest.userName}</span>
@@ -3105,9 +3091,7 @@ export default function AdminDashboard() {
                                 }}
                                 title="View Records"
                               >
-                                <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0">
-                                  {item.userName ? getInitials(item.userName) : "U"}
-                                </div>
+                                <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{(users.find(u => u.uid === item.userId)?.avatar) ? <img src={users.find(u => u.uid === item.userId).avatar} alt={item.userName} className="w-full h-full object-cover" /> : (item.userName ? getInitials(item.userName) : "U")}</div>
                                 <div className="flex flex-col">
                                   <span className="font-extrabold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{item.userName}</span>
                                   <span className="text-[10px] text-text-mut font-semibold mt-0.5">{item.userDept || "Staff"}</span>
@@ -3652,9 +3636,7 @@ export default function AdminDashboard() {
             
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
               <div className="flex items-center gap-4 bg-brand-primary/5 p-4 rounded-[16px] border border-brand-primary/10">
-                <div className="w-16 h-16 rounded-full bg-brand-primary/15 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-2xl uppercase shadow-md flex-shrink-0">
-                  {selectedUser.name ? getInitials(selectedUser.name) : "U"}
-                </div>
+                <div className="w-16 h-16 rounded-full bg-brand-primary/15 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-2xl uppercase shadow-md flex-shrink-0 overflow-hidden">{selectedUser.avatar ? <img src={selectedUser.avatar} alt={selectedUser.name} className="w-full h-full object-cover" /> : (selectedUser.name ? getInitials(selectedUser.name) : "U")}</div>
                 <div>
                   <h4 className="text-xl font-black text-text-main">{selectedUser.name}</h4>
                   <p className="text-xs text-text-mut font-semibold">{selectedUser.email}</p>
@@ -4598,9 +4580,7 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[9px] font-bold">
-                                {(msg.senderName || "?").charAt(0).toUpperCase()}
-                              </div>
+                              <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[9px] font-bold overflow-hidden">{(users.find(u => u.uid === msg.senderId)?.avatar) ? <img src={users.find(u => u.uid === msg.senderId).avatar} alt={msg.senderName} className="w-full h-full object-cover" /> : ((msg.senderName || "?").charAt(0).toUpperCase())}</div>
                               <span className="text-xs font-semibold text-text-main whitespace-nowrap">{msg.senderName}</span>
                             </div>
                           </td>
@@ -4863,9 +4843,7 @@ export default function AdminDashboard() {
                               <td className="px-6 py-4">
                                 {asset.assignedUserId ? (
                                   <div className="flex items-center gap-2">
-                                    <div className="w-5 h-5 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-[9px] font-bold">
-                                      {(asset.assignedUserName || "?").charAt(0).toUpperCase()}
-                                    </div>
+                                    <div className="w-5 h-5 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-[9px] font-bold overflow-hidden">{(users.find(u => u.uid === asset.assignedUserId)?.avatar) ? <img src={users.find(u => u.uid === asset.assignedUserId).avatar} alt={asset.assignedUserName} className="w-full h-full object-cover" /> : ((asset.assignedUserName || "?").charAt(0).toUpperCase())}</div>
                                     <span className="text-xs font-semibold text-text-main whitespace-nowrap">{asset.assignedUserName}</span>
                                   </div>
                                 ) : (

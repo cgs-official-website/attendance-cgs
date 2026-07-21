@@ -580,9 +580,7 @@ export default function ProjectCalendar() {
                     <div key={log.id} className="p-4 bg-bg-base/40 border border-border-card rounded-[16px] space-y-3 relative group">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary font-black flex items-center justify-center text-xs">
-                            {log.userName ? log.userName.charAt(0).toUpperCase() : <User size={14} />}
-                          </div>
+                          <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary font-black flex items-center justify-center text-xs overflow-hidden">{(allUsers.find(u => u.uid === log.userId)?.avatar) ? <img src={allUsers.find(u => u.uid === log.userId).avatar} alt={log.userName} className="w-full h-full object-cover" /> : (log.userName ? log.userName.charAt(0).toUpperCase() : <User size={14} />)}</div>
                           <div>
                             <h5 className="text-xs font-black text-text-main">{log.userName}</h5>
                             <span className="text-[10px] text-text-mut font-bold">{log.projectName}</span>
@@ -794,9 +792,7 @@ export default function ProjectCalendar() {
                         return (
                           <tr key={`${member.uid}-${proj.id}`} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors text-xs text-text-sec">
                             <td className="p-4 font-bold text-text-main flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary font-black flex items-center justify-center text-[10px]">
-                                {member.name.charAt(0).toUpperCase()}
-                              </div>
+                              <div className="w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary font-black flex items-center justify-center text-[10px] overflow-hidden">{member.avatar ? <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" /> : member.name.charAt(0).toUpperCase()}</div>
                               {member.name}
                             </td>
                             <td className="p-4 font-semibold text-brand-primary">{proj.name}</td>
@@ -877,7 +873,7 @@ export default function ProjectCalendar() {
 
             const proj = task.project || "Unassigned";
             if (!grouped[proj]) grouped[proj] = {};
-            if (!grouped[proj][member.uid]) grouped[proj][member.uid] = { memberName: member.name, tasks: [] };
+            if (!grouped[proj][member.uid]) grouped[proj][member.uid] = { memberName: member.name, avatar: member.avatar, tasks: [] };
             grouped[proj][member.uid].tasks.push({ task, logs: manualReps });
           });
         });
@@ -962,9 +958,7 @@ export default function ProjectCalendar() {
                             {/* Member + Task header row */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-600 font-black flex items-center justify-center text-sm shrink-0">
-                                  {memberData.memberName?.charAt(0).toUpperCase()}
-                                </div>
+                                <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-600 font-black flex items-center justify-center text-sm shrink-0 overflow-hidden">{memberData.avatar ? <img src={memberData.avatar} alt={memberData.memberName} className="w-full h-full object-cover" /> : memberData.memberName?.charAt(0).toUpperCase()}</div>
                                 <div>
                                   <div className="text-sm font-black text-text-main">{memberData.memberName}</div>
                                   <div className="flex items-center gap-1.5 mt-0.5">

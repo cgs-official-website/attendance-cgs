@@ -494,19 +494,7 @@ export const checkIn = async (user, location) => {
   const dateStr = getLocalDateString();
 
   let checkInDate = new Date();
-  if (user && user.shiftStart) {
-    const [shiftH, shiftM] = user.shiftStart.split(":").map(Number);
-    const shiftStartToday = new Date();
-    shiftStartToday.setHours(shiftH, shiftM, 0, 0);
-
-    const shiftStartPlusOneHour = new Date(shiftStartToday.getTime() + 60 * 60 * 1000);
-
-    if (checkInDate >= shiftStartToday && checkInDate <= shiftStartPlusOneHour) {
-      // Within grace period → snap to shift start
-      checkInDate = shiftStartToday;
-    }
-    // If more than 1 hour late → keep actual check-in time (checkInDate unchanged)
-  }
+  
   const timeStr = checkInDate.toISOString();
 
   const recordId = `${user.uid}_${dateStr}`;

@@ -1930,7 +1930,7 @@ export default function UserDashboard() {
                     formatter={(value) => [`${value} hrs`, 'Worked']}
                     labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
                   />
-                  <Bar dataKey="hours" radius={[4, 4, 0, 0]} maxBarSize={30}>
+                  <Bar dataKey="hours" radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false}>
                     {weeklyHoursData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.active ? '#4f46e5' : (entry.hours > 0 ? '#818cf8' : '#e2e8f0')} />
                     ))}
@@ -2037,8 +2037,14 @@ export default function UserDashboard() {
                         {b.isBirthdayToday && (
                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ animation: "shimmer 2s infinite" }} />
                         )}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0 z-10 ${b.isBirthdayToday ? 'bg-amber-500/20 text-amber-500' : 'bg-brand-primary/10 text-brand-primary'}`}>
-                          {b.isBirthdayToday ? <Cake size={20} className="animate-bounce" /> : (b.name ? b.name.charAt(0) : "U")}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold uppercase shadow-sm flex-shrink-0 z-10 overflow-hidden ${b.isBirthdayToday ? 'bg-amber-500/20 text-amber-500' : 'bg-brand-primary/10 text-brand-primary'}`}>
+                          {b.avatar ? (
+                            <img src={b.avatar} alt={b.name} className="w-full h-full object-cover" />
+                          ) : b.isBirthdayToday ? (
+                            <Cake size={20} className="animate-bounce" />
+                          ) : (
+                            b.name ? b.name.charAt(0) : "U"
+                          )}
                         </div>
                         <div className="z-10">
                           <h4 className="font-bold text-sm text-text-main">{b.name}</h4>

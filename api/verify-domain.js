@@ -2,6 +2,7 @@ import dns from 'dns';
 import util from 'util';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 const resolveTxt = util.promisify(dns.resolveTxt);
 
@@ -33,6 +34,19 @@ export default async function handler(req, res) {
   }
 
   try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing token' });
+    }
+    const token = authHeader.split('Bearer ')[1];
+    let decodedToken;
+    try {
+      decodedToken = await getAuth().verifyIdToken(token);
+    } catch (authError) {
+      console.error('Token verification failed:', authError);
+      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
+
     const { domainId, domainName } = req.body;
 
     if (!domainId || !domainName) {
@@ -112,6 +126,12 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Domain verification handler error:', error);
+    
+    // Handle Firestore Quota Exhaustion specifically
+    if (error.message && error.message.includes('RESOURCE_EXHAUSTED')) {
+      return res.status(429).json({ error: 'Server is experiencing high traffic. Please try again later.' });
+    }
+    
     return res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 }

@@ -90,9 +90,13 @@ export default function DomainManager({ companyId }) {
   const handleVerifyDomain = async (id, domainName) => {
     setVerifyingId(id);
     try {
+      const token = await currentUser.getIdToken();
       const response = await fetch('/api/verify-domain', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ domainId: id, domainName })
       });
       

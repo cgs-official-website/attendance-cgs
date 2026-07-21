@@ -42,14 +42,26 @@ export default async function handler(req, res) {
     // 1. Fetch the domain document from Firestore
     const db = getFirestore();
     const domainDocRef = db.collection('companyDomains').doc(domainId);
-    const domainDoc = await domainDocRef.get();
+    
+    let domainData = null;
+    try {
+      const domainDoc = await domainDocRef.get();
+      if (domainDoc.exists) {
+        domainData = domainDoc.data();
+      }
+    } catch (dbError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn("Firestore fetch error in dev (likely quota exceeded). Using mock data.", dbError.message);
+        domainData = { status: 'PENDING', verificationToken: 'dummy' };
+      } else {
+        throw dbError;
+      }
+    }
 
-    if (!domainDoc.exists) {
+    if (!domainData) {
       return res.status(404).json({ error: 'Domain record not found' });
     }
 
-    const domainData = domainDoc.data();
-    
     if (domainData.status === 'VERIFIED') {
       return res.status(200).json({ success: true, message: 'Domain is already verified' });
     }
@@ -58,26 +70,41 @@ export default async function handler(req, res) {
 
     // 2. Perform DNS TXT Lookup
     let isVerified = false;
-    try {
-      const records = await resolveTxt(domainName);
-      
-      // Node returns an array of arrays for TXT: [ ['record1part1', 'part2'], ['record2'] ]
-      const flatRecords = records.map(recordArray => recordArray.join(''));
-      
-      if (flatRecords.includes(expectedToken)) {
-        isVerified = true;
+    
+    // Bypass actual DNS check in local development environment
+    if (process.env.NODE_ENV === 'development') {
+      isVerified = true;
+      console.log(`[DEV MODE] Bypassed DNS verification for ${domainName}`);
+    } else {
+      try {
+        const records = await resolveTxt(domainName);
+        
+        // Node returns an array of arrays for TXT: [ ['record1part1', 'part2'], ['record2'] ]
+        const flatRecords = records.map(recordArray => recordArray.join(''));
+        
+        if (flatRecords.includes(expectedToken)) {
+          isVerified = true;
+        }
+      } catch (dnsError) {
+        console.error(`DNS lookup failed for ${domainName}:`, dnsError);
+        return res.status(400).json({ error: 'Failed to look up DNS records. Please ensure they are propagated.', details: dnsError.message });
       }
-    } catch (dnsError) {
-      console.error(`DNS lookup failed for ${domainName}:`, dnsError);
-      return res.status(400).json({ error: 'Failed to look up DNS records. Please ensure they are propagated.', details: dnsError.message });
     }
 
     // 3. Update Firestore if verified
     if (isVerified) {
-      await domainDocRef.update({
-        status: 'VERIFIED',
-        verifiedAt: FieldValue.serverTimestamp()
-      });
+      try {
+        await domainDocRef.update({
+          status: 'VERIFIED',
+          verifiedAt: FieldValue.serverTimestamp()
+        });
+      } catch (updateError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn("Firestore update error in dev (likely quota exceeded). Ignoring.", updateError.message);
+        } else {
+          throw updateError;
+        }
+      }
       return res.status(200).json({ success: true, message: 'Domain successfully verified!' });
     } else {
       return res.status(400).json({ error: 'Verification token not found in DNS records. Please wait for DNS propagation.' });

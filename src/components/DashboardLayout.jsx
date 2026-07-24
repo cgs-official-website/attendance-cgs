@@ -1360,11 +1360,11 @@ export default function DashboardLayout({ children }) {
               )}
             </div>
 
-            {/* Help / Attendance Rules - hidden on xs screens */}
+            {/* Help / Support Ticket - hidden on xs screens */}
             <button
               className="hidden sm:flex w-8 h-8 items-center justify-center border border-border-card rounded-[10px] bg-bg-card hover:bg-bg-base text-text-sec cursor-pointer flex-shrink-0"
-              onClick={() => setShowRulesModal(true)}
-              title="Attendance Rules"
+              onClick={() => setShowTicketModal(true)}
+              title="Raise Support Ticket to Zuna"
             >
               <HelpCircle size={15} />
             </button>

@@ -34,10 +34,12 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   Building2,
   IndianRupee,
   Link2,
-  Globe
+  Globe,
+  LifeBuoy
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
+import RaiseTicketModal from "./RaiseTicketModal";
 import { 
   checkIn, 
   checkOut, 
@@ -137,6 +139,7 @@ export default function DashboardLayout({ children }) {
 
   const [localSearch, setLocalSearch] = useState(searchParams.get("q") || "");
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   useEffect(() => {
     setLocalSearch(searchParams.get("q") || "");
@@ -1174,6 +1177,22 @@ export default function DashboardLayout({ children }) {
             >
               <RefreshCw size={15} className={isRefreshing ? "animate-spin text-brand-primary" : ""} />
             </button>
+
+            {/* Raise Support Ticket to Zuna */}
+            <button
+              onClick={() => setShowTicketModal(true)}
+              className="w-8 h-8 flex items-center justify-center border border-brand-primary/30 rounded-[10px] bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary transition-colors cursor-pointer flex-shrink-0"
+              title="Raise Support Ticket to Zuna"
+            >
+              <LifeBuoy size={15} />
+            </button>
+
+            <RaiseTicketModal 
+              isOpen={showTicketModal}
+              onClose={() => setShowTicketModal(false)}
+              clientName={currentUser?.name || companyName || "HR Administrator"}
+              clientEmail={currentUser?.email || ""}
+            />
 
             {/* Light/Dark mode switcher */}
             <button

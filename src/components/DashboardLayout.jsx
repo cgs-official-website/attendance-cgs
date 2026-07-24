@@ -141,6 +141,8 @@ export default function DashboardLayout({ children }) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
 
+  const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'hr_admin' || currentUser?.isAdmin || (currentUser && !['employee', 'staff', 'teacher', 'user'].includes(currentUser?.role));
+
   useEffect(() => {
     setLocalSearch(searchParams.get("q") || "");
   }, [searchParams]);
@@ -1178,21 +1180,25 @@ export default function DashboardLayout({ children }) {
               <RefreshCw size={15} className={isRefreshing ? "animate-spin text-brand-primary" : ""} />
             </button>
 
-            {/* Raise Support Ticket to Zuna */}
-            <button
-              onClick={() => setShowTicketModal(true)}
-              className="w-8 h-8 flex items-center justify-center border border-brand-primary/30 rounded-[10px] bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary transition-colors cursor-pointer flex-shrink-0"
-              title="Raise Support Ticket to Zuna"
-            >
-              <LifeBuoy size={15} />
-            </button>
+            {/* Raise Support Ticket to Zuna (Admins Only) */}
+            {isAdminUser && (
+              <>
+                <button
+                  onClick={() => setShowTicketModal(true)}
+                  className="w-8 h-8 flex items-center justify-center border border-brand-primary/30 rounded-[10px] bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary transition-colors cursor-pointer flex-shrink-0"
+                  title="Raise Support Ticket to Zuna"
+                >
+                  <LifeBuoy size={15} />
+                </button>
 
-            <RaiseTicketModal 
-              isOpen={showTicketModal}
-              onClose={() => setShowTicketModal(false)}
-              clientName={currentUser?.name || companyName || "HR Administrator"}
-              clientEmail={currentUser?.email || ""}
-            />
+                <RaiseTicketModal 
+                  isOpen={showTicketModal}
+                  onClose={() => setShowTicketModal(false)}
+                  clientName={currentUser?.name || companyName || "HR Administrator"}
+                  clientEmail={currentUser?.email || ""}
+                />
+              </>
+            )}
 
             {/* Light/Dark mode switcher */}
             <button
@@ -1360,11 +1366,17 @@ export default function DashboardLayout({ children }) {
               )}
             </div>
 
-            {/* Help / Support Ticket - hidden on xs screens */}
+            {/* Help / Support Ticket (Admin) or Attendance Rules (Employee) */}
             <button
               className="hidden sm:flex w-8 h-8 items-center justify-center border border-border-card rounded-[10px] bg-bg-card hover:bg-bg-base text-text-sec cursor-pointer flex-shrink-0"
-              onClick={() => setShowTicketModal(true)}
-              title="Raise Support Ticket to Zuna"
+              onClick={() => {
+                if (isAdminUser) {
+                  setShowTicketModal(true);
+                } else {
+                  setShowRulesModal(true);
+                }
+              }}
+              title={isAdminUser ? "Raise Support Ticket to Zuna" : "Attendance Rules"}
             >
               <HelpCircle size={15} />
             </button>

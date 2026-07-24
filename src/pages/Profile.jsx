@@ -2,7 +2,8 @@ import React, { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { updateUserRecord, uploadFileToFirebase, getCompanies, deleteCompany, updateCompanyDetails } from "../firebase";
-import { User, Mail, Shield, ShieldAlert, Award, Clock, Save, Building, Copy, Check } from "lucide-react";
+import { User, Mail, Shield, ShieldAlert, Award, Clock, Save, Building, Copy, Check, Eye, Crop, Camera, Trash2, Sliders } from "lucide-react";
+import ImageEditorModal from "../components/ImageEditorModal";
 
 export default function Profile() {
   const { currentUser, updateCurrentUserState } = useAuth();
@@ -18,6 +19,11 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Image Editor Modal state
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editorImageSrc, setEditorImageSrc] = useState(null);
+  const [editorInitialMode, setEditorInitialMode] = useState("crop");
 
   const fileInputRef = useRef(null);
   const isAdmin = currentUser?.role === "admin";
@@ -143,8 +149,6 @@ export default function Profile() {
 
     setLoading(true);
     try {
-      // If user is normal user, update their details. Admin cannot change their own shift from user profile
-      // (or we can let admin change it).
       const finalShiftStart = isAdmin ? shiftStart : (currentUser.shiftStart || "10:00");
       const finalShiftEnd = isAdmin ? shiftEnd : (currentUser.shiftEnd || "19:00");
       const finalProgram = isAdmin ? programType : (currentUser.programType || "Internship");
@@ -168,7 +172,6 @@ export default function Profile() {
         currentUser.designation
       );
 
-      // Update state reactively
       updateCurrentUserState({
         name,
         department: dept,
@@ -187,28 +190,67 @@ export default function Profile() {
     }
   };
 
-  const handleAvatarClick = () => {
-    fileInputRef.current.click();
-  };
-
-  const handleFileChange = async (e) => {
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        return showToast("Image size must be less than 2MB.", "warning");
+      if (file.size > 10 * 1024 * 1024) {
+        return showToast("Image size must be less than 10MB.", "warning");
       }
-      try {
-        setLoading(true);
-        showToast("Uploading profile picture to cloud...", "info");
-        const fileData = await uploadFileToFirebase(file, currentUser?.companyId || "", "profiles");
-        setAvatar(fileData.url);
-        showToast("Profile picture uploaded to cloud. Click 'Save Settings' to save.", "success");
-      } catch (err) {
-        showToast("Failed to upload image: " + err.message, "error");
-      } finally {
-        setLoading(false);
-      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setEditorImageSrc(reader.result);
+        setEditorInitialMode("crop");
+        setIsEditorOpen(true);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = "";
     }
+  };
+
+  const handleOpenViewImage = () => {
+    if (!avatar) return;
+    setEditorImageSrc(avatar);
+    setEditorInitialMode("view");
+    setIsEditorOpen(true);
+  };
+
+  const handleOpenCropImage = () => {
+    if (!avatar) {
+      fileInputRef.current?.click();
+      return;
+    }
+    setEditorImageSrc(avatar);
+    setEditorInitialMode("crop");
+    setIsEditorOpen(true);
+  };
+
+  const handleSaveEditedAvatar = async (file, dataUrl) => {
+    try {
+      setLoading(true);
+      showToast("Uploading cropped profile picture to cloud...", "info");
+      
+      let finalAvatarUrl = dataUrl;
+      try {
+        const fileData = await uploadFileToFirebase(file, currentUser?.companyId || "", "profiles");
+        if (fileData?.url) {
+          finalAvatarUrl = fileData.url;
+        }
+      } catch (uploadErr) {
+        console.warn("Cloud upload fallback to base64:", uploadErr);
+      }
+
+      setAvatar(finalAvatarUrl);
+      showToast("Profile picture updated! Click 'Save Settings' to save changes.", "success");
+    } catch (err) {
+      showToast("Failed to process image: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatar("");
+    showToast("Profile picture removed. Click 'Save Settings' to apply.", "info");
   };
 
   return (
@@ -227,19 +269,68 @@ export default function Profile() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Column: Avatar & Account Badge */}
         <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col items-center justify-center text-center">
-          <div 
-            onClick={handleAvatarClick}
-            className="w-20 h-20 rounded-full bg-brand-primary/10 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-2xl uppercase shadow-md mb-4 relative overflow-hidden group cursor-pointer"
-          >
-            {avatar ? (
-              <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              name ? name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"
-            )}
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity">
-              EDIT
+          {/* Profile Picture Frame with Hover Actions */}
+          <div className="relative group mb-3">
+            <div 
+              onClick={avatar ? handleOpenViewImage : () => fileInputRef.current?.click()}
+              className="w-24 h-24 rounded-full bg-brand-primary/10 text-brand-primary border-2 border-brand-primary/30 flex items-center justify-center font-black text-3xl uppercase shadow-md overflow-hidden cursor-pointer relative transition-transform group-hover:scale-105"
+            >
+              {avatar ? (
+                <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                name ? name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase() : "U"
+              )}
+
+              {/* Hover Overlay */}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white text-[10px] font-bold transition-opacity">
+                {avatar ? <Eye size={18} /> : <Camera size={18} />}
+                <span className="mt-1">{avatar ? "VIEW" : "UPLOAD"}</span>
+              </div>
             </div>
           </div>
+
+          {/* Quick Action Toolbar for Avatar */}
+          <div className="flex items-center gap-1.5 mb-4 bg-bg-base/60 border border-border-card p-1 rounded-full text-xs">
+            <button
+              type="button"
+              onClick={handleOpenViewImage}
+              disabled={!avatar}
+              className="p-1.5 rounded-full hover:bg-bg-card text-text-sec hover:text-brand-primary disabled:opacity-40 transition-colors cursor-pointer"
+              title="View Profile Picture"
+            >
+              <Eye size={14} />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCropImage}
+              className="p-1.5 rounded-full hover:bg-bg-card text-text-sec hover:text-brand-primary transition-colors cursor-pointer"
+              title="Crop & Edit Image"
+            >
+              <Crop size={14} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 rounded-full hover:bg-bg-card text-text-sec hover:text-brand-primary transition-colors cursor-pointer"
+              title="Upload New Image"
+            >
+              <Camera size={14} />
+            </button>
+
+            {avatar && (
+              <button
+                type="button"
+                onClick={handleRemoveAvatar}
+                className="p-1.5 rounded-full hover:bg-red-500/10 text-text-sec hover:text-red-500 transition-colors cursor-pointer"
+                title="Remove Picture"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+
           <input
             type="file"
             ref={fileInputRef}
@@ -623,6 +714,17 @@ export default function Profile() {
           )}
         </div>
       </div>
+
+      {/* Image Editor & Lightbox Viewer Modal */}
+      <ImageEditorModal
+        isOpen={isEditorOpen}
+        onClose={() => setIsEditorOpen(false)}
+        imageSrc={editorImageSrc}
+        initialMode={editorInitialMode}
+        onSave={handleSaveEditedAvatar}
+      />
     </div>
   );
 }
+
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LuX, LuLifeBuoy, LuSend, LuCircleAlert, LuCircleCheck, LuMessageSquare, LuClock, LuPlus, LuChevronRight, LuArrowLeft } from "react-icons/lu";
+import { X, LifeBuoy, Send, AlertTriangle, CheckCircle2, MessageSquare, Clock, Plus, ChevronRight, ArrowLeft } from "lucide-react";
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
@@ -194,9 +194,9 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
 
   const getStatusBadge = (status) => {
     switch(status) {
-      case 'resolved': return <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold flex items-center gap-1"><LuCircleCheck size={12}/> Resolved</span>;
-      case 'in-progress': return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-xs font-bold flex items-center gap-1"><LuClock size={12}/> In Progress</span>;
-      default: return <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded-md text-xs font-bold flex items-center gap-1"><LuMessageSquare size={12}/> Open</span>;
+      case 'resolved': return <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Resolved</span>;
+      case 'in-progress': return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-xs font-bold flex items-center gap-1"><Clock size={12}/> In Progress</span>;
+      default: return <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded-md text-xs font-bold flex items-center gap-1"><MessageSquare size={12}/> Open</span>;
     }
   };
 
@@ -206,7 +206,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-cyan-50 border border-cyan-100 flex items-center justify-center text-cyan-600 shrink-0">
-              <LuLifeBuoy size={20} />
+              <LifeBuoy size={20} />
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-900">Zuna Central Support</h3>
@@ -214,7 +214,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors">
-            <LuX size={18} />
+            <X size={18} />
           </button>
         </div>
 
@@ -225,7 +225,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
               activeTab === 'raise' ? 'border-cyan-600 text-cyan-600 bg-white rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <LuPlus size={15} /> Raise New Ticket
+            <Plus size={15} /> Raise New Ticket
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -233,7 +233,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
               activeTab === 'history' ? 'border-cyan-600 text-cyan-600 bg-white rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <LuMessageSquare size={15} /> My Tickets ({myTickets.length})
+            <MessageSquare size={15} /> My Tickets ({myTickets.length})
           </button>
         </div>
 
@@ -241,12 +241,12 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
           <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
             {successMsg && (
               <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl text-xs font-bold flex items-center gap-2">
-                <LuCircleCheck size={16} /> {successMsg}
+                <CheckCircle2 size={16} /> {successMsg}
               </div>
             )}
             {errorMsg && (
               <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
-                <LuCircleAlert size={16} /> {errorMsg}
+                <AlertTriangle size={16} /> {errorMsg}
               </div>
             )}
 
@@ -284,7 +284,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
             <div className="flex items-center justify-end gap-3 pt-2">
               <button type="button" onClick={onClose} className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-2xl">Cancel</button>
               <button type="submit" disabled={loading} className="px-6 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-2xl shadow-lg shadow-cyan-500/25 flex items-center gap-2">
-                <LuSend size={14} /> {loading ? 'Submitting...' : 'Submit to Zuna Admin'}
+                <Send size={14} /> {loading ? 'Submitting...' : 'Submit to Zuna Admin'}
               </button>
             </div>
           </form>
@@ -303,7 +303,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
                   <h4 className="text-sm font-bold text-slate-900 group-hover:text-cyan-600 transition-colors">{t.subject}</h4>
                   <p className="text-xs text-slate-500 truncate mt-0.5">{t.description}</p>
                 </div>
-                <LuChevronRight className="text-slate-300 group-hover:text-cyan-600 shrink-0" size={18}/>
+                <ChevronRight className="text-slate-300 group-hover:text-cyan-600 shrink-0" size={18}/>
               </div>
             ))}
             {myTickets.length === 0 && <div className="text-center py-12 text-slate-400 text-sm font-semibold">No support tickets found.</div>}
@@ -313,7 +313,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
         {activeTab === 'history' && selectedTicket && (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-              <button onClick={() => setSelectedTicket(null)} className="text-xs font-bold text-cyan-600 flex items-center gap-1"><LuArrowLeft size={14}/> Back to My Tickets</button>
+              <button onClick={() => setSelectedTicket(null)} className="text-xs font-bold text-cyan-600 flex items-center gap-1"><ArrowLeft size={14}/> Back to My Tickets</button>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-slate-400">#{selectedTicket.id}</span>
                 {getStatusBadge(selectedTicket.status)}
@@ -345,7 +345,7 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
             <form onSubmit={handleSendReply} className="p-3 border-t border-slate-100 bg-white flex gap-2">
               <input type="text" placeholder="Write reply..." value={replyText} onChange={e => setReplyText(e.target.value)} className="flex-1 px-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-slate-900 font-medium" required/>
               <button type="submit" disabled={sendingReply} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs rounded-xl flex items-center gap-1">
-                <LuSend size={12}/> {sendingReply ? 'Sending...' : 'Reply'}
+                <Send size={12}/> {sendingReply ? 'Sending...' : 'Reply'}
               </button>
             </form>
           </div>

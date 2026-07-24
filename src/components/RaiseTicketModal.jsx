@@ -194,67 +194,80 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
 
   const getStatusBadge = (status) => {
     switch(status) {
-      case 'resolved': return <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-xs font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Resolved</span>;
-      case 'in-progress': return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-xs font-bold flex items-center gap-1"><Clock size={12}/> In Progress</span>;
-      default: return <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded-md text-xs font-bold flex items-center gap-1"><MessageSquare size={12}/> Open</span>;
+      case 'resolved': return <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Resolved</span>;
+      case 'in-progress': return <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-md text-[11px] font-bold flex items-center gap-1"><Clock size={12}/> In Progress</span>;
+      default: return <span className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary border border-brand-primary/20 rounded-md text-[11px] font-bold flex items-center gap-1"><MessageSquare size={12}/> Open</span>;
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-md overflow-y-auto animate-fadeIn" onClick={onClose}>
+      <div 
+        className="bg-bg-card text-text-main rounded-3xl shadow-2xl border border-border-card w-full max-w-lg my-auto overflow-hidden flex flex-col max-h-[88vh] sm:max-h-[85vh] transition-all"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-border-card bg-bg-base/40 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-50 border border-cyan-100 flex items-center justify-center text-cyan-600 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center text-brand-primary shrink-0">
               <LifeBuoy size={20} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Zuna Central Support</h3>
-              <p className="text-xs text-slate-500 font-medium">Direct support desk for HR Administrators</p>
+              <h3 className="text-base sm:text-lg font-extrabold text-text-main">Zuna Central Support</h3>
+              <p className="text-xs text-text-mut font-medium">Direct support desk for HR Administrators</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors">
+          <button 
+            onClick={onClose} 
+            className="p-2 text-text-mut hover:text-text-main rounded-xl hover:bg-bg-base transition-colors cursor-pointer"
+          >
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex border-b border-slate-100 bg-slate-50 px-5 gap-2">
+        {/* Tab Selection */}
+        <div className="flex border-b border-border-card bg-bg-base/60 px-4 sm:px-5 gap-2 shrink-0">
           <button
             onClick={() => { setActiveTab('raise'); setSelectedTicket(null); }}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
-              activeTab === 'raise' ? 'border-cyan-600 text-cyan-600 bg-white rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
+            className={`py-3 px-3 sm:px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'raise' 
+                ? 'border-brand-primary text-brand-primary bg-bg-card rounded-t-xl' 
+                : 'border-transparent text-text-mut hover:text-text-sec'
             }`}
           >
-            <Plus size={15} /> Raise New Ticket
+            <Plus size={14} /> Raise New Ticket
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
-              activeTab === 'history' ? 'border-cyan-600 text-cyan-600 bg-white rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
+            className={`py-3 px-3 sm:px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'history' 
+                ? 'border-brand-primary text-brand-primary bg-bg-card rounded-t-xl' 
+                : 'border-transparent text-text-mut hover:text-text-sec'
             }`}
           >
-            <MessageSquare size={15} /> My Tickets ({myTickets.length})
+            <MessageSquare size={14} /> My Tickets ({myTickets.length})
           </button>
         </div>
 
+        {/* TAB 1: FORM */}
         {activeTab === 'raise' && (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3.5 overflow-y-auto flex-1">
             {successMsg && (
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-2xl text-xs font-bold flex items-center gap-2">
                 <CheckCircle2 size={16} /> {successMsg}
               </div>
             )}
             {errorMsg && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-bold flex items-center gap-2">
                 <AlertTriangle size={16} /> {errorMsg}
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Issue Subject</label>
+              <label className="block text-[11px] font-extrabold text-text-sec uppercase tracking-wider mb-1">Issue Subject</label>
               <input 
                 type="text" required
-                className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white text-slate-900 font-medium"
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-bg-base border border-border-card rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary text-text-main font-medium placeholder:text-text-mut transition-all"
                 placeholder="e.g. Payroll Tax Export Failure"
                 value={subject} onChange={e => setSubject(e.target.value)}
               />
@@ -262,75 +275,111 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Priority</label>
-                <select className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-2xl font-semibold" value={priority} onChange={e => setPriority(e.target.value)}>
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="urgent">⚡ Urgent Priority</option>
+                <label className="block text-[11px] font-extrabold text-text-sec uppercase tracking-wider mb-1">Priority</label>
+                <select 
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-bg-base border border-border-card rounded-2xl font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-brand-primary/30" 
+                  value={priority} onChange={e => setPriority(e.target.value)}
+                >
+                  <option value="low" className="bg-bg-card text-text-main">Low Priority</option>
+                  <option value="medium" className="bg-bg-card text-text-main">Medium Priority</option>
+                  <option value="high" className="bg-bg-card text-text-main">High Priority</option>
+                  <option value="urgent" className="bg-bg-card text-text-main">⚡ Urgent Priority</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Product</label>
-                <input type="text" disabled value="Attendance (HRMS)" className="w-full px-4 py-3 text-sm bg-slate-100 border border-slate-200 rounded-2xl text-slate-500 font-bold"/>
+                <label className="block text-[11px] font-extrabold text-text-sec uppercase tracking-wider mb-1">Product</label>
+                <input 
+                  type="text" disabled value="Attendance (HRMS)" 
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-bg-base/60 border border-border-card rounded-2xl text-text-mut font-bold"
+                />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Detailed Description</label>
-              <textarea required rows={4} className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium resize-none" placeholder="Describe the issue..." value={description} onChange={e => setDescription(e.target.value)}/>
+              <label className="block text-[11px] font-extrabold text-text-sec uppercase tracking-wider mb-1">Detailed Description</label>
+              <textarea 
+                required rows={3} 
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-bg-base border border-border-card rounded-2xl text-text-main font-medium placeholder:text-text-mut resize-none focus:outline-none focus:ring-2 focus:ring-brand-primary/30 transition-all" 
+                placeholder="Describe the issue you are experiencing..." 
+                value={description} onChange={e => setDescription(e.target.value)}
+              />
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
-              <button type="button" onClick={onClose} className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-2xl">Cancel</button>
-              <button type="submit" disabled={loading} className="px-6 py-2.5 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-2xl shadow-lg shadow-cyan-500/25 flex items-center gap-2">
+              <button 
+                type="button" onClick={onClose} 
+                className="px-4 py-2 text-xs font-bold text-text-sec bg-bg-base hover:bg-border-card rounded-2xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" disabled={loading} 
+                className="px-5 py-2 text-xs font-bold text-white bg-brand-primary hover:opacity-90 active:scale-95 rounded-2xl shadow-lg shadow-brand-primary/25 flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all"
+              >
                 <Send size={14} /> {loading ? 'Submitting...' : 'Submit to Zuna Admin'}
               </button>
             </div>
           </form>
         )}
 
+        {/* TAB 2: HISTORY LIST */}
         {activeTab === 'history' && !selectedTicket && (
-          <div className="p-5 flex-1 overflow-y-auto space-y-3">
+          <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-3">
             {myTickets.map(t => (
-              <div key={t.id} onClick={() => setSelectedTicket(t)} className="p-4 rounded-2xl border border-slate-200 hover:border-cyan-400 hover:shadow-md transition-all cursor-pointer bg-white flex items-center justify-between gap-3 group">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-extrabold text-cyan-600">#{t.id}</span>
+              <div 
+                key={t.id} onClick={() => setSelectedTicket(t)} 
+                className="p-3.5 sm:p-4 rounded-2xl border border-border-card hover:border-brand-primary/40 hover:shadow-md transition-all cursor-pointer bg-bg-base/40 flex items-center justify-between gap-3 group"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-xs font-extrabold text-brand-primary">#{t.id}</span>
                     {getStatusBadge(t.status)}
-                    <span className="text-xs text-slate-400 font-medium ml-auto">{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Recently'}</span>
+                    <span className="text-[10px] text-text-mut font-medium ml-auto">{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Recently'}</span>
                   </div>
-                  <h4 className="text-sm font-bold text-slate-900 group-hover:text-cyan-600 transition-colors">{t.subject}</h4>
-                  <p className="text-xs text-slate-500 truncate mt-0.5">{t.description}</p>
+                  <h4 className="text-xs sm:text-sm font-bold text-text-main group-hover:text-brand-primary transition-colors truncate">{t.subject}</h4>
+                  <p className="text-[11px] text-text-mut truncate mt-0.5">{t.description}</p>
                 </div>
-                <ChevronRight className="text-slate-300 group-hover:text-cyan-600 shrink-0" size={18}/>
+                <ChevronRight className="text-text-mut group-hover:text-brand-primary shrink-0 transition-colors" size={18}/>
               </div>
             ))}
-            {myTickets.length === 0 && <div className="text-center py-12 text-slate-400 text-sm font-semibold">No support tickets found.</div>}
+            {myTickets.length === 0 && (
+              <div className="text-center py-10 text-text-mut text-xs font-semibold">
+                <LifeBuoy size={36} className="mx-auto mb-2 text-text-mut opacity-50" />
+                <p>No support tickets found.</p>
+                <p className="text-[10px] opacity-75 mt-1">Switch to "Raise New Ticket" tab to submit a request.</p>
+              </div>
+            )}
           </div>
         )}
 
+        {/* THREAD DETAIL */}
         {activeTab === 'history' && selectedTicket && (
           <div className="flex flex-col flex-1 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-              <button onClick={() => setSelectedTicket(null)} className="text-xs font-bold text-cyan-600 flex items-center gap-1"><ArrowLeft size={14}/> Back to My Tickets</button>
+            <div className="px-4 sm:px-5 py-2.5 border-b border-border-card bg-bg-base/80 flex items-center justify-between shrink-0">
+              <button onClick={() => setSelectedTicket(null)} className="text-xs font-bold text-brand-primary hover:underline flex items-center gap-1 cursor-pointer">
+                <ArrowLeft size={14}/> Back to My Tickets
+              </button>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-400">#{selectedTicket.id}</span>
+                <span className="text-xs font-extrabold text-text-mut">#{selectedTicket.id}</span>
                 {getStatusBadge(selectedTicket.status)}
               </div>
             </div>
 
-            <div className="p-5 flex-1 overflow-y-auto space-y-3 bg-slate-50/40">
-              <div className="p-3.5 bg-slate-100 rounded-2xl border border-slate-200">
-                <span className="text-xs font-bold text-slate-500 block mb-1">Subject: {selectedTicket.subject}</span>
-                <p className="text-xs text-slate-800 font-medium">{selectedTicket.description}</p>
+            <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-3 bg-bg-base/20">
+              <div className="p-3 bg-bg-base rounded-2xl border border-border-card">
+                <span className="text-[11px] font-bold text-text-mut block mb-1">Subject: {selectedTicket.subject}</span>
+                <p className="text-xs text-text-main font-medium">{selectedTicket.description}</p>
               </div>
 
               {(selectedTicket.messages || []).map((msg, i) => {
                 const isSuperAdmin = msg.sender === 'Agent' || msg.sender === 'SuperAdmin' || msg.role === 'superadmin';
                 return (
                   <div key={i} className={`flex flex-col ${isSuperAdmin ? 'items-start' : 'items-end'}`}>
-                    <div className={`max-w-[85%] p-3.5 rounded-2xl text-xs font-medium ${isSuperAdmin ? 'bg-cyan-600 text-white rounded-tl-none shadow-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-tr-none shadow-sm'}`}>
+                    <div className={`max-w-[85%] p-3 rounded-2xl text-xs font-medium ${
+                      isSuperAdmin 
+                        ? 'bg-brand-primary text-white rounded-tl-none shadow-md' 
+                        : 'bg-bg-card border border-border-card text-text-main rounded-tr-none shadow-sm'
+                    }`}>
                       <div className="flex items-center justify-between gap-3 text-[10px] opacity-75 mb-1 font-bold">
                         <span>{isSuperAdmin ? '⚡ Zuna SuperAdmin Support' : msg.author || 'HR Admin'}</span>
                         <span>{msg.timestamp || 'Recently'}</span>
@@ -342,9 +391,17 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
               })}
             </div>
 
-            <form onSubmit={handleSendReply} className="p-3 border-t border-slate-100 bg-white flex gap-2">
-              <input type="text" placeholder="Write reply..." value={replyText} onChange={e => setReplyText(e.target.value)} className="flex-1 px-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-slate-900 font-medium" required/>
-              <button type="submit" disabled={sendingReply} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs rounded-xl flex items-center gap-1">
+            <form onSubmit={handleSendReply} className="p-3 border-t border-border-card bg-bg-card flex gap-2 shrink-0">
+              <input 
+                type="text" placeholder="Write reply to Zuna SuperAdmin..." 
+                value={replyText} onChange={e => setReplyText(e.target.value)} 
+                className="flex-1 px-3.5 py-2 text-xs bg-bg-base border border-border-card rounded-xl text-text-main font-medium focus:outline-none focus:border-brand-primary placeholder:text-text-mut" 
+                required
+              />
+              <button 
+                type="submit" disabled={sendingReply} 
+                className="px-4 py-2 bg-brand-primary hover:opacity-90 text-white font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-all"
+              >
                 <Send size={12}/> {sendingReply ? 'Sending...' : 'Reply'}
               </button>
             </form>

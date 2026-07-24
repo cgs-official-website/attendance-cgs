@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, LifeBuoy, Send, AlertTriangle, CheckCircle2, MessageSquare, Clock, Plus, ChevronRight, ArrowLeft } from "lucide-react";
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp, onSnapshot, doc, updateDoc } from 'firebase/firestore';
@@ -200,8 +201,8 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-md overflow-y-auto animate-fadeIn" onClick={onClose}>
+  const modalContent = (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-md overflow-y-auto animate-fadeIn" onClick={onClose}>
       <div 
         className="bg-bg-card text-text-main rounded-3xl shadow-2xl border border-border-card w-full max-w-lg my-auto overflow-hidden flex flex-col max-h-[88vh] sm:max-h-[85vh] transition-all"
         onClick={e => e.stopPropagation()}
@@ -410,4 +411,6 @@ export default function RaiseTicketModal({ isOpen, onClose, clientName = "HR Adm
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 }

@@ -233,6 +233,30 @@ export default function AdminDashboard() {
   const [newJobType, setNewJobType] = useState("Full-time");
   const [newDesignation, setNewDesignation] = useState("");
   const [newRole, setNewRole] = useState("Employee");
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
+  const [newPersonalEmail, setNewPersonalEmail] = useState("");
+  const [newPersonalMobileNumber, setNewPersonalMobileNumber] = useState("");
+  const [newGender, setNewGender] = useState("");
+  const [newMaritalStatus, setNewMaritalStatus] = useState("Single");
+  const [newEmployeeStatus, setNewEmployeeStatus] = useState("Active");
+  const [newSourceOfHire, setNewSourceOfHire] = useState("");
+  const [newCurrentExperience, setNewCurrentExperience] = useState("");
+  const [newReportingManager, setNewReportingManager] = useState("");
+  const [newUan, setNewUan] = useState("");
+  const [newPan, setNewPan] = useState("");
+  const [newAadharNum, setNewAadharNum] = useState("");
+  const [newBankAcNo, setNewBankAcNo] = useState("");
+  const [newIfscCode, setNewIfscCode] = useState("");
+  const [newPermanentAddress, setNewPermanentAddress] = useState("");
+  const [newSpecialization, setNewSpecialization] = useState("");
+  const [newInstituteName, setNewInstituteName] = useState("");
+  const [newYearOfCompletion, setNewYearOfCompletion] = useState("");
+  const [newDateOfExit, setNewDateOfExit] = useState("");
+  const [newEmployeeId, setNewEmployeeId] = useState("");
+  const [newPhoto, setNewPhoto] = useState("");
+  const [newAge, setNewAge] = useState("");
+  const [newAddTab, setNewAddTab] = useState("Personal");
 
   // Edit Form Fields
   const [editName, setEditName] = useState("");
@@ -253,6 +277,29 @@ export default function AdminDashboard() {
   const [editProgram, setEditProgram] = useState("Internship");
   const [editTasks, setEditTasks] = useState([]);
   const [editEmployeeId, setEditEmployeeId] = useState("");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editPersonalEmail, setEditPersonalEmail] = useState("");
+  const [editPersonalMobileNumber, setEditPersonalMobileNumber] = useState("");
+  const [editGender, setEditGender] = useState("");
+  const [editMaritalStatus, setEditMaritalStatus] = useState("Single");
+  const [editEmployeeStatus, setEditEmployeeStatus] = useState("Active");
+  const [editSourceOfHire, setEditSourceOfHire] = useState("");
+  const [editCurrentExperience, setEditCurrentExperience] = useState("");
+  const [editReportingManager, setEditReportingManager] = useState("");
+  const [editUan, setEditUan] = useState("");
+  const [editPan, setEditPan] = useState("");
+  const [editAadharNum, setEditAadharNum] = useState("");
+  const [editBankAcNo, setEditBankAcNo] = useState("");
+  const [editIfscCode, setEditIfscCode] = useState("");
+  const [editPermanentAddress, setEditPermanentAddress] = useState("");
+  const [editSpecialization, setEditSpecialization] = useState("");
+  const [editInstituteName, setEditInstituteName] = useState("");
+  const [editYearOfCompletion, setEditYearOfCompletion] = useState("");
+  const [editDateOfExit, setEditDateOfExit] = useState("");
+  const [editPhoto, setEditPhoto] = useState("");
+  const [editAge, setEditAge] = useState("");
+  const [editTab, setEditTab] = useState("Personal");
 
   // Detail Modal State
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -1532,7 +1579,17 @@ export default function AdminDashboard() {
       const roleStr = newRole === "Admin" ? "admin" : (newRole === "System Admin" ? "system admin" : "employee");
       const isPm = newRole === "Project Manager" || newRole === "Admin" || newRole === "System Admin";
       
-      await registerUser(newName, newDept, newJobType, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, "", "", roleStr, currentUser.companyId);
+      const additionalData = {
+        firstName: newFirstName, lastName: newLastName, personalEmail: newPersonalEmail,
+        personalMobileNumber: newPersonalMobileNumber, gender: newGender, maritalStatus: newMaritalStatus,
+        employeeStatus: newEmployeeStatus, sourceOfHire: newSourceOfHire, currentExperience: newCurrentExperience,
+        reportingManager: newReportingManager, uan: newUan, pan: newPan, aadharNum: newAadharNum,
+        bankAcNo: newBankAcNo, ifscCode: newIfscCode, permanentAddress: newPermanentAddress,
+        specialization: newSpecialization, instituteName: newInstituteName, yearOfCompletion: newYearOfCompletion,
+        dateOfExit: newDateOfExit, photo: newPhoto, age: newAge, employeeId: newEmployeeId
+      };
+      
+      await registerUser(newName, newDept, newJobType, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, newEmployeeId, "", roleStr, currentUser.companyId, additionalData);
       showToast(`Employee ${newName} registered successfully. Default password is 'Welcome@123'.`, "success");
       setShowAddModal(false);
       
@@ -1552,6 +1609,12 @@ export default function AdminDashboard() {
       setNewRole("Employee");
       setNewJobType("Full-time");
       setNewDesignation("");
+      setNewFirstName(""); setNewLastName(""); setNewPersonalEmail(""); setNewPersonalMobileNumber("");
+      setNewGender(""); setNewMaritalStatus("Single"); setNewEmployeeStatus("Active"); setNewSourceOfHire("");
+      setNewCurrentExperience(""); setNewReportingManager(""); setNewUan(""); setNewPan("");
+      setNewAadharNum(""); setNewBankAcNo(""); setNewIfscCode(""); setNewPermanentAddress("");
+      setNewSpecialization(""); setNewInstituteName(""); setNewYearOfCompletion(""); setNewDateOfExit("");
+      setNewEmployeeId(""); setNewPhoto(""); setNewAge(""); setNewAddTab("Personal");
       
       // Refresh list
       loadDirectoryData();
@@ -1579,6 +1642,29 @@ export default function AdminDashboard() {
     setEditProgram(user.programType || "Internship");
     setEditTasks(user.tasks || []);
     setEditEmployeeId(user.employeeId || "");
+    setEditFirstName(user.firstName || "");
+    setEditLastName(user.lastName || "");
+    setEditPersonalEmail(user.personalEmail || "");
+    setEditPersonalMobileNumber(user.personalMobileNumber || "");
+    setEditGender(user.gender || "");
+    setEditMaritalStatus(user.maritalStatus || "Single");
+    setEditEmployeeStatus(user.employeeStatus || "Active");
+    setEditSourceOfHire(user.sourceOfHire || "");
+    setEditCurrentExperience(user.currentExperience || "");
+    setEditReportingManager(user.reportingManager || "");
+    setEditUan(user.uan || "");
+    setEditPan(user.pan || "");
+    setEditAadharNum(user.aadharNum || "");
+    setEditBankAcNo(user.bankAcNo || "");
+    setEditIfscCode(user.ifscCode || "");
+    setEditPermanentAddress(user.permanentAddress || "");
+    setEditSpecialization(user.specialization || "");
+    setEditInstituteName(user.instituteName || "");
+    setEditYearOfCompletion(user.yearOfCompletion || "");
+    setEditDateOfExit(user.dateOfExit || "");
+    setEditPhoto(user.photo || "");
+    setEditAge(user.age || "");
+    setEditTab("Personal");
     
     let currentRole = "Employee";
     if (user.role === "admin") currentRole = "Admin";
@@ -1601,6 +1687,17 @@ export default function AdminDashboard() {
     
     setActionLoading(true);
     try {
+      const additionalData = {
+        firstName: editFirstName, lastName: editLastName, personalEmail: editPersonalEmail,
+        personalMobileNumber: editPersonalMobileNumber, gender: editGender, maritalStatus: editMaritalStatus,
+        employeeStatus: editEmployeeStatus, sourceOfHire: editSourceOfHire, currentExperience: editCurrentExperience,
+        reportingManager: editReportingManager, uan: editUan, pan: editPan, aadharNum: editAadharNum,
+        bankAcNo: editBankAcNo, ifscCode: editIfscCode, permanentAddress: editPermanentAddress,
+        specialization: editSpecialization, instituteName: editInstituteName, yearOfCompletion: editYearOfCompletion,
+        dateOfExit: editDateOfExit, photo: editPhoto, age: editAge,
+        role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee")
+      };
+
       await updateUserRecord(
         selectedUser.uid, 
         editName, 
@@ -1620,7 +1717,7 @@ export default function AdminDashboard() {
         editDesignation,
         editRole === "Project Manager" || editRole === "Admin" || editRole === "System Admin",
         editEmployeeId,
-        editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee")
+        additionalData
       );
       
       setUsers(prev => prev.map(u => u.uid === selectedUser.uid ? {
@@ -3775,205 +3872,220 @@ export default function AdminDashboard() {
               </button>
             </div>
             
-            <form onSubmit={handleAddNewEmployee} className="flex flex-col max-h-[75vh]">
+                        <form onSubmit={handleAddNewEmployee} className="flex flex-col max-h-[85vh]">
+              {/* TABS */}
+              <div className="flex border-b border-border-card mb-4 overflow-x-auto scrollbar-none">
+                {['Personal', 'Educational', 'Professional', 'Government & Identity', 'Employment', 'Banking'].map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setNewAddTab(tab)}
+                    className={`py-2 px-4 text-xs font-bold whitespace-nowrap ${newAddTab === tab ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-mut hover:text-text-main'}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
               <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Full Name</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="e.g. Marcus Thompson"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Email Address</label>
-                  <input 
-                    type="email" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="e.g. marcus@company.com"
-                    required
-                  />
-                </div>
-              </div>
+                {newAddTab === 'Personal' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1 md:col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Profile Photo (URL)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPhoto} onChange={(e) => setNewPhoto(e.target.value)} placeholder="e.g. https://..." />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Staff ID *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmployeeId} onChange={(e) => setNewEmployeeId(e.target.value)} placeholder="e.g. ST1001" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">First Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newFirstName} onChange={(e) => { setNewFirstName(e.target.value); setNewName(e.target.value + ' ' + newLastName); }} placeholder="e.g. John" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Last Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newLastName} onChange={(e) => { setNewLastName(e.target.value); setNewName(newFirstName + ' ' + e.target.value); }} placeholder="e.g. Doe" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Work Email Address *</label>
+                        <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="e.g. john.doe@company.com" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Personal Email Address</label>
+                        <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPersonalEmail} onChange={(e) => setNewPersonalEmail(e.target.value)} placeholder="e.g. john.doe@gmail.com" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Mobile Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPersonalMobileNumber} onChange={(e) => setNewPersonalMobileNumber(e.target.value)} placeholder="e.g. 9876543210" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Birth</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDob} onChange={(e) => { setNewDob(e.target.value); if(e.target.value) { const age = new Date().getFullYear() - new Date(e.target.value).getFullYear(); setNewAge(age.toString()); } }} max={new Date().toISOString().split("T")[0]} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Age</label>
+                        <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newAge} onChange={(e) => setNewAge(e.target.value)} placeholder="e.g. 28" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Gender</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newGender} onChange={(e) => setNewGender(e.target.value)}>
+                          <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Marital Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newMaritalStatus} onChange={(e) => setNewMaritalStatus(e.target.value)}>
+                          <option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Permanent Address</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPermanentAddress} onChange={(e) => setNewPermanentAddress(e.target.value)} placeholder="e.g. 123 Street Name" />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Domain / Department</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={newDept}
-                  onChange={(e) => setNewDept(e.target.value)}
-                  placeholder="e.g. Engineering"
-                  required
-                />
-              </div>
+                {newAddTab === 'Educational' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Specialization / Degree</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newSpecialization} onChange={(e) => setNewSpecialization(e.target.value)} placeholder="e.g. B.Tech Computer Science" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Institute / College Name</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newInstituteName} onChange={(e) => setNewInstituteName(e.target.value)} placeholder="e.g. MIT" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Year of Completion</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newYearOfCompletion} onChange={(e) => setNewYearOfCompletion(e.target.value)} placeholder="e.g. 2021" />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div className="flex flex-col gap-1 mt-2">
-                <label className="text-xs font-bold text-text-sec">Shift Type</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${newShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
-                    onClick={() => {
-                      setNewShiftType('Morning');
-                      setNewShiftStart('09:00');
-                      setNewShiftEnd('18:00');
-                    }}
-                  >
-                    Morning Shift
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 py-2 px-2 border rounded-[8px] text-[11px] font-bold transition-all cursor-pointer ${newShiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main hover:bg-bg-base'}`}
-                    onClick={() => {
-                      setNewShiftType('Night');
-                      setNewShiftStart('21:00');
-                      setNewShiftEnd('06:00');
-                    }}
-                  >
-                    Night Shift
-                  </button>
-                </div>
-              </div>
+                {newAddTab === 'Professional' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Current Experience (Years)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newCurrentExperience} onChange={(e) => setNewCurrentExperience(e.target.value)} placeholder="e.g. 3.5" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Assigned Projects</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newProject} onChange={(e) => setNewProject(e.target.value)} placeholder="e.g. Web App, API (comma separated)" />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Date of Birth</label>
-                  <input 
-                    type="date" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newDob}
-                    onChange={(e) => setNewDob(e.target.value)}
-                    max={new Date().toISOString().split("T")[0]}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Joining Date</label>
-                  <input 
-                    type="date" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newJoiningDate}
-                    onChange={(e) => setNewJoiningDate(e.target.value)}
-                    max={new Date().toISOString().split("T")[0]}
-                  />
-                </div>
-              </div>
+                {newAddTab === 'Government & Identity' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">UAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newUan} onChange={(e) => setNewUan(e.target.value)} placeholder="e.g. 10002345678" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">PAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPan} onChange={(e) => setNewPan(e.target.value)} placeholder="e.g. ABCDE1234F" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Aadhar Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newAadharNum} onChange={(e) => setNewAadharNum(e.target.value)} placeholder="e.g. 1234 5678 9101" />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Job Type</label>
-                  <select 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newJobType}
-                    onChange={(e) => setNewJobType(e.target.value)}
-                  >
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                    <option value="Contract">Contract</option>
-                    <option value="Internship">Internship</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Designation</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newDesignation}
-                    onChange={(e) => setNewDesignation(e.target.value)}
-                    placeholder="e.g. Frontend Dev"
-                  />
-                </div>
-              </div>
+                {newAddTab === 'Employment' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Department *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="e.g. Engineering" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Designation</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDesignation} onChange={(e) => setNewDesignation(e.target.value)} placeholder="e.g. Developer" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Role</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                          <option value="Employee">Employee</option><option value="Project Manager">Project Manager</option><option value="Admin">Admin</option><option value="System Admin">System Admin</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Job Type</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newJobType} onChange={(e) => setNewJobType(e.target.value)}>
+                          <option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Contract">Contract</option><option value="Internship">Internship</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Employee Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmployeeStatus} onChange={(e) => setNewEmployeeStatus(e.target.value)}>
+                          <option value="Active">Active</option><option value="Inactive">Inactive</option><option value="On Leave">On Leave</option><option value="Terminated">Terminated</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Source of Hire</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newSourceOfHire} onChange={(e) => setNewSourceOfHire(e.target.value)} placeholder="e.g. LinkedIn" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Reporting Manager</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newReportingManager} onChange={(e) => setNewReportingManager(e.target.value)} placeholder="e.g. Jane Doe" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Joining Date</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newJoiningDate} onChange={(e) => setNewJoiningDate(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Exit</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDateOfExit} onChange={(e) => setNewDateOfExit(e.target.value)} />
+                      </div>
+                      
+                      <div className="flex flex-col gap-1 mt-2 col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Shift Type *</label>
+                        <div className="flex gap-2">
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${newShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setNewShiftType('Morning'); setNewShiftStart('09:00'); setNewShiftEnd('18:00'); }}>Morning Shift</button>
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${newShiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setNewShiftType('Night'); setNewShiftStart('21:00'); setNewShiftEnd('06:00'); }}>Night Shift</button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 col-span-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Annual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newAnnual} onChange={(e) => setNewAnnual(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Sick Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newSick} onChange={(e) => setNewSick(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Casual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newCasual} onChange={(e) => setNewCasual(Number(e.target.value))} required />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Assigned Projects (comma separated)</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={newProject}
-                  onChange={(e) => setNewProject(e.target.value)}
-                  placeholder="e.g. Website Redesign, Mobile App"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Role</label>
-                <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                >
-                  <option value="Employee">Employee</option>
-                  <option value="Project Manager">Project Manager</option>
-                  <option value="Admin">Admin</option>
-                  <option value="System Admin">System Admin</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Annual Leaves</label>
-                  <input 
-                    type="number" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newAnnual}
-                    onChange={(e) => setNewAnnual(Number(e.target.value))}
-                    min="0"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Sick Leaves</label>
-                  <input 
-                    type="number" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newSick}
-                    onChange={(e) => setNewSick(Number(e.target.value))}
-                    min="0"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Casual Leaves</label>
-                  <input 
-                    type="number" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={newCasual}
-                    onChange={(e) => setNewCasual(Number(e.target.value))}
-                    min="0"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 bg-brand-primary/5 p-3 rounded-[12px] border border-dashed border-border-card">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-brand-primary">Shift Start</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all" 
-                    value={newShiftStart}
-                    onChange={(e) => setNewShiftStart(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-brand-primary">Shift End</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all" 
-                    value={newShiftEnd}
-                    onChange={(e) => setNewShiftEnd(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
+                {newAddTab === 'Banking' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Bank Account Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newBankAcNo} onChange={(e) => setNewBankAcNo(e.target.value)} placeholder="e.g. 1234567890" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">IFSC Code</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newIfscCode} onChange={(e) => setNewIfscCode(e.target.value)} placeholder="e.g. SBIN0001234" />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
@@ -3987,13 +4099,14 @@ export default function AdminDashboard() {
                 </button>
                 <button 
                   type="submit" 
-                  className="py-2.5 px-5 bg-brand-primary text-white text-xs font-bold rounded-[12px] hover:bg-brand-hover transition-colors cursor-pointer"
+                  className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover shadow-md shadow-brand-primary/20 text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
                   disabled={actionLoading}
                 >
-                  {actionLoading ? "Registering..." : "Add Employee"}
+                  {actionLoading ? "Registering..." : "Add Staff Member"}
                 </button>
               </div>
             </form>
+
           </div>
         </div>,
         document.body
@@ -4013,262 +4126,222 @@ export default function AdminDashboard() {
               </button>
             </div>
             
-            <form onSubmit={handleSaveUserEdit} className="flex flex-col max-h-[75vh]">
-              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Full Name</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Domain / Department</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={editDept}
-                  onChange={(e) => setEditDept(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Employee ID (Optional)</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={editEmployeeId}
-                  onChange={(e) => setEditEmployeeId(e.target.value)}
-                  placeholder="e.g. EMP-001"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Program Type</label>
-                  <select 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editProgram}
-                    onChange={(e) => setEditProgram(e.target.value)}
-                    required
-                  >
-                    <option value="Internship">Internship</option>
-                    <option value="Training">Training</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Shift Presets</label>
-                  <div className="flex gap-1">
-                    {shiftPresets.map((p, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        className="flex-1 py-2 px-1 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-[9px] font-bold transition-all whitespace-nowrap cursor-pointer"
-                        onClick={() => {
-                          setEditShiftStart(p.start);
-                          setEditShiftEnd(p.end);
-                        }}
-                      >
-                        {p.label.split(" ")[0]} {p.label.split(" ")[1]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Date of Birth</label>
-                  <input 
-                    type="date" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editDob}
-                    onChange={(e) => setEditDob(e.target.value)}
-                    max={new Date().toISOString().split("T")[0]}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Joining Date</label>
-                  <input 
-                    type="date" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editJoiningDate}
-                    onChange={(e) => setEditJoiningDate(e.target.value)}
-                    max={new Date().toISOString().split("T")[0]}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Job Type</label>
-                  <select 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editJobType}
-                    onChange={(e) => setEditJobType(e.target.value)}
-                  >
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                    <option value="Contract">Contract</option>
-                    <option value="Internship">Internship</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Designation</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editDesignation}
-                    onChange={(e) => setEditDesignation(e.target.value)}
-                    placeholder="e.g. Frontend Dev"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Assigned Projects (comma separated)</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                  value={editProject}
-                  onChange={(e) => setEditProject(e.target.value)}
-                  placeholder="e.g. Website Redesign, Mobile App"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1 mt-2">
-                <label className="text-xs font-bold text-text-sec">Role</label>
-                <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
-                >
-                  <option value="Employee">Employee</option>
-                  <option value="Project Manager">Project Manager</option>
-                  <option value="Admin">Admin</option>
-                  <option value="System Admin">System Admin</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1 bg-bg-base/30 p-3 rounded-[12px] border border-border-card mb-4">
-                <label className="text-xs font-bold text-text-sec flex justify-between">
-                  Tasks
-                  <button 
+                        <form onSubmit={handleSaveUserEdit} className="flex flex-col max-h-[85vh]">
+              {/* TABS */}
+              <div className="flex border-b border-border-card mb-4 overflow-x-auto scrollbar-none">
+                {['Personal', 'Educational', 'Professional', 'Government & Identity', 'Employment', 'Banking'].map(tab => (
+                  <button
+                    key={tab}
                     type="button"
-                    onClick={() => setEditTasks([...editTasks, { id: Date.now().toString(), title: "", completed: false }])}
-                    className="text-brand-primary hover:text-brand-hover text-[10px]"
+                    onClick={() => setEditTab(tab)}
+                    className={`py-2 px-4 text-xs font-bold whitespace-nowrap ${editTab === tab ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-mut hover:text-text-main'}`}
                   >
-                    + Add Task
+                    {tab}
                   </button>
-                </label>
-                {editTasks.map((task, idx) => (
-                  <div key={task.id || idx} className="flex items-center gap-2 mt-2">
-                    <input 
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={(e) => {
-                        const updated = [...editTasks];
-                        updated[idx].completed = e.target.checked;
-                        setEditTasks(updated);
-                      }}
-                      className="accent-brand-primary cursor-pointer"
-                    />
-                    <input 
-                      type="text" 
-                      className="flex-1 px-2 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-xs text-text-main outline-none"
-                      value={task.title}
-                      onChange={(e) => {
-                        const updated = [...editTasks];
-                        updated[idx].title = e.target.value;
-                        setEditTasks(updated);
-                      }}
-                      placeholder="Task description"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const updated = editTasks.filter((_, i) => i !== idx);
-                        setEditTasks(updated);
-                      }}
-                      className="text-red-500 hover:text-red-600 text-xs"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
                 ))}
-                {editTasks.length === 0 && (
-                  <p className="text-[10px] text-text-mut mt-1">No tasks assigned.</p>
+              </div>
+
+              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
+                {editTab === 'Personal' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1 md:col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Profile Photo (URL)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPhoto} onChange={(e) => setEditPhoto(e.target.value)} placeholder="e.g. https://..." />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Staff ID</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editEmployeeId} onChange={(e) => setEditEmployeeId(e.target.value)} placeholder="e.g. ST1001" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">First Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editFirstName} onChange={(e) => { setEditFirstName(e.target.value); setEditName(e.target.value + ' ' + editLastName); }} placeholder="e.g. John" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Last Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editLastName} onChange={(e) => { setEditLastName(e.target.value); setEditName(editFirstName + ' ' + e.target.value); }} placeholder="e.g. Doe" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Full Name * (Derived)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="e.g. John Doe" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Personal Email Address</label>
+                        <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPersonalEmail} onChange={(e) => setEditPersonalEmail(e.target.value)} placeholder="e.g. john.doe@gmail.com" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Mobile Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPersonalMobileNumber} onChange={(e) => setEditPersonalMobileNumber(e.target.value)} placeholder="e.g. 9876543210" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Birth</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDob} onChange={(e) => { setEditDob(e.target.value); if(e.target.value) { const age = new Date().getFullYear() - new Date(e.target.value).getFullYear(); setEditAge(age.toString()); } }} max={new Date().toISOString().split("T")[0]} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Age</label>
+                        <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editAge} onChange={(e) => setEditAge(e.target.value)} placeholder="e.g. 28" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Gender</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editGender} onChange={(e) => setEditGender(e.target.value)}>
+                          <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Marital Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editMaritalStatus} onChange={(e) => setEditMaritalStatus(e.target.value)}>
+                          <option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Permanent Address</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPermanentAddress} onChange={(e) => setEditPermanentAddress(e.target.value)} placeholder="e.g. 123 Street Name" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Educational' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Specialization / Degree</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editSpecialization} onChange={(e) => setEditSpecialization(e.target.value)} placeholder="e.g. B.Tech Computer Science" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Institute / College Name</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editInstituteName} onChange={(e) => setEditInstituteName(e.target.value)} placeholder="e.g. MIT" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Year of Completion</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editYearOfCompletion} onChange={(e) => setEditYearOfCompletion(e.target.value)} placeholder="e.g. 2021" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Professional' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Current Experience (Years)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editCurrentExperience} onChange={(e) => setEditCurrentExperience(e.target.value)} placeholder="e.g. 3.5" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Assigned Projects</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editProject} onChange={(e) => setEditProject(e.target.value)} placeholder="e.g. Web App, API (comma separated)" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Government & Identity' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">UAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editUan} onChange={(e) => setEditUan(e.target.value)} placeholder="e.g. 10002345678" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">PAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPan} onChange={(e) => setEditPan(e.target.value)} placeholder="e.g. ABCDE1234F" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Aadhar Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editAadharNum} onChange={(e) => setEditAadharNum(e.target.value)} placeholder="e.g. 1234 5678 9101" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Employment' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Department *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDept} onChange={(e) => setEditDept(e.target.value)} placeholder="e.g. Engineering" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Designation</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDesignation} onChange={(e) => setEditDesignation(e.target.value)} placeholder="e.g. Developer" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Role</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                          <option value="Employee">Employee</option><option value="Project Manager">Project Manager</option><option value="Admin">Admin</option><option value="System Admin">System Admin</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Job Type</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editJobType} onChange={(e) => setEditJobType(e.target.value)}>
+                          <option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Contract">Contract</option><option value="Internship">Internship</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Employee Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editEmployeeStatus} onChange={(e) => setEditEmployeeStatus(e.target.value)}>
+                          <option value="Active">Active</option><option value="Inactive">Inactive</option><option value="On Leave">On Leave</option><option value="Terminated">Terminated</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Source of Hire</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editSourceOfHire} onChange={(e) => setEditSourceOfHire(e.target.value)} placeholder="e.g. LinkedIn" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Reporting Manager</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editReportingManager} onChange={(e) => setEditReportingManager(e.target.value)} placeholder="e.g. Jane Doe" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Joining Date</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editJoiningDate} onChange={(e) => setEditJoiningDate(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Exit</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDateOfExit} onChange={(e) => setEditDateOfExit(e.target.value)} />
+                      </div>
+                      
+                      <div className="flex flex-col gap-1 mt-2 col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Shift Type *</label>
+                        <div className="flex gap-2">
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${editShiftStart === '09:00' || editShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setEditShiftType('Morning'); setEditShiftStart('09:00'); setEditShiftEnd('18:00'); }}>Morning Shift</button>
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${editShiftStart === '21:00' || editShiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setEditShiftType('Night'); setEditShiftStart('21:00'); setEditShiftEnd('06:00'); }}>Night Shift</button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 col-span-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Annual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editAnnual} onChange={(e) => setEditAnnual(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Sick Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editSick} onChange={(e) => setEditSick(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Casual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editCasual} onChange={(e) => setEditCasual(Number(e.target.value))} required />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Banking' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Bank Account Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editBankAcNo} onChange={(e) => setEditBankAcNo(e.target.value)} placeholder="e.g. 1234567890" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">IFSC Code</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editIfscCode} onChange={(e) => setEditIfscCode(e.target.value)} placeholder="e.g. SBIN0001234" />
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Annual Leaves</label>
-                  <input 
-                    type="number" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editAnnual}
-                    onChange={(e) => setEditAnnual(Number(e.target.value))}
-                    min="0"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Sick Leaves</label>
-                  <input 
-                    type="number" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editSick}
-                    onChange={(e) => setEditSick(Number(e.target.value))}
-                    min="0"
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Casual Leaves</label>
-                  <input 
-                    type="number" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all" 
-                    value={editCasual}
-                    onChange={(e) => setEditCasual(Number(e.target.value))}
-                    min="0"
-                    required
-                  />
-                </div>
-              </div>
-
-              {selectedUser?.role !== "superadmin" && (
-              <div className="grid grid-cols-2 gap-4 bg-brand-primary/5 p-3 rounded-[12px] border border-dashed border-border-card">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-brand-primary">Shift Start</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all" 
-                    value={editShiftStart}
-                    onChange={(e) => setEditShiftStart(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-brand-primary">Shift End</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card text-text-main text-xs outline-none focus:border-brand-primary transition-all" 
-                    value={editShiftEnd}
-                    onChange={(e) => setEditShiftEnd(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-              )}
-              </div>
-              
               <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
                 <button 
                   type="button" 
@@ -4280,13 +4353,14 @@ export default function AdminDashboard() {
                 </button>
                 <button 
                   type="submit" 
-                  className="py-2.5 px-5 bg-brand-primary text-white text-xs font-bold rounded-[12px] hover:bg-brand-hover transition-colors cursor-pointer"
+                  className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover shadow-md shadow-brand-primary/20 text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
                   disabled={actionLoading}
                 >
                   {actionLoading ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>
+
           </div>
         </div>,
         document.body

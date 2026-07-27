@@ -173,7 +173,7 @@ export const getDbType = () => dbType;
 /**
  * Register a new user
  */
-export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "") => {
+export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "", additionalData = {}) => {
   const finalRole = email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : role;
 
   if (dbType === "firebase") {
@@ -259,7 +259,8 @@ export const registerUser = async (name, department, programType, email, passwor
       designation: cleanValue(designation),
       isProjectManager: !!isProjectManager,
       employeeId: cleanValue(employeeId),
-      companyId: cleanValue(finalCompanyId)
+      companyId: cleanValue(finalCompanyId),
+      ...additionalData
     };
 
     try {
@@ -315,7 +316,8 @@ export const registerUser = async (name, department, programType, email, passwor
       isProjectManager,
       employeeId,
       companyId: companySlug ? (localDb.getCompanies ? localDb.getCompanies() : (typeof getLocalCompanies === 'function' ? getLocalCompanies() : [])).find(c => c.slug?.toLowerCase() === companySlug.toLowerCase())?.id || "" : "",
-      password // storing hashed or plain in local storage for local verification
+      password,
+      ...additionalData
     };
 
     localDb.saveUser(newUser);
@@ -992,7 +994,7 @@ export const getAllRegisteredUsers = async (companyId = "") => {
 /**
  * Update a user record (Admin edit user)
  */
-export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar, dob, joiningDate, projects, tasks, jobType, designation, isProjectManager, employeeId) => {
+export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar, dob, joiningDate, projects, tasks, jobType, designation, isProjectManager, employeeId, additionalData = {}) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", uid);
     const updates = {
@@ -1003,7 +1005,8 @@ export const updateUserRecord = async (uid, name, department, programType, shift
       shiftEnd,
       annualLeaves: Number(annualLeaves),
       sickLeaves: Number(sickLeaves),
-      casualLeaves: Number(casualLeaves)
+      casualLeaves: Number(casualLeaves),
+      ...additionalData
     };
     if (avatar !== undefined) updates.avatar = avatar;
     if (dob !== undefined) updates.dob = dob;
@@ -1028,7 +1031,8 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         shiftEnd,
         annualLeaves: Number(annualLeaves),
         sickLeaves: Number(sickLeaves),
-        casualLeaves: Number(casualLeaves)
+        casualLeaves: Number(casualLeaves),
+        ...additionalData
       };
       if (avatar !== undefined) updatedData.avatar = avatar;
       if (dob !== undefined) updatedData.dob = dob;
@@ -1064,6 +1068,7 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         if (jobType !== undefined) updatedUser.jobType = jobType;
         if (designation !== undefined) updatedUser.designation = designation;
         if (isProjectManager !== undefined) updatedUser.isProjectManager = isProjectManager;
+        Object.assign(updatedUser, additionalData);
         localDb.setCurrentUser(updatedUser);
         notifyAuthListeners(updatedUser);
       }

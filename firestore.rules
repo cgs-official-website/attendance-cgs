@@ -1,19 +1,52 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserRole() == 'admin' || 
+        getUserRole() == 'superadmin' || 
+        getUserRole() == 'system admin'
+      );
+    }
+
     match /companies/{company} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAuthenticated();
     }
+    
     match /companyDomains/{domain} {
       // Public read required for registration check before auth
       allow read: if true;
       // Only authenticated admins can create/update
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.createdBy;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.createdBy;
     }
+    
+    // Rules for Users Collection (Staff Directory Data)
+    match /users/{userId} {
+      // Allow any authenticated user to view the staff directory
+      allow read: if isAuthenticated();
+      // Allow admins to create users, or users to create their own record during signup
+      allow create: if isAdmin() || request.auth.uid == userId;
+      // Allow admins to update any user, and users to update their own basic profile
+      allow update: if isAdmin() || request.auth.uid == userId;
+      // Only admins can delete a user record
+      allow delete: if isAdmin();
+    }
+    
+    // Default fallback for other collections (leaves, attendance, tasks, etc)
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
   }
 }

@@ -1589,7 +1589,7 @@ export default function AdminDashboard() {
         dateOfExit: newDateOfExit, photo: newPhoto, age: newAge, employeeId: newEmployeeId
       };
       
-      await registerUser(newName, newDept, newJobType, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, newEmployeeId, "", roleStr, currentUser.companyId, additionalData);
+      await registerUser(newName, newDept, newProgram, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, newEmployeeId, "", roleStr, currentUser.companyId, additionalData);
       showToast(`Employee ${newName} registered successfully. Default password is 'Welcome@123'.`, "success");
       setShowAddModal(false);
       
@@ -1702,7 +1702,7 @@ export default function AdminDashboard() {
         selectedUser.uid, 
         editName, 
         editDept, 
-        editJobType, 
+        editProgram, 
         editShiftStart, 
         editShiftEnd,
         editAnnual,
@@ -1737,7 +1737,8 @@ export default function AdminDashboard() {
         jobType: editJobType,
         designation: editDesignation,
         role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee"),
-        isProjectManager: editRole === "Project Manager" || editRole === "Admin" || editRole === "System Admin"
+        isProjectManager: editRole === "Project Manager" || editRole === "Admin" || editRole === "System Admin",
+        ...additionalData
       } : u));
       
       showToast("User profile updated successfully.", "success");

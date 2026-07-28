@@ -557,8 +557,9 @@ export default function TaskManagement() {
                     No active tasks.
                   </div>
                 ) : (
-                  activeTasks.map((task) => {
-                    const taskIdx = tasks.findIndex(t => t.id === task.id);
+                  <div className="space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2 pb-2">
+                    {activeTasks.map((task) => {
+                      const taskIdx = tasks.findIndex(t => t.id === task.id);
                     return (
                       <div key={task.id} className="bg-bg-card border border-border-card rounded-[16px] p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group text-left">
                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-primary/60 group-hover:bg-brand-primary transition-colors"></div>
@@ -636,7 +637,8 @@ export default function TaskManagement() {
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  </div>
                 )}
               </div>
 

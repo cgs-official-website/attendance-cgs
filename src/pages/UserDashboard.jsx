@@ -97,6 +97,7 @@ export default function UserDashboard() {
   const [showPayslipModal, setShowPayslipModal] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [companyName, setCompanyName] = useState("");
+  const [companyPayrollSettings, setCompanyPayrollSettings] = useState({ pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0 });
   const [companyLogo, setCompanyLogo] = useState("");
 
   useEffect(() => {

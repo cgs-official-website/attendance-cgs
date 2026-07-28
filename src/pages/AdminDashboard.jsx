@@ -33,7 +33,8 @@ import {
   saveEmployeePayroll,
   deleteEmployeePayroll,
   updateEmployeeGrossSalary,
-  listenToCompany
+  listenToCompany,
+  updateCompanyDetails
 } from "../firebase";
 import { 
   Shield, 
@@ -206,6 +207,8 @@ export default function AdminDashboard() {
   const setActiveTab = (tab) => setSearchParams({ tab });
 
   const [users, setUsers] = useState([]);
+  const [showPayrollSettingsModal, setShowPayrollSettingsModal] = useState(false);
+  const [companyPayrollSettings, setCompanyPayrollSettings] = useState({ pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0 });
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -5399,10 +5402,11 @@ export default function AdminDashboard() {
           const basic = gross * 0.5;
           const hra = basic * 0.4;
           const special = gross - basic - hra;
-          const pf = basic * 0.12;
-          const esi = gross <= 21000 ? gross * 0.0075 : 0;
+          const pf = companyPayrollSettings?.pf ? basic * 0.12 : 0;
+          const esi = (companyPayrollSettings?.esi && gross <= 21000) ? gross * 0.0075 : 0;
           
           const getPTDeduction = (g) => {
+            if (companyPayrollSettings && !companyPayrollSettings.pt) return 0;
             if (g <= 21000) return 0;
             if (g <= 30000) return Math.round((180 / 6) * 100) / 100;
             if (g <= 45000) return Math.round((425 / 6) * 100) / 100;
@@ -5411,10 +5415,11 @@ export default function AdminDashboard() {
             return Math.round((1250 / 6) * 100) / 100;
           };
           const pt = getPTDeduction(gross);
+          const insurance = companyPayrollSettings?.insurance ? Number(companyPayrollSettings.insuranceAmount || 0) : 0;
 
-          const tds = gross > 50000 ? (gross - pf - pt) * 0.05 : 0; // Simplified mock TDS
-          const net = gross - (pf + esi + pt + tds);
-          return { basic, hra, special, pf, esi, pt, tds, net };
+          const tds = gross > 50000 ? (gross - pf - pt - insurance) * 0.05 : 0;
+          const net = gross - (pf + esi + pt + tds + insurance);
+          return { basic, hra, special, pf, esi, pt, tds, insurance, net };
         };
 
         const currentPayroll = staffUsers.map(user => {
@@ -5448,6 +5453,11 @@ export default function AdminDashboard() {
               <div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Payroll Management</h1>
                 <p className="text-sm text-text-sec mt-1">Manage employee salaries, EPF, ESI, and generate payslips complying with Indian Law.</p>
+              </div>
+              <div>
+                <button onClick={() => setShowPayrollSettingsModal(true)} className="flex items-center gap-2 px-4 py-2 bg-bg-card border border-border-card text-text-main text-sm font-bold rounded-[14px] hover:bg-bg-base transition-colors shadow-sm">
+                  <Edit size={16} /> Payroll Settings
+                </button>
               </div>
             </div>
 
@@ -5813,6 +5823,104 @@ export default function AdminDashboard() {
         document.body
       )}
 
+      
+      {/* Payroll Settings Modal */}
+      {showPayrollSettingsModal && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-bg-card w-full max-w-md rounded-[24px] shadow-2xl border border-border-card overflow-hidden animate-scale-up flex flex-col">
+            <div className="px-6 py-4 border-b border-border-card flex items-center justify-between bg-bg-base/50">
+              <h2 className="text-lg font-extrabold text-text-main flex items-center gap-2">
+                <Edit className="text-brand-primary" size={20} />
+                Payroll Settings
+              </h2>
+              <button onClick={() => setShowPayrollSettingsModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1.5 rounded-lg hover:bg-bg-base">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6">
+              <div className="space-y-4">
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div>
+                    <span className="text-sm font-bold text-text-main group-hover:text-brand-primary transition-colors block">Employee Provident Fund (EPF)</span>
+                    <span className="text-xs text-text-sec">Enable 12% EPF deduction</span>
+                  </div>
+                  <div className={`w-12 h-6 rounded-full p-1 transition-colors ${companyPayrollSettings.pf ? 'bg-brand-primary' : 'bg-border-card'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white transition-transform ${companyPayrollSettings.pf ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                  <input type="checkbox" className="hidden" checked={companyPayrollSettings.pf} onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, pf: e.target.checked }))} />
+                </label>
+                
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div>
+                    <span className="text-sm font-bold text-text-main group-hover:text-brand-primary transition-colors block">Employee State Insurance (ESI)</span>
+                    <span className="text-xs text-text-sec">Enable 0.75% ESI deduction</span>
+                  </div>
+                  <div className={`w-12 h-6 rounded-full p-1 transition-colors ${companyPayrollSettings.esi ? 'bg-brand-primary' : 'bg-border-card'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white transition-transform ${companyPayrollSettings.esi ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                  <input type="checkbox" className="hidden" checked={companyPayrollSettings.esi} onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, esi: e.target.checked }))} />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div>
+                    <span className="text-sm font-bold text-text-main group-hover:text-brand-primary transition-colors block">Professional Tax (PT)</span>
+                    <span className="text-xs text-text-sec">Enable standard PT deduction</span>
+                  </div>
+                  <div className={`w-12 h-6 rounded-full p-1 transition-colors ${companyPayrollSettings.pt ? 'bg-brand-primary' : 'bg-border-card'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white transition-transform ${companyPayrollSettings.pt ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                  <input type="checkbox" className="hidden" checked={companyPayrollSettings.pt} onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, pt: e.target.checked }))} />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div>
+                    <span className="text-sm font-bold text-text-main group-hover:text-brand-primary transition-colors block">Health Insurance</span>
+                    <span className="text-xs text-text-sec">Enable company insurance deduction</span>
+                  </div>
+                  <div className={`w-12 h-6 rounded-full p-1 transition-colors ${companyPayrollSettings.insurance ? 'bg-brand-primary' : 'bg-border-card'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white transition-transform ${companyPayrollSettings.insurance ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                  <input type="checkbox" className="hidden" checked={companyPayrollSettings.insurance} onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, insurance: e.target.checked }))} />
+                </label>
+                
+                {companyPayrollSettings.insurance && (
+                  <div className="pt-2 animate-fade-in">
+                    <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Insurance Deduction Amount (₹)</label>
+                    <input 
+                      type="number" 
+                      value={companyPayrollSettings.insuranceAmount || 0}
+                      onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, insuranceAmount: Number(e.target.value) }))}
+                      className="w-full bg-bg-base border border-border-card text-text-main text-sm rounded-[12px] px-4 py-2.5 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition-all"
+                      placeholder="e.g. 500"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-6 border-t border-border-card flex gap-3">
+              <button onClick={() => setShowPayrollSettingsModal(false)} className="flex-1 py-2.5 rounded-[12px] font-bold text-xs bg-bg-base text-text-main hover:bg-border-card transition-colors">Cancel</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await updateCompanyDetails(currentUser.companyId, { payrollSettings: companyPayrollSettings });
+                    setShowPayrollSettingsModal(false);
+                    showToast("Payroll settings updated successfully", "success");
+                  } catch (e) {
+                    console.error('Update Settings Error:', e);
+                    showToast("Failed to update settings", "error");
+                  }
+                }} 
+                className="flex-1 py-2.5 rounded-[12px] font-bold text-xs bg-brand-primary text-white hover:bg-brand-hover transition-colors shadow-lg shadow-brand-primary/20"
+              >
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      
       {activeTab === "domains" && (
         <DomainManager companyId={currentUser.companyId} />
       )}

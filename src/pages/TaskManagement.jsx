@@ -320,7 +320,7 @@ export default function TaskManagement() {
       const status = t.completed ? "Done" : "Active";
       tableData.push([{ content: t.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
       
-      const reports = taskReports[t.id] || [];
+      const reports = [...(taskReports[t.id] || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       if (reports.length > 0) {
         reports.forEach(r => {
           tableData.push([
@@ -369,7 +369,7 @@ export default function TaskManagement() {
         "Update Timestamp": ""
       });
       
-      const reports = taskReports[t.id] || [];
+      const reports = [...(taskReports[t.id] || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       if (reports.length > 0) {
         reports.forEach(r => {
           tableData.push({
@@ -416,7 +416,7 @@ export default function TaskManagement() {
     const status = task.completed ? "Done" : "Active";
     tableData.push([{ content: task.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${task.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
     
-    const reports = taskReports[task.id] || [];
+    const reports = [...(taskReports[task.id] || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     if (reports.length > 0) {
       reports.forEach(r => {
         tableData.push([

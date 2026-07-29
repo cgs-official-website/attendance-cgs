@@ -488,6 +488,7 @@ export default function AdminDashboard() {
     const numberToWords = (num) => {
     const a = ['','one ','two ','three ','four ', 'five ','six ','seven ','eight ','nine ','ten ','eleven ','twelve ','thirteen ','fourteen ','fifteen ','sixteen ','seventeen ','eighteen ','nineteen '];
     const b = ['', '', 'twenty','thirty','forty','fifty', 'sixty','seventy','eighty','ninety'];
+    num = Math.round(Number(num));
     if ((num = num.toString()).length > 9) return 'overflow';
     const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
     if (!n) return '';
@@ -5910,9 +5911,9 @@ export default function AdminDashboard() {
                 <div className="col-span-2 text-right">{selectedPayrollUser.net.toFixed(2)}</div>
               </div>
 
-              <p className="text-xs text-black mt-6 mb-4">Net Amount in words: ( {numberToWords(selectedPayrollUser.net).toUpperCase()}ONLY )</p>
+              <p className="text-xs text-black mt-6 mb-4">Net Amount in words: ( {numberToWords(selectedPayrollUser.net).toUpperCase()} ONLY )</p>
               <p className="text-xs text-black font-bold mb-4">Disclaimer: This is a system generated payslip, does not require any signature.</p>
-              <div className="mt-12 pt-4 border-t-2 border-black flex justify-center items-center gap-2 pb-2 opacity-80">
+              <div className="mt-12 flex justify-center items-center gap-2 pb-2 opacity-80">
                 <span className="text-sm font-extrabold text-black">Powered by</span>
                 <img src={zunaLogo} alt="Zuna Logo" className="h-6 object-contain" />
                 <span className="text-sm font-extrabold text-black ml-1">Simplify payroll and compliance.</span>

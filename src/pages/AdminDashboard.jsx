@@ -5946,6 +5946,8 @@ export default function AdminDashboard() {
                     esi: selectedPayrollUser.esi,
                     pt: selectedPayrollUser.pt,
                     tds: selectedPayrollUser.tds,
+                    lopAmount: selectedPayrollUser.lopAmount || 0,
+                    lopsDays: selectedPayrollUser.lopsDays || 0,
                     net: selectedPayrollUser.net
                   })
                   .then(() => showToast("Payslip published to employee portal", "success"))

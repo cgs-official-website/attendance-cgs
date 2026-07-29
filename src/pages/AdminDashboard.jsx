@@ -5814,8 +5814,8 @@ export default function AdminDashboard() {
                   {companyPayrollSettings?.payslipFields?.grade !== false && selectedPayrollUser.grade && <div className="grid grid-cols-3"><span className="col-span-1">Grade</span><span className="col-span-2">: {selectedPayrollUser.grade}</span></div>}
                   {companyPayrollSettings?.payslipFields?.pfNo !== false && selectedPayrollUser.pfNo && <div className="grid grid-cols-3"><span className="col-span-1">PF No.</span><span className="col-span-2">: {selectedPayrollUser.pfNo}</span></div>}
                   {companyPayrollSettings?.payslipFields?.uan !== false && selectedPayrollUser.uan && <div className="grid grid-cols-3"><span className="col-span-1">PF UAN</span><span className="col-span-2">: {selectedPayrollUser.uan}</span></div>}
-                  {companyPayrollSettings?.payslipFields?.bankAcNo !== false && selectedPayrollUser.bankAcNo && <div className="grid grid-cols-3"><span className="col-span-1">Bank Account No.</span><span className="col-span-2">: {selectedPayrollUser.bankAcNo}</span></div>}
-                  {companyPayrollSettings?.payslipFields?.ifscCode !== false && selectedPayrollUser.ifscCode && <div className="grid grid-cols-3"><span className="col-span-1">IFSC</span><span className="col-span-2">: {selectedPayrollUser.ifscCode}</span></div>}
+                  {companyPayrollSettings?.payslipFields?.bankAcNo !== false && <div className="grid grid-cols-3"><span className="col-span-1">Bank A/C No.</span><span className="col-span-2">: {selectedPayrollUser.bankAcNo || 'NaN'}</span></div>}
+                  {companyPayrollSettings?.payslipFields?.ifscCode !== false && <div className="grid grid-cols-3"><span className="col-span-1">IFSC</span><span className="col-span-2">: {selectedPayrollUser.ifscCode || 'NaN'}</span></div>}
                 </div>
                 {/* Right Column */}
                 <div>
@@ -5911,6 +5911,12 @@ export default function AdminDashboard() {
 
               <p className="text-xs text-black mt-6 mb-4">Net Amount in words: ( {numberToWords(selectedPayrollUser.net).toUpperCase()}ONLY )</p>
               <p className="text-xs text-black font-bold mb-4">Disclaimer: This is a system generated payslip, does not require any signature.</p>
+              <div className="mt-12 pt-4 border-t-2 border-black flex justify-center items-center gap-2 pb-2 opacity-80">
+                <span className="text-sm font-extrabold text-black">Powered by</span>
+                <img src="/zuna-logo.png" alt="Zuna Logo" className="h-6 object-contain" />
+                <span className="text-sm font-extrabold text-black ml-1">Simplify payroll and compliance.</span>
+              </div>
+
             </div>
             <div className="px-6 py-4 border-t border-border-card flex flex-col sm:flex-row justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
               <button onClick={() => setShowPayslipModal(false)} className="w-full sm:w-auto px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>

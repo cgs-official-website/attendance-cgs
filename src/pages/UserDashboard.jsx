@@ -1075,7 +1075,7 @@ export default function UserDashboard() {
                     {companyPayrollSettings?.payslipFields?.costCenter !== false && currentUser.costCenter && <div className="grid grid-cols-3"><span className="col-span-1">Cost Center</span><span className="col-span-2">: {currentUser.costCenter}</span></div>}
                     {companyPayrollSettings?.payslipFields?.pan !== false && currentUser.pan && <div className="grid grid-cols-3"><span className="col-span-1">PAN</span><span className="col-span-2">: {currentUser.pan}</span></div>}
                     {currentUser.gender && <div className="grid grid-cols-3"><span className="col-span-1">Gender</span><span className="col-span-2">: {currentUser.gender}</span></div>}
-                    <div className="grid grid-cols-3"><span className="col-span-1">Loss of Pay</span><span className="col-span-2">: 0.00</span></div>
+                    <div className="grid grid-cols-3"><span className="col-span-1">Loss of Pay</span><span className="col-span-2">: {(selectedPayslip.lopAmount || 0).toFixed(2)}</span></div>
                   </div>
                 </div>
 
@@ -1111,7 +1111,7 @@ export default function UserDashboard() {
                   <div className="col-span-2 text-right">0.00</div>
                   {/* Loss of Pay deduction could go here, currently 0 */}
                   <div className="col-span-3 font-semibold">Loss of Pay</div>
-                  <div className="col-span-1 text-right">0.00</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.lopAmount || 0).toFixed(2)}</div>
 
                   {/* Row 3 */}
                   {selectedPayslip.special > 0 ? (
@@ -1147,7 +1147,7 @@ export default function UserDashboard() {
                   <div className="col-span-2 text-right">{selectedPayslip.grossSalary.toFixed(2)}</div>
                   <div className="col-span-2 text-right">0.00</div>
                   <div className="col-span-3">Gross Deduction</div>
-                  <div className="col-span-1 text-right">{(selectedPayslip.pf + selectedPayslip.pt + selectedPayslip.esi + selectedPayslip.tds).toFixed(2)}</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.pf + selectedPayslip.pt + selectedPayslip.esi + selectedPayslip.tds + (selectedPayslip.lopAmount || 0)).toFixed(2)}</div>
                 </div>
 
                 <div className="border-t-2 border-black w-full mb-2"></div>

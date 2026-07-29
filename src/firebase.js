@@ -3308,15 +3308,18 @@ export const deleteEmployeePayroll = async (companyId, employeeId, month, year) 
   }
 };
 
-export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
+export const updateEmployeeGrossSalary = async (userId, grossSalary, paidDays) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", userId);
-    await updateDoc(docRef, { grossSalary: Number(grossSalary) });
+    const updates = { grossSalary: Number(grossSalary) };
+    if (paidDays !== undefined) updates.paidDays = Number(paidDays);
+    await updateDoc(docRef, updates);
   } else {
     const current = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
     const idx = current.findIndex(u => u.uid === userId);
     if (idx >= 0) {
       current[idx].grossSalary = Number(grossSalary);
+      if (paidDays !== undefined) current[idx].paidDays = Number(paidDays);
       localStorage.setItem("att_users", JSON.stringify(current));
     }
   }

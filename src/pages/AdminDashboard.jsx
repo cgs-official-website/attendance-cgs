@@ -470,6 +470,7 @@ export default function AdminDashboard() {
   const [showDeletePayslipConfirm, setShowDeletePayslipConfirm] = useState(false);
   const [selectedPayrollUser, setSelectedPayrollUser] = useState(null);
   const [editSalaryValue, setEditSalaryValue] = useState("");
+  const [editPaidDaysValue, setEditPaidDaysValue] = useState("");
 
   useEffect(() => {
     if (activeTab === "payroll" && currentUser?.role === "admin") {
@@ -5426,12 +5427,17 @@ export default function AdminDashboard() {
       {/* ------------------ VIEW: PAYROLL (INDIA) ------------------ */}
       {activeTab === "payroll" && (() => {
         // Calculations for Indian Payroll
-        const calculatePayroll = (gross) => {
-          const basic = gross * 0.5;
+        const calculatePayroll = (gross, paidDays, workingDays) => {
+          const lopsDays = Math.max(0, workingDays - paidDays);
+          const actualGross = (gross / workingDays) * paidDays;
+          const lopAmount = gross - actualGross;
+
+          const basic = actualGross * 0.5;
           const hra = basic * 0.4;
-          const special = gross - basic - hra;
+          const special = actualGross - basic - hra;
+          
           const pf = companyPayrollSettings?.pf ? basic * 0.12 : 0;
-          const esi = (companyPayrollSettings?.esi && gross <= 21000) ? gross * 0.0075 : 0;
+          const esi = (companyPayrollSettings?.esi && actualGross <= 21000) ? actualGross * 0.0075 : 0;
           
           const getPTDeduction = (g) => {
             if (companyPayrollSettings && !companyPayrollSettings.pt) return 0;
@@ -5442,18 +5448,19 @@ export default function AdminDashboard() {
             if (g <= 75000) return Math.round((1025 / 6) * 100) / 100;
             return Math.round((1250 / 6) * 100) / 100;
           };
-          const pt = getPTDeduction(gross);
+          const pt = getPTDeduction(actualGross);
           const insurance = companyPayrollSettings?.insurance ? Number(companyPayrollSettings.insuranceAmount || 0) : 0;
 
-          const tds = gross > 50000 ? (gross - pf - pt - insurance) * 0.05 : 0;
-          const net = gross - (pf + esi + pt + tds + insurance);
-          return { basic, hra, special, pf, esi, pt, tds, insurance, net };
+          const tds = actualGross > 50000 ? (actualGross - pf - pt - insurance) * 0.05 : 0;
+          const net = actualGross - (pf + esi + pt + tds + insurance);
+          return { basic, hra, special, pf, esi, pt, tds, insurance, net, actualGross, lopAmount, lopsDays };
         };
 
         const currentPayroll = staffUsers.map(user => {
-          // If the user doesn't have a grossSalary, set to 0. It must be manually assigned.
           const gross = user.grossSalary || 0;
-          const calc = calculatePayroll(gross);
+          const workingDays = companyPayrollSettings?.workingDays || 30;
+          const paidDays = user.paidDays !== undefined ? user.paidDays : workingDays;
+          const calc = calculatePayroll(gross, paidDays, workingDays);
           
           return {
             ...user,
@@ -5606,6 +5613,7 @@ export default function AdminDashboard() {
                                 onClick={() => {
                                   setSelectedPayrollUser(user);
                                   setEditSalaryValue(user.gross);
+                                  setEditPaidDaysValue(user.paidDays !== undefined ? user.paidDays : (companyPayrollSettings?.workingDays || 30));
                                   setShowEditSalaryModal(true);
                                 }}
                                 className="p-1.5 text-text-mut hover:text-brand-primary bg-bg-base hover:bg-brand-primary/10 rounded-lg transition-colors border border-border-card/60"
@@ -5685,7 +5693,7 @@ export default function AdminDashboard() {
               <button 
                 onClick={async () => {
                   try {
-                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue);
+                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue, editPaidDaysValue !== "" ? editPaidDaysValue : (companyPayrollSettings?.workingDays || 30));
                     showToast("Salary updated successfully", "success");
                     setShowEditSalaryModal(false);
                     loadDirectoryData();
@@ -5757,7 +5765,7 @@ export default function AdminDashboard() {
                   {companyPayrollSettings?.payslipFields?.costCenter !== false && selectedPayrollUser.costCenter && <div className="grid grid-cols-3"><span className="col-span-1">Cost Center</span><span className="col-span-2">: {selectedPayrollUser.costCenter}</span></div>}
                   {companyPayrollSettings?.payslipFields?.pan !== false && selectedPayrollUser.pan && <div className="grid grid-cols-3"><span className="col-span-1">PAN</span><span className="col-span-2">: {selectedPayrollUser.pan}</span></div>}
                   {selectedPayrollUser.gender && <div className="grid grid-cols-3"><span className="col-span-1">Gender</span><span className="col-span-2">: {selectedPayrollUser.gender}</span></div>}
-                  <div className="grid grid-cols-3"><span className="col-span-1">Loss of Pay</span><span className="col-span-2">: 0.00</span></div>
+                  <div className="grid grid-cols-3"><span className="col-span-1">Loss of Pay</span><span className="col-span-2">: {(selectedPayrollUser.lopAmount || 0).toFixed(2)}</span></div>
                 </div>
               </div>
 
@@ -5793,7 +5801,7 @@ export default function AdminDashboard() {
                 <div className="col-span-2 text-right">0.00</div>
                 {/* Loss of Pay deduction could go here, currently 0 */}
                 <div className="col-span-3 font-semibold">Loss of Pay</div>
-                <div className="col-span-1 text-right">0.00</div>
+                <div className="col-span-1 text-right">{(selectedPayrollUser.lopAmount || 0).toFixed(2)}</div>
 
                 {/* Row 3 */}
                 {selectedPayrollUser.special > 0 ? (
@@ -5829,7 +5837,7 @@ export default function AdminDashboard() {
                 <div className="col-span-2 text-right">{selectedPayrollUser.gross.toFixed(2)}</div>
                 <div className="col-span-2 text-right">0.00</div>
                 <div className="col-span-3">Gross Deduction</div>
-                <div className="col-span-1 text-right">{(selectedPayrollUser.pf + selectedPayrollUser.pt + selectedPayrollUser.esi + selectedPayrollUser.tds).toFixed(2)}</div>
+                <div className="col-span-1 text-right">{(selectedPayrollUser.pf + selectedPayrollUser.pt + selectedPayrollUser.esi + selectedPayrollUser.tds + (selectedPayrollUser.lopAmount || 0)).toFixed(2)}</div>
               </div>
 
               <div className="border-t-2 border-black w-full mb-2"></div>

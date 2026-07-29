@@ -473,7 +473,7 @@ export default function AdminDashboard() {
   const [showDeletePayslipConfirm, setShowDeletePayslipConfirm] = useState(false);
   const [selectedPayrollUser, setSelectedPayrollUser] = useState(null);
   const [editSalaryValue, setEditSalaryValue] = useState("");
-  const [editPaidDaysValue, setEditPaidDaysValue] = useState("");
+  const [editLeaveDaysValue, setEditLeaveDaysValue] = useState("");
 
   useEffect(() => {
     if (activeTab === "payroll" && currentUser?.role === "admin") {
@@ -5616,7 +5616,1886 @@ export default function AdminDashboard() {
                                 onClick={() => {
                                   setSelectedPayrollUser(user);
                                   setEditSalaryValue(user.gross);
-                                  setEditPaidDaysValue(user.paidDays !== undefined ? user.paidDays : (companyPayrollSettings?.workingDays || 30));
+                                  setEditLeaveDaysValue(user.paidDays !== undefined ? Math.max(0, (companyPayrollSettings?.workingDays || 30) - user.paidDays) : 0);
+                                  setShowEditSalaryModal(true);
+                                }}
+                                className="p-1.5 text-text-mut hover:text-brand-primary bg-bg-base hover:bg-brand-primary/10 rounded-lg transition-colors border border-border-card/60"
+                                title="Edit Salary Structure"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setSelectedPayrollUser(user);
+                                  setShowPayslipModal(true);
+                                }}
+                                className="p-1.5 text-text-mut hover:text-emerald-500 bg-bg-base hover:bg-emerald-500/10 rounded-lg transition-colors border border-border-card/60"
+                                title="View Payslip"
+                              >
+                                <FileText size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ------------------ VIEW: EXTERNAL LINKS ------------------ */}
+      {activeTab === "external-links" && (
+        <div className="animate-fade-in">
+          <ExternalLinksTab 
+            currentUser={currentUser}
+            users={users}
+            showToast={showToast}
+          />
+        </div>
+      )}
+
+      {/* ------------------ MODALS ------------------ */}
+      {showEditSalaryModal && selectedPayrollUser && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-bg-card w-full max-w-md rounded-[24px] border border-border-card shadow-2xl overflow-hidden animate-slide-up flex flex-col relative my-auto">
+            <div className="px-6 py-5 border-b border-border-card flex items-center justify-between sticky top-0 bg-bg-card z-10 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center">
+                  <Banknote className="text-brand-primary" size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-text-main">Update Salary</h3>
+                  <p className="text-[10px] text-text-sec mt-0.5">{selectedPayrollUser.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditSalaryModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1 rounded-lg hover:bg-bg-base"><X size={18} /></button>
+            </div>
+                        <div className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-text-sec block mb-2">Gross Salary (Monthly)</label>
+                <div className="relative">
+                  <IndianRupee size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut" />
+                  <input 
+                    type="number"
+                    value={editSalaryValue}
+                    onChange={(e) => setEditSalaryValue(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-bg-base/50 border border-border-card rounded-[12px] text-sm text-text-main outline-none focus:border-brand-primary transition-colors font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-text-sec block mb-2">Number of Leave (LOP Days)</label>
+                <div className="relative">
+                  <input 
+                    type="number"
+                    value={editLeaveDaysValue}
+                    onChange={(e) => setEditLeaveDaysValue(e.target.value)}
+                    className="w-full px-4 py-3 bg-bg-base/50 border border-border-card rounded-[12px] text-sm text-text-main outline-none focus:border-brand-primary transition-colors font-bold"
+                  />
+                </div>
+              </div>
+
+              {(() => {
+                const wDays = companyPayrollSettings?.workingDays || 30;
+                const leaves = Number(editLeaveDaysValue) || 0;
+                const paid = Math.max(0, wDays - leaves);
+                const g = Number(editSalaryValue) || 0;
+                const actualGross = (g / wDays) * paid;
+                const lop = g - actualGross;
+
+                // Full calculation for Net Salary
+                const basic = actualGross * 0.5;
+                const pf = companyPayrollSettings?.pf ? basic * 0.12 : 0;
+                const esi = (companyPayrollSettings?.esi && actualGross <= 21000) ? actualGross * 0.0075 : 0;
+                const getPTDeduction = (grossAmt) => {
+                  if (companyPayrollSettings && !companyPayrollSettings.pt) return 0;
+                  if (grossAmt <= 21000) return 0;
+                  if (grossAmt <= 30000) return Math.round((180 / 6) * 100) / 100;
+                  if (grossAmt <= 45000) return Math.round((425 / 6) * 100) / 100;
+                  if (grossAmt <= 60000) return Math.round((930 / 6) * 100) / 100;
+                  if (grossAmt <= 75000) return Math.round((1025 / 6) * 100) / 100;
+                  return Math.round((1250 / 6) * 100) / 100;
+                };
+                const pt = getPTDeduction(actualGross);
+                const insurance = companyPayrollSettings?.insurance ? Number(companyPayrollSettings.insuranceAmount || 0) : 0;
+                const tds = actualGross > 50000 ? (actualGross - pf - pt - insurance) * 0.05 : 0;
+                const net = actualGross - (pf + esi + pt + tds + insurance);
+
+                return (
+                  <div className="bg-bg-base border border-border-card rounded-[12px] p-4 flex flex-col gap-2 mt-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-text-sec">Loss of Pay (LOP Amount):</span>
+                      <span className="font-extrabold text-brand-danger">₹{lop.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-text-sec">Final Net Salary:</span>
+                      <span className="font-extrabold text-emerald-500">₹{net.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="mt-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-[12px]">
+                <p className="text-[10px] text-amber-600 font-semibold leading-relaxed">
+                  Saving this will recalculate EPF, ESI, HRA, and PT dynamically.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
+              <button onClick={() => setShowEditSalaryModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Cancel</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    const leaves = Number(editLeaveDaysValue) || 0;
+                    const wDays = companyPayrollSettings?.workingDays || 30;
+                    const paidDays = Math.max(0, wDays - leaves);
+                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue, paidDays);
+                    showToast("Salary updated successfully", "success");
+                    setShowEditSalaryModal(false);
+                    loadDirectoryData();
+                  } catch (e) {
+                    showToast("Failed to update salary", "error");
+                  }
+                }} 
+                disabled={!editSalaryValue || editSalaryValue <= 0 || editLeaveDaysValue === ""}
+                className="px-6 py-2.5 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-lg shadow-brand-primary/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Changes
+              </button>
+            </div>            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Add New Employee Modal */}
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main">Add New Employee</h3>
+              <button 
+                onClick={() => setShowAddModal(false)} 
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+                        <form onSubmit={handleAddNewEmployee} className="flex flex-col max-h-[85vh]">
+              {/* TABS */}
+              <div className="flex border-b border-border-card mb-4 overflow-x-auto scrollbar-none">
+                {['Personal', 'Educational', 'Professional', 'Government & Identity', 'Employment', 'Banking'].map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setNewAddTab(tab)}
+                    className={`py-2 px-4 text-xs font-bold whitespace-nowrap ${newAddTab === tab ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-mut hover:text-text-main'}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
+                {newAddTab === 'Personal' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1 md:col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Profile Photo (URL)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPhoto} onChange={(e) => setNewPhoto(e.target.value)} placeholder="e.g. https://..." />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Staff ID *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmployeeId} onChange={(e) => setNewEmployeeId(e.target.value)} placeholder="e.g. ST1001" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">First Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newFirstName} onChange={(e) => { setNewFirstName(e.target.value); setNewName(e.target.value + ' ' + newLastName); }} placeholder="e.g. John" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Last Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newLastName} onChange={(e) => { setNewLastName(e.target.value); setNewName(newFirstName + ' ' + e.target.value); }} placeholder="e.g. Doe" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Work Email Address *</label>
+                        <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="e.g. john.doe@company.com" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Personal Email Address</label>
+                        <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPersonalEmail} onChange={(e) => setNewPersonalEmail(e.target.value)} placeholder="e.g. john.doe@gmail.com" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Mobile Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPersonalMobileNumber} onChange={(e) => setNewPersonalMobileNumber(e.target.value)} placeholder="e.g. 9876543210" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Birth</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDob} onChange={(e) => { setNewDob(e.target.value); if(e.target.value) { const age = new Date().getFullYear() - new Date(e.target.value).getFullYear(); setNewAge(age.toString()); } }} max={new Date().toISOString().split("T")[0]} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Age</label>
+                        <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newAge} onChange={(e) => setNewAge(e.target.value)} placeholder="e.g. 28" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Gender</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newGender} onChange={(e) => setNewGender(e.target.value)}>
+                          <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Marital Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newMaritalStatus} onChange={(e) => setNewMaritalStatus(e.target.value)}>
+                          <option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Permanent Address</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPermanentAddress} onChange={(e) => setNewPermanentAddress(e.target.value)} placeholder="e.g. 123 Street Name" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {newAddTab === 'Educational' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Specialization / Degree</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newSpecialization} onChange={(e) => setNewSpecialization(e.target.value)} placeholder="e.g. B.Tech Computer Science" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Institute / College Name</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newInstituteName} onChange={(e) => setNewInstituteName(e.target.value)} placeholder="e.g. MIT" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Year of Completion</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newYearOfCompletion} onChange={(e) => setNewYearOfCompletion(e.target.value)} placeholder="e.g. 2021" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {newAddTab === 'Professional' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Current Experience (Years)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newCurrentExperience} onChange={(e) => setNewCurrentExperience(e.target.value)} placeholder="e.g. 3.5" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Assigned Projects</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newProject} onChange={(e) => setNewProject(e.target.value)} placeholder="e.g. Web App, API (comma separated)" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {newAddTab === 'Government & Identity' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">UAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newUan} onChange={(e) => setNewUan(e.target.value)} placeholder="e.g. 10002345678" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">PAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPan} onChange={(e) => setNewPan(e.target.value)} placeholder="e.g. ABCDE1234F" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Aadhar Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newAadharNum} onChange={(e) => setNewAadharNum(e.target.value)} placeholder="e.g. 1234 5678 9101" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {newAddTab === 'Employment' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Department *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="e.g. Engineering" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Designation</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDesignation} onChange={(e) => setNewDesignation(e.target.value)} placeholder="e.g. Developer" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Role</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                          <option value="Employee">Employee</option><option value="Project Manager">Project Manager</option><option value="Admin">Admin</option><option value="System Admin">System Admin</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Job Type</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newJobType} onChange={(e) => setNewJobType(e.target.value)}>
+                          <option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Contract">Contract</option><option value="Internship">Internship</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Employee Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmployeeStatus} onChange={(e) => setNewEmployeeStatus(e.target.value)}>
+                          <option value="Active">Active</option><option value="Inactive">Inactive</option><option value="On Leave">On Leave</option><option value="Terminated">Terminated</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Source of Hire</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newSourceOfHire} onChange={(e) => setNewSourceOfHire(e.target.value)} placeholder="e.g. LinkedIn" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Reporting Manager</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newReportingManager} onChange={(e) => setNewReportingManager(e.target.value)} placeholder="e.g. Jane Doe" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Joining Date</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newJoiningDate} onChange={(e) => setNewJoiningDate(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Exit</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDateOfExit} onChange={(e) => setNewDateOfExit(e.target.value)} />
+                      </div>
+                      
+                      <div className="flex flex-col gap-1 mt-2 col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Shift Type *</label>
+                        <div className="flex gap-2">
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${newShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setNewShiftType('Morning'); setNewShiftStart('09:00'); setNewShiftEnd('18:00'); }}>Morning Shift</button>
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${newShiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setNewShiftType('Night'); setNewShiftStart('21:00'); setNewShiftEnd('06:00'); }}>Night Shift</button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 col-span-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Annual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newAnnual} onChange={(e) => setNewAnnual(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Sick Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newSick} onChange={(e) => setNewSick(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Casual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newCasual} onChange={(e) => setNewCasual(Number(e.target.value))} required />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {newAddTab === 'Banking' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Bank Account Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newBankAcNo} onChange={(e) => setNewBankAcNo(e.target.value)} placeholder="e.g. 1234567890" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">IFSC Code</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newIfscCode} onChange={(e) => setNewIfscCode(e.target.value)} placeholder="e.g. SBIN0001234" />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddModal(false)} 
+                  className="py-2.5 px-4 border border-border-card rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec text-xs font-bold transition-colors cursor-pointer"
+                  disabled={actionLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover shadow-md shadow-brand-primary/20 text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? "Registering..." : "Add Staff Member"}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main">Edit User Profile</h3>
+              <button 
+                onClick={() => { setShowEditModal(false); setSelectedUser(null); }} 
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+                        <form onSubmit={handleSaveUserEdit} className="flex flex-col max-h-[85vh]">
+              {/* TABS */}
+              <div className="flex border-b border-border-card mb-4 overflow-x-auto scrollbar-none">
+                {['Personal', 'Educational', 'Professional', 'Government & Identity', 'Employment', 'Banking'].map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setEditTab(tab)}
+                    className={`py-2 px-4 text-xs font-bold whitespace-nowrap ${editTab === tab ? 'text-brand-primary border-b-2 border-brand-primary' : 'text-text-mut hover:text-text-main'}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
+                {editTab === 'Personal' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1 md:col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Profile Photo (URL)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPhoto} onChange={(e) => setEditPhoto(e.target.value)} placeholder="e.g. https://..." />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Staff ID</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editEmployeeId} onChange={(e) => setEditEmployeeId(e.target.value)} placeholder="e.g. ST1001" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">First Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editFirstName} onChange={(e) => { setEditFirstName(e.target.value); setEditName(e.target.value + ' ' + editLastName); }} placeholder="e.g. John" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Last Name *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editLastName} onChange={(e) => { setEditLastName(e.target.value); setEditName(editFirstName + ' ' + e.target.value); }} placeholder="e.g. Doe" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Full Name * (Derived)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="e.g. John Doe" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Personal Email Address</label>
+                        <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPersonalEmail} onChange={(e) => setEditPersonalEmail(e.target.value)} placeholder="e.g. john.doe@gmail.com" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Mobile Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPersonalMobileNumber} onChange={(e) => setEditPersonalMobileNumber(e.target.value)} placeholder="e.g. 9876543210" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Birth</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDob} onChange={(e) => { setEditDob(e.target.value); if(e.target.value) { const age = new Date().getFullYear() - new Date(e.target.value).getFullYear(); setEditAge(age.toString()); } }} max={new Date().toISOString().split("T")[0]} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Age</label>
+                        <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editAge} onChange={(e) => setEditAge(e.target.value)} placeholder="e.g. 28" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Gender</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editGender} onChange={(e) => setEditGender(e.target.value)}>
+                          <option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Marital Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editMaritalStatus} onChange={(e) => setEditMaritalStatus(e.target.value)}>
+                          <option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Permanent Address</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPermanentAddress} onChange={(e) => setEditPermanentAddress(e.target.value)} placeholder="e.g. 123 Street Name" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Educational' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Specialization / Degree</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editSpecialization} onChange={(e) => setEditSpecialization(e.target.value)} placeholder="e.g. B.Tech Computer Science" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Institute / College Name</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editInstituteName} onChange={(e) => setEditInstituteName(e.target.value)} placeholder="e.g. MIT" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Year of Completion</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editYearOfCompletion} onChange={(e) => setEditYearOfCompletion(e.target.value)} placeholder="e.g. 2021" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Professional' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Current Experience (Years)</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editCurrentExperience} onChange={(e) => setEditCurrentExperience(e.target.value)} placeholder="e.g. 3.5" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Assigned Projects</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editProject} onChange={(e) => setEditProject(e.target.value)} placeholder="e.g. Web App, API (comma separated)" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Government & Identity' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">UAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editUan} onChange={(e) => setEditUan(e.target.value)} placeholder="e.g. 10002345678" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">PAN Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPan} onChange={(e) => setEditPan(e.target.value)} placeholder="e.g. ABCDE1234F" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Aadhar Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editAadharNum} onChange={(e) => setEditAadharNum(e.target.value)} placeholder="e.g. 1234 5678 9101" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Employment' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Department *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDept} onChange={(e) => setEditDept(e.target.value)} placeholder="e.g. Engineering" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Designation</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDesignation} onChange={(e) => setEditDesignation(e.target.value)} placeholder="e.g. Developer" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Role</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                          <option value="Employee">Employee</option><option value="Project Manager">Project Manager</option><option value="Admin">Admin</option><option value="System Admin">System Admin</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Job Type</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editJobType} onChange={(e) => setEditJobType(e.target.value)}>
+                          <option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Contract">Contract</option><option value="Internship">Internship</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Employee Status</label>
+                        <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editEmployeeStatus} onChange={(e) => setEditEmployeeStatus(e.target.value)}>
+                          <option value="Active">Active</option><option value="Inactive">Inactive</option><option value="On Leave">On Leave</option><option value="Terminated">Terminated</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Source of Hire</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editSourceOfHire} onChange={(e) => setEditSourceOfHire(e.target.value)} placeholder="e.g. LinkedIn" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Reporting Manager</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editReportingManager} onChange={(e) => setEditReportingManager(e.target.value)} placeholder="e.g. Jane Doe" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Joining Date</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editJoiningDate} onChange={(e) => setEditJoiningDate(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Date of Exit</label>
+                        <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDateOfExit} onChange={(e) => setEditDateOfExit(e.target.value)} />
+                      </div>
+                      
+                      <div className="flex flex-col gap-1 mt-2 col-span-3">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Shift Type *</label>
+                        <div className="flex gap-2">
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${editShiftStart === '09:00' || editShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setEditShiftType('Morning'); setEditShiftStart('09:00'); setEditShiftEnd('18:00'); }}>Morning Shift</button>
+                          <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${editShiftStart === '21:00' || editShiftType === 'Night' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setEditShiftType('Night'); setEditShiftStart('21:00'); setEditShiftEnd('06:00'); }}>Night Shift</button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 col-span-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Annual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editAnnual} onChange={(e) => setEditAnnual(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Sick Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editSick} onChange={(e) => setEditSick(Number(e.target.value))} required />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-text-sec uppercase">Casual Leaves</label>
+                          <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editCasual} onChange={(e) => setEditCasual(Number(e.target.value))} required />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {editTab === 'Banking' && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Bank Account Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editBankAcNo} onChange={(e) => setEditBankAcNo(e.target.value)} placeholder="e.g. 1234567890" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">IFSC Code</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editIfscCode} onChange={(e) => setEditIfscCode(e.target.value)} placeholder="e.g. SBIN0001234" />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-border-card pt-4 mt-4 flex-shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowEditModal(false); setSelectedUser(null); }} 
+                  className="py-2.5 px-4 border border-border-card rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec text-xs font-bold transition-colors cursor-pointer"
+                  disabled={actionLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="py-2.5 px-5 bg-brand-primary hover:bg-brand-hover shadow-md shadow-brand-primary/20 text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete User Confirm Modal */}
+      {showDeleteConfirm && selectedUser && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[440px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-brand-danger">Delete User Profile</h3>
+              <button 
+                onClick={() => { setShowDeleteConfirm(false); setSelectedUser(null); }} 
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="space-y-3 mb-6 text-sm text-text-sec leading-relaxed">
+              <p>Are you sure you want to delete the profile for <strong>{selectedUser.name}</strong> ({selectedUser.email})?</p>
+              <p className="text-brand-danger font-bold text-xs flex items-center gap-1">
+                <AlertTriangle size={18} className='text-amber-500 inline-block mr-1' /> Warning: This action is permanent and will remove the user record from the database directory.
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => { setShowDeleteConfirm(false); setSelectedUser(null); }} 
+                className="py-2.5 px-4 border border-border-card rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec text-xs font-bold transition-colors cursor-pointer"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmDeleteUser} 
+                className="py-2.5 px-5 bg-brand-danger text-white text-xs font-bold rounded-[12px] hover:bg-brand-danger-hover transition-colors cursor-pointer"
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Deleting..." : "Delete User"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete Paid Leave Confirm Modal */}
+      {showDeletePaidLeaveConfirm && selectedPaidLeave && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[440px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-brand-danger">Delete Paid Leave</h3>
+              <button 
+                onClick={() => { setShowDeletePaidLeaveConfirm(false); setSelectedPaidLeave(null); }} 
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="space-y-3 mb-6 text-sm text-text-sec leading-relaxed">
+              <p>Are you sure you want to delete the paid leave announcement for <strong>{selectedPaidLeave.title}</strong>?</p>
+              <p className="text-brand-danger font-bold text-xs flex items-center gap-1">
+                <AlertTriangle size={18} className='text-amber-500 inline-block mr-1' /> Warning: This action is permanent and will remove the announcement from the system.
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => { setShowDeletePaidLeaveConfirm(false); setSelectedPaidLeave(null); }} 
+                className="py-2.5 px-4 border border-border-card rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec text-xs font-bold transition-colors cursor-pointer"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDeletePaidLeave} 
+                className="py-2.5 px-5 bg-brand-danger text-white text-xs font-bold rounded-[12px] hover:bg-brand-danger-hover transition-colors cursor-pointer"
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Deleting..." : "Delete Announcement"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ─── CHAT MONITOR TAB ─── */}
+      {activeTab === "chat" && (() => {
+        const getThreadLabel = (msg) => {
+          if (msg.threadType === "channel") {
+            const ch = chatChannels.find(c => c.id === msg.threadId);
+            return "#" + (ch?.displayName || ch?.name || msg.threadId);
+          }
+          const dm = chatDmThreads.find(d => d.id === msg.threadId);
+          if (dm) {
+            const ids = dm.participantIds || [];
+            const names = ids.map(id => dm.participantNames?.[id] || id);
+            return "DM: " + names.join(" ↔ ");
+          }
+          return "DM: " + msg.threadId;
+        };
+
+        const filteredMsgs = chatMessages.filter(m => {
+          const matchType = chatTypeFilter === "all" || m.threadType === chatTypeFilter;
+          const matchThread = chatThreadFilter === "all" || m.threadId === chatThreadFilter;
+          const q = chatFilter.toLowerCase();
+          const matchSearch = !chatFilter ||
+            (m.senderName || "").toLowerCase().includes(q) ||
+            (m.text || "").toLowerCase().includes(q) ||
+            getThreadLabel(m).toLowerCase().includes(q);
+          return matchType && matchThread && matchSearch && !m.isDeleted;
+        });
+
+        const handleDeleteMsg = async (id) => {
+          showConfirm("Delete Message", "Delete this message permanently?", async () => {
+            await deleteChatMessage(id);
+            setChatMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
+            showToast("Message removed", "success");
+          }, { confirmText: "Delete", cancelText: "Cancel" });
+        };
+
+        const handleExportChat = () => {
+          const rows = [
+            ["Timestamp", "Type", "Thread", "Sender", "Message", "File Name", "File URL"]
+          ];
+          filteredMsgs.forEach(m => {
+            let fileUrl = m.fileData?.url || "";
+            if (fileUrl.startsWith("data:") && fileUrl.length > 500) {
+              fileUrl = "[Embedded File Data]";
+            }
+            
+            const rowData = [
+              m.timestamp ? new Date(m.timestamp).toLocaleString() : "",
+              m.threadType,
+              getThreadLabel(m),
+              m.senderName,
+              m.text || "",
+              m.fileData?.name || "",
+              fileUrl
+            ];
+            
+            // Truncate to avoid Excel's 32,767 character limit per cell
+            rows.push(rowData.map(val => String(val).substring(0, 32000)));
+          });
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Chat Log");
+          const max_len = {};
+          rows.forEach(row => row.forEach((val, i) => {
+            max_len[i] = Math.max(max_len[i] || 10, String(val || "").length);
+          }));
+          // Prevent column width from exceeding 255 (Excel limit)
+          ws["!cols"] = Object.keys(max_len).map(i => ({ wch: Math.min(max_len[i] + 3, 250) }));
+          XLSX.writeFile(wb, `Chat_Monitor_Export_${new Date().toISOString().split("T")[0]}.xlsx`);
+          showToast("Chat log exported!", "success");
+        };
+
+        const handleRecoverChat = async () => {
+          showToast("Recovering Carrezza chat data...", "info");
+          const res = await recoverChatData();
+          if (res.success) {
+            showToast(res.msg, "success");
+          } else {
+            showToast(res.msg, "error");
+          }
+        };
+
+        const uniqueThreads = [...new Set(chatMessages.map(m => m.threadId))];
+
+        return (
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main">Chat Monitor</h1>
+                <p className="text-sm text-text-sec mt-1">View, search and moderate all team messages and direct conversations.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleRecoverChat}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 text-amber-500 text-sm font-bold rounded-[12px] hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-sm"
+                >
+                  <ShieldAlert size={15} /> Recover Chat Data
+                </button>
+                <button
+                  onClick={handleExportChat}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-brand-primary text-white text-sm font-bold rounded-[12px] hover:bg-brand-hover transition-colors cursor-pointer shadow-md"
+                >
+                  <Download size={15} /> Export Chat Log
+                </button>
+              </div>
+            </div>
+
+            {/* Stats Row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary" },
+                { label: "Channels", val: chatChannels.length, icon: "#", color: "text-indigo-500" },
+                { label: "DM Threads", val: chatDmThreads.length, icon: <Mail size={18} className='inline-block mr-1' />, color: "text-amber-500" },
+                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: <Paperclip size={18} className='inline-block mr-1' />, color: "text-emerald-500" }
+              ].map((s, i) => (
+                <div key={i} className="bg-bg-card border border-border-card rounded-[16px] p-4 flex items-center gap-3">
+                  <span className={`text-2xl font-black ${s.color}`}>{s.icon}</span>
+                  <div>
+                    <div className="text-[10px] font-bold text-text-mut uppercase tracking-wider">{s.label}</div>
+                    <div className="text-2xl font-extrabold text-text-main">{s.val}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 bg-bg-card border border-border-card rounded-[16px] p-4">
+              <div className="flex items-center gap-2 bg-bg-base border border-border-card rounded-[10px] px-3 py-2 min-w-[200px] flex-1">
+                <Search size={14} className="text-text-mut" />
+                <input
+                  type="text"
+                  value={chatFilter}
+                  onChange={e => setChatFilter(e.target.value)}
+                  placeholder="Search messages, users, channels..."
+                  className="bg-transparent text-sm text-text-main outline-none flex-1"
+                />
+              </div>
+              <select
+                value={chatTypeFilter}
+                onChange={e => { setChatTypeFilter(e.target.value); setChatThreadFilter("all"); }}
+                className="bg-bg-base border border-border-card text-text-main text-xs font-semibold rounded-[10px] px-3 py-2 outline-none cursor-pointer"
+              >
+                <option value="all">All Types</option>
+                <option value="channel">Channels Only</option>
+                <option value="dm">DMs Only</option>
+              </select>
+              <select
+                value={chatThreadFilter}
+                onChange={e => setChatThreadFilter(e.target.value)}
+                className="bg-bg-base border border-border-card text-text-main text-xs font-semibold rounded-[10px] px-3 py-2 outline-none cursor-pointer"
+              >
+                <option value="all">All Threads</option>
+                {uniqueThreads.map(tid => (
+                  <option key={tid} value={tid}>
+                    {chatMessages.find(m => m.threadId === tid) ? getThreadLabel(chatMessages.find(m => m.threadId === tid)) : tid}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Messages Table */}
+            <div className="bg-bg-card border border-border-card rounded-[20px] overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border-card flex items-center justify-between">
+                <span className="text-xs font-bold text-text-sec uppercase tracking-wider">
+                  {filteredMsgs.length} message{filteredMsgs.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {chatLoading ? (
+                <div className="py-12 text-center">
+                  <div className="w-8 h-8 border-2 border-brand-primary/30 border-t-brand-primary rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-text-mut">Loading chat history...</p>
+                </div>
+              ) : filteredMsgs.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-2xl mb-2"><MessageSquare size={18} className='inline-block mr-1' /></p>
+                  <p className="text-sm font-semibold text-text-mut">No messages found</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border-card bg-bg-base">
+                        {["Timestamp", "Type", "Thread / Channel", "Sender", "Message", "Attachment", "Actions"].map(h => (
+                          <th key={h} className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider px-4 py-3 text-left whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMsgs.slice((chatPage - 1) * 20, chatPage * 20).map(msg => (
+                        <tr key={msg.id} className="border-b border-border-card hover:bg-bg-base transition-colors">
+                          <td className="px-4 py-3 text-[11px] text-text-mut whitespace-nowrap">
+                            {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${msg.threadType === "channel" ? "bg-indigo-500/10 text-indigo-500" : "bg-amber-500/10 text-amber-500"}`}>
+                              {msg.threadType === "channel" ? "Channel" : "DM"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs font-semibold text-text-sec whitespace-nowrap">
+                            {getThreadLabel(msg)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center text-[9px] font-bold overflow-hidden">{(users.find(u => u.uid === msg.senderId)?.avatar) ? <img src={users.find(u => u.uid === msg.senderId).avatar} alt={msg.senderName} className="w-full h-full object-cover" /> : ((msg.senderName || "?").charAt(0).toUpperCase())}</div>
+                              <span className="text-xs font-semibold text-text-main whitespace-nowrap">{msg.senderName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 max-w-[260px]">
+                            <span className="text-xs text-text-sec line-clamp-2">{msg.text || <span className="text-text-mut italic">—</span>}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {msg.fileData ? (
+                              <a
+                                href={msg.fileData.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-bold text-brand-primary hover:underline flex items-center gap-1 whitespace-nowrap"
+                              >
+                                <Paperclip size={18} className='inline-block mr-1' /> {msg.fileData.name?.substring(0, 20) || "File"}
+                              </a>
+                            ) : <span className="text-text-mut text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleDeleteMsg(msg.id)}
+                              className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
+                              title="Delete message"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination Controls */}
+                {Math.ceil(filteredMsgs.length / 20) > 1 && (
+                  <div className="px-5 py-3 border-t border-border-card flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider">
+                      Page {chatPage} of {Math.ceil(filteredMsgs.length / 20)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setChatPage(p => Math.max(1, p - 1))}
+                        disabled={chatPage === 1}
+                        className="px-3 py-1.5 bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[8px] hover:bg-brand-primary/10 hover:text-brand-primary hover:border-brand-primary/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      >
+                        Previous
+                      </button>
+                      <button 
+                        onClick={() => setChatPage(p => Math.min(Math.ceil(filteredMsgs.length / 20), p + 1))}
+                        disabled={chatPage === Math.ceil(filteredMsgs.length / 20)}
+                        className="px-3 py-1.5 bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[8px] hover:bg-brand-primary/10 hover:text-brand-primary hover:border-brand-primary/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
+              )}
+            </div>
+
+            {/* Channels Overview */}
+            {chatChannels.length > 0 && (
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5">
+                <h3 className="text-sm font-extrabold text-text-main mb-4 flex items-center gap-2">
+                  <span className="text-lg">#</span> Channels Overview
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {chatChannels.map(ch => (
+                    <div key={ch.id} className="flex items-start gap-3 p-3 bg-bg-base rounded-[12px] border border-border-card">
+                      <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold text-sm flex-shrink-0">#</div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-text-main truncate">{ch.displayName || ch.name}</div>
+                        <div className="text-[10px] text-text-mut truncate">{ch.description || "No description"}</div>
+                        <div className="text-[10px] text-text-mut mt-0.5">{ch.memberIds?.length || 0} members · by {ch.createdByName}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ------------------ VIEW 7: ASSET MANAGEMENT ------------------ */}
+      {activeTab === "assets" && (() => {
+        // Filter assets by search query, status, and category
+        const filteredAssets = assets.filter((asset) => {
+          const matchSearch =
+            (asset.name || "").toLowerCase().includes(assetSearch.toLowerCase()) ||
+            (asset.serialNumber || "").toLowerCase().includes(assetSearch.toLowerCase()) ||
+            (asset.assignedUserName || "").toLowerCase().includes(assetSearch.toLowerCase());
+          const matchCategory = assetCategoryFilter === "all" || 
+            (Array.isArray(asset.category) ? asset.category.includes(assetCategoryFilter) : asset.category === assetCategoryFilter);
+          const matchStatus = assetStatusFilter === "all" || asset.status === assetStatusFilter;
+          return matchSearch && matchCategory && matchStatus;
+        });
+
+        // Pagination for assets
+        const assetsPerPage = rowsPerPage;
+        const assetsStartIndex = (assetsPage - 1) * assetsPerPage;
+        const paginatedAssets = filteredAssets.slice(assetsStartIndex, assetsStartIndex + assetsPerPage);
+        const assetsTotalPages = Math.ceil(filteredAssets.length / assetsPerPage) || 1;
+
+        const canManageAssetsGlobal = currentUser?.role === "admin" || currentUser?.role === "superadmin" || (currentUser?.name || "").toLowerCase().includes("super admin") || (currentUser?.name || "").toLowerCase().includes("system admin");
+
+        return (
+          <div className="animate-fade-in space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2 text-left">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Asset Management</h1>
+                <p className="text-sm text-text-sec mt-1">Register, track, and assign organization devices (laptops, headsets, chargers, etc.)</p>
+              </div>
+              <div className="flex gap-2 self-start sm:self-center">
+                <button 
+                  onClick={handleExportAssetsExcel} 
+                  className="flex items-center gap-1.5 py-2.5 px-4 border border-emerald-500/30 text-xs font-bold rounded-[12px] bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer"
+                >
+                  <Download size={14} /> 
+                  <span>Excel</span>
+                </button>
+                <button 
+                  onClick={handleExportAssetsPDF} 
+                  className="flex items-center gap-1.5 py-2.5 px-4 border border-red-500/30 text-xs font-bold rounded-[12px] bg-red-500/5 hover:bg-red-500/10 text-red-600 dark:text-red-400 transition-colors cursor-pointer"
+                >
+                  <FileText size={14} /> 
+                  <span>PDF</span>
+                </button>
+                {canManageAssetsGlobal && (
+                  <>
+                    <button
+                      onClick={handleOpenAssignAssetsModal}
+                      className="py-2.5 px-4 bg-bg-card border border-border-card text-text-sec hover:text-text-main text-xs font-bold rounded-[12px] transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserPlus size={16} />
+                      <span>Assign Assets</span>
+                    </button>
+                    <button
+                      onClick={handleOpenAddAssetModal}
+                      className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] shadow-md shadow-brand-primary/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={16} />
+                      <span>Add Asset</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Filters bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut font-semibold" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search assets name, serial, employee..."
+                  className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all"
+                  value={assetSearch}
+                  onChange={(e) => {
+                    setAssetSearch(e.target.value);
+                    setAssetsPage(1);
+                  }}
+                />
+              </div>
+
+              <div>
+                <select
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetCategoryFilter}
+                  onChange={(e) => {
+                    setAssetCategoryFilter(e.target.value);
+                    setAssetsPage(1);
+                  }}
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Laptop">Laptops</option>
+                  <option value="Headset">Headsets</option>
+                  <option value="Charger">Chargers</option>
+                  <option value="Keyboard">Keyboards</option>
+                  <option value="Mouse">Mice</option>
+                  <option value="Monitor">Monitors</option>
+                  <option value="Mobile">Mobiles</option>
+                  <option value="Other">Others</option>
+                </select>
+              </div>
+
+              <div>
+                <select
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-card text-xs text-text-main outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  value={assetStatusFilter}
+                  onChange={(e) => {
+                    setAssetStatusFilter(e.target.value);
+                    setAssetsPage(1);
+                  }}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Available">Available</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Under Repair">Under Repair</option>
+                  <option value="Retired">Retired</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Assets Table */}
+            <div className="bg-bg-card border border-border-card rounded-[24px] overflow-hidden shadow-sm text-left">
+              {filteredAssets.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="w-12 h-12 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center mx-auto mb-3">
+                    <HardDrive size={22} />
+                  </div>
+                  <p className="text-sm font-bold text-text-main">No assets found</p>
+                  <p className="text-xs text-text-mut mt-1">Try resetting your search filters or add a new device.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border-card bg-bg-base/30">
+                          {["Asset Details", "Category", "Serial Number", "Status", "Assigned To", "Date Assigned", "Authority", "Actions"].map((h) => (
+                            <th
+                              key={h}
+                              className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider px-6 py-4 text-left whitespace-nowrap"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedAssets.map((asset) => {
+                          let statusColor = "bg-green-500/10 text-green-500 border border-green-500/20";
+                          if (asset.status === "Assigned") {
+                            statusColor = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
+                          } else if (asset.status === "Under Repair") {
+                            statusColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+                          } else if (asset.status === "Retired") {
+                            statusColor = "bg-red-500/10 text-red-500 border border-red-500/20";
+                          }
+
+                          return (
+                            <tr key={asset.id} className="border-b border-border-card hover:bg-bg-base/20 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="font-bold text-xs text-text-main">{asset.name}</div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="text-xs text-text-sec font-semibold">
+                                  {Array.isArray(asset.category) ? asset.category.join(", ") : (asset.category || "Other")}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-xs font-mono text-text-sec">
+                                {asset.serialNumber}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${statusColor}`}>
+                                  {asset.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                {asset.assignedUserId ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-[9px] font-bold overflow-hidden">{(users.find(u => u.uid === asset.assignedUserId)?.avatar) ? <img src={users.find(u => u.uid === asset.assignedUserId).avatar} alt={asset.assignedUserName} className="w-full h-full object-cover" /> : ((asset.assignedUserName || "?").charAt(0).toUpperCase())}</div>
+                                    <span className="text-xs font-semibold text-text-main whitespace-nowrap">{asset.assignedUserName}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-text-mut italic">Unassigned</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-text-sec whitespace-nowrap font-semibold">
+                                {asset.assignedDate ? new Date(asset.assignedDate).toLocaleDateString() : "—"}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-text-sec whitespace-nowrap font-semibold">
+                                {asset.assigningAuthorityName || "—"}
+                              </td>
+                              <td className="px-6 py-4">
+                                {canEditAsset(asset) ? (
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleOpenEditAssetModal(asset)}
+                                      className="p-1.5 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-[6px] transition-colors cursor-pointer"
+                                      title="Edit asset"
+                                    >
+                                      <Edit size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteAssetClick(asset.id, asset.name)}
+                                      className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-[6px] transition-colors cursor-pointer"
+                                      title="Delete asset"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 text-[10px] text-text-mut font-semibold bg-bg-base px-2.5 py-1 rounded-[8px] border border-border-card/60 w-fit select-none">
+                                    <Lock size={10} className="text-text-mut/80" />
+                                    <span>Locked</span>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {filteredAssets.length > assetsPerPage && (
+                    <div className="p-4 border-t border-border-card flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-text-mut font-semibold">
+                          Showing {assetsStartIndex + 1} to {Math.min(filteredAssets.length, assetsStartIndex + assetsPerPage)} of {filteredAssets.length} entries
+                        </span>
+                        <select 
+                          value={rowsPerPage} 
+                          onChange={(e) => {
+                            setRowsPerPage(Number(e.target.value));
+                            setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                          }}
+                          className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                        >
+                          <option value={10}>10 / page</option>
+                          <option value={20}>20 / page</option>
+                          <option value={50}>50 / page</option>
+                          <option value={100}>100 / page</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          disabled={assetsPage === 1}
+                          onClick={() => setAssetsPage(p => p - 1)}
+                          className="px-3 py-1.5 bg-bg-base border border-border-card rounded-[8px] text-xs font-bold text-text-sec hover:text-text-main transition-colors disabled:opacity-40 cursor-pointer"
+                        >
+                          Prev
+                        </button>
+                        <button
+                          disabled={assetsPage === assetsTotalPages}
+                          onClick={() => setAssetsPage(p => p + 1)}
+                          className="px-3 py-1.5 bg-bg-base border border-border-card rounded-[8px] text-xs font-bold text-text-sec hover:text-text-main transition-colors disabled:opacity-40 cursor-pointer"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Asset Add/Edit Modal */}
+      {showAssetModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[550px] bg-bg-card border border-border-card/85 rounded-[24px] p-6 shadow-2xl shadow-brand-primary/5 animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Top Premium Gradient Line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-primary via-purple-500 to-brand-hover" />
+            
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-card flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-[14px] bg-gradient-to-tr from-brand-primary/20 to-brand-hover/10 text-brand-primary flex items-center justify-center border border-brand-primary/10">
+                  <Laptop size={20} className="animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-text-main tracking-tight">
+                    {isEditingAsset ? "Edit Asset Registry" : "Add New Asset"}
+                  </h3>
+                  <p className="text-[10px] text-text-mut font-bold uppercase tracking-wider">Asset Configuration Panel</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAssetModal(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-base border border-border-card text-text-mut hover:text-text-main hover:border-brand-primary/40 hover:rotate-90 transition-all duration-300 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveAsset} className="flex-1 overflow-y-auto pr-1 space-y-5 py-1">
+              {/* Asset Specs Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-4">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Laptop size={12} />
+                  <span>Asset Specifications</span>
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Asset Name</label>
+                  <div className="relative flex items-center">
+                    <Laptop size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                    <input 
+                      type="text" 
+                      className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-semibold shadow-sm" 
+                      value={assetFormName}
+                      onChange={(e) => setAssetFormName(e.target.value)}
+                      placeholder="e.g. Dell Latitude 5420"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5 relative" ref={categoryDropdownRef}>
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Category</label>
+                    <div className="relative flex items-center">
+                      <Layers size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm flex items-center justify-between text-left"
+                      >
+                        <span className="truncate">
+                          {assetFormCategory.length === 0 
+                            ? "Select Categories" 
+                            : assetFormCategory.join(", ")}
+                        </span>
+                        <ChevronDown size={14} className="text-text-mut/70 pointer-events-none flex-shrink-0" />
+                      </button>
+                    </div>
+                    {showCategoryDropdown && (
+                      <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-bg-card border border-border-card rounded-[14px] shadow-xl p-3 space-y-2.5 max-h-[220px] overflow-y-auto animate-scale-up">
+                        {["Laptop", "Headset", "Charger", "Keyboard", "Mouse", "Monitor", "Mobile", "Other"].map((cat) => {
+                          const isChecked = assetFormCategory.includes(cat);
+                          return (
+                            <label key={cat} className="flex items-center gap-2.5 text-xs font-bold text-text-sec hover:text-text-main cursor-pointer select-none py-0.5 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isChecked) {
+                                    setAssetFormCategory(prev => prev.filter(c => c !== cat));
+                                  } else {
+                                    setAssetFormCategory(prev => [...prev, cat]);
+                                  }
+                                }}
+                                className="rounded-[4px] border-border-card text-brand-primary focus:ring-brand-primary cursor-pointer w-4 h-4 transition-all accent-brand-primary"
+                              />
+                              <span>{cat}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Serial Number / ID</label>
+                    <div className="relative flex items-center">
+                      <Hash size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <input 
+                        type="text" 
+                        className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-mono font-semibold shadow-sm" 
+                        value={assetFormSerial}
+                        onChange={(e) => setAssetFormSerial(e.target.value)}
+                        placeholder="e.g. SN-Dell-98A"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Assignment Details Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-4">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <UserPlus size={12} />
+                  <span>Assignment Details</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Status</label>
+                    <div className="relative flex items-center">
+                      <Activity size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assetFormStatus}
+                        onChange={(e) => setAssetFormStatus(e.target.value)}
+                      >
+                        <option value="Available">Available</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="Under Repair">Under Repair</option>
+                        <option value="Retired">Retired</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assign to Employee</label>
+                    <div className="relative flex items-center">
+                      <Users size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assetFormAssignedUser}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAssetFormAssignedUser(val);
+                          if (val) {
+                            setAssetFormStatus("Assigned");
+                          } else if (assetFormStatus === "Assigned") {
+                            setAssetFormStatus("Available");
+                          }
+                        }}
+                      >
+                        <option value="">Unassigned / Available</option>
+                        {users.map((u) => (
+                          <option key={u.uid} value={u.uid}>
+                            {u.name} ({u.department || "No Dept"})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                {(assetFormStatus === "Assigned" || assetFormAssignedUser) && (
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border-card/60 animate-fade-in">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Date of Assigning</label>
+                      <div className="relative flex items-center">
+                        <Calendar size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                        <input 
+                          type="date" 
+                          className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-semibold shadow-sm" 
+                          value={assetFormAssignedDate}
+                          onChange={(e) => setAssetFormAssignedDate(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assigning Authority</label>
+                      <div className="relative flex items-center">
+                        <Shield size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                        <select 
+                          className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                          value={assetFormAssigningAuthority}
+                          onChange={(e) => setAssetFormAssigningAuthority(e.target.value)}
+                          required
+                        >
+                          <option value="">Select Authority</option>
+                          {users.filter(u => 
+                            (u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin") &&
+                            !(u.name || "").toLowerCase().includes("zoho")
+                          ).map((u) => (
+                            <option key={u.uid} value={u.uid}>
+                              {u.name} ({u.role})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowAssetModal(false)}
+                  className="py-2.5 px-5 text-xs font-bold text-text-sec hover:text-text-main hover:bg-bg-base rounded-[14px] transition-all cursor-pointer border border-transparent hover:border-border-card"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assetLoading}
+                  className="py-2.5 px-6 bg-gradient-to-r from-brand-primary to-brand-hover text-white text-xs font-bold rounded-[14px] shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/35 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
+                >
+                  {assetLoading ? "Saving..." : "Save Asset"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Bulk Assign Assets Modal */}
+      {showAssignAssetsModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in text-left">
+          <div className="w-full max-w-[550px] bg-bg-card border border-border-card/85 rounded-[24px] p-6 shadow-2xl shadow-brand-primary/5 animate-scale-up relative overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Top Premium Gradient Line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-primary via-purple-500 to-brand-hover" />
+            
+            <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-card flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-[14px] bg-gradient-to-tr from-brand-primary/20 to-brand-hover/10 text-brand-primary flex items-center justify-center border border-brand-primary/10">
+                  <UserPlus size={20} className="animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-text-main tracking-tight">
+                    Assign Assets to Employee
+                  </h3>
+                  <p className="text-[10px] text-text-mut font-bold uppercase tracking-wider">Bulk Asset Assignment Panel</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAssignAssetsModal(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-bg-base border border-border-card text-text-mut hover:text-text-main hover:border-brand-primary/40 hover:rotate-90 transition-all duration-300 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAssignAssetsSubmit} className="flex-1 overflow-y-auto pr-1 space-y-5 py-1">
+              {/* Assignment Specs Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-4">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <UserPlus size={12} />
+                  <span>Assignment Parameters</span>
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assign to Employee</label>
+                  <div className="relative flex items-center">
+                    <Users size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                    <select 
+                      className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                      value={assignAssetsTargetUser}
+                      onChange={(e) => setAssignAssetsTargetUser(e.target.value)}
+                      required
+                    >
+                      <option value="">Select Employee</option>
+                      {users.map((u) => (
+                        <option key={u.uid} value={u.uid}>
+                          {u.name} ({u.department || "No Dept"})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Date of Assigning</label>
+                    <div className="relative flex items-center">
+                      <Calendar size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <input 
+                        type="date" 
+                        className="w-full pl-10 pr-4 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all font-semibold shadow-sm" 
+                        value={assignAssetsDate}
+                        onChange={(e) => setAssignAssetsDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Assigning Authority</label>
+                    <div className="relative flex items-center">
+                      <Shield size={15} className="absolute left-3.5 text-text-mut/70 pointer-events-none" />
+                      <select 
+                        className="w-full pl-10 pr-10 py-2.5 border border-border-card/80 hover:border-brand-primary/40 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/5 rounded-[14px] bg-bg-card text-xs text-text-main outline-none transition-all cursor-pointer font-semibold shadow-sm appearance-none"
+                        value={assignAssetsAuthority}
+                        onChange={(e) => setAssignAssetsAuthority(e.target.value)}
+                        required
+                      >
+                        <option value="">Select Authority</option>
+                        {users.filter(u => 
+                          (u.role === "admin" || u.role === "superadmin" || u.role === "systemadmin" || u.role === "system admin") &&
+                          !(u.name || "").toLowerCase().includes("zoho")
+                        ).map((u) => (
+                          <option key={u.uid} value={u.uid}>
+                            {u.name} ({u.role})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3.5 text-text-mut/70 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Checklist Section */}
+              <div className="bg-bg-base/30 dark:bg-slate-900/10 rounded-[18px] p-5 border border-border-card space-y-3">
+                <div className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Laptop size={12} />
+                  <span>Select Available Asset(s)</span>
+                </div>
+                <div className="border border-border-card/80 rounded-[14px] bg-bg-card max-h-[160px] overflow-y-auto p-4 space-y-3 shadow-inner">
+                  {assets.filter(a => a.status === "Available").length === 0 ? (
+                    <div className="text-xs text-text-mut text-center py-6 font-semibold">No available assets in inventory.</div>
+                  ) : (
+                    assets.filter(a => a.status === "Available").map((asset) => (
+                      <label key={asset.id} className="flex items-center gap-3.5 text-xs font-bold text-text-sec hover:text-text-main cursor-pointer select-none transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={assignAssetsSelectedIds.includes(asset.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAssignAssetsSelectedIds(prev => [...prev, asset.id]);
+                            } else {
+                              setAssignAssetsSelectedIds(prev => prev.filter(id => id !== asset.id));
+                            }
+                          }}
+                          className="rounded-[6px] border-border-card text-brand-primary focus:ring-brand-primary cursor-pointer w-4.5 h-4.5 transition-all accent-brand-primary mr-1"
+                        />
+                        <span className="flex items-center gap-2">
+                          <span className="text-text-main">{asset.name}</span>
+                          <span className="text-[10px] text-text-mut font-mono font-semibold bg-bg-base px-2 py-0.5 rounded-[6px] border border-border-card/50">(SN: {asset.serialNumber})</span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border-card flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignAssetsModal(false)}
+                  className="py-2.5 px-5 text-xs font-bold text-text-sec hover:text-text-main hover:bg-bg-base rounded-[14px] transition-all cursor-pointer border border-transparent hover:border-border-card"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={assignAssetsLoading || assignAssetsSelectedIds.length === 0 || !assignAssetsTargetUser || !assignAssetsAuthority}
+                  className="py-2.5 px-6 bg-gradient-to-r from-brand-primary to-brand-hover text-white text-xs font-bold rounded-[14px] shadow-lg shadow-brand-primary/20 hover:shadow-xl hover:shadow-brand-primary/35 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
+                >
+                  {assignAssetsLoading ? "Assigning..." : "Assign Asset(s)"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ------------------ VIEW: PAYROLL (INDIA) ------------------ */}
+      {activeTab === "payroll" && (() => {
+        // Calculations for Indian Payroll
+        const calculatePayroll = (gross, paidDays, workingDays) => {
+          const lopsDays = Math.max(0, workingDays - paidDays);
+          const actualGross = (gross / workingDays) * paidDays;
+          const lopAmount = gross - actualGross;
+
+          const basic = actualGross * 0.5;
+          const hra = basic * 0.4;
+          const special = actualGross - basic - hra;
+          
+          const pf = companyPayrollSettings?.pf ? basic * 0.12 : 0;
+          const esi = (companyPayrollSettings?.esi && actualGross <= 21000) ? actualGross * 0.0075 : 0;
+          
+          const getPTDeduction = (g) => {
+            if (companyPayrollSettings && !companyPayrollSettings.pt) return 0;
+            if (g <= 21000) return 0;
+            if (g <= 30000) return Math.round((180 / 6) * 100) / 100;
+            if (g <= 45000) return Math.round((425 / 6) * 100) / 100;
+            if (g <= 60000) return Math.round((930 / 6) * 100) / 100;
+            if (g <= 75000) return Math.round((1025 / 6) * 100) / 100;
+            return Math.round((1250 / 6) * 100) / 100;
+          };
+          const pt = getPTDeduction(actualGross);
+          const insurance = companyPayrollSettings?.insurance ? Number(companyPayrollSettings.insuranceAmount || 0) : 0;
+
+          const tds = actualGross > 50000 ? (actualGross - pf - pt - insurance) * 0.05 : 0;
+          const net = actualGross - (pf + esi + pt + tds + insurance);
+          return { basic, hra, special, pf, esi, pt, tds, insurance, net, actualGross, lopAmount, lopsDays };
+        };
+
+        const currentPayroll = staffUsers.map(user => {
+          const gross = user.grossSalary || 0;
+          const workingDays = companyPayrollSettings?.workingDays || 30;
+          const paidDays = user.paidDays !== undefined ? user.paidDays : workingDays;
+          const calc = calculatePayroll(gross, paidDays, workingDays);
+          
+          return {
+            ...user,
+            gross,
+            ...calc
+          };
+        });
+
+        // Search logic for payroll table
+        const filteredPayroll = currentPayroll.filter((u) => {
+          const matchesSearch = 
+            u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            u.email.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchesDept = !selectedDept || u.department === selectedDept;
+          return matchesSearch && matchesDept;
+        });
+
+        const totalGross = payrollData.reduce((acc, curr) => acc + (curr.grossSalary || 0), 0);
+        const totalPF = payrollData.reduce((acc, curr) => acc + (curr.pf || 0), 0);
+        const totalNet = payrollData.reduce((acc, curr) => acc + (curr.net || 0), 0);
+        
+        return (
+          <div className="animate-fade-in space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2 text-left">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Payroll Management</h1>
+                <p className="text-sm text-text-sec mt-1">Manage employee salaries, EPF, ESI, and generate payslips complying with Indian Law.</p>
+              </div>
+              <div>
+                <button onClick={() => setShowPayrollSettingsModal(true)} className="flex items-center gap-2 px-4 py-2 bg-bg-card border border-border-card text-text-main text-sm font-bold rounded-[14px] hover:bg-bg-base transition-colors shadow-sm">
+                  <Edit size={16} /> Payroll Settings
+                </button>
+              </div>
+            </div>
+
+            {/* Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Total Gross Payout</span>
+                  <span className="text-3xl font-extrabold text-text-main block mt-1.5 flex items-center gap-1"><IndianRupee size={24} /> {totalGross.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="absolute right-0 top-0 p-4 opacity-5">
+                  <Banknote size={80} />
+                </div>
+              </div>
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Total PF Contribution</span>
+                  <span className="text-3xl font-extrabold text-brand-primary block mt-1.5 flex items-center gap-1"><IndianRupee size={24} /> {totalPF.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="absolute right-0 top-0 p-4 text-brand-primary opacity-5">
+                  <Activity size={80} />
+                </div>
+              </div>
+              <div className="bg-bg-card border border-border-card rounded-[20px] p-5 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Total Net Payout</span>
+                  <span className="text-3xl font-extrabold text-emerald-500 block mt-1.5 flex items-center gap-1"><IndianRupee size={24} /> {totalNet.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="absolute right-0 top-0 p-4 text-emerald-500 opacity-5">
+                  <Check size={80} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
+              <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-end">
+                <div className="flex flex-col gap-1.5 flex-grow">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Search Employee</label>
+                  <div className="relative">
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut" />
+                    <input
+                      type="text"
+                      className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all placeholder-text-mut"
+                      placeholder="Search name or email..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5 min-w-[150px]">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Department</label>
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                    value={selectedDept}
+                    onChange={(e) => setSelectedDept(e.target.value)}
+                  >
+                    <option value="">All Departments</option>
+                    {departments.map((dept, idx) => <option key={idx} value={dept}>{dept}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5 min-w-[120px]">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Month</label>
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                    value={payrollMonth}
+                    onChange={(e) => setPayrollMonth(e.target.value)}
+                  >
+                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm overflow-hidden text-left">
+              <div className="overflow-x-auto custom-scrollbar -mx-6 px-6">
+                <table className="w-full min-w-[900px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-card">
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Employee</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Gross Salary</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Basic Pay</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">HRA</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">PF (12%)</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">ESI</th>
+                      <th className="pb-3 px-4 text-left text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Net Salary</th>
+                      <th className="pb-3 px-4 text-right text-[10px] font-extrabold text-text-mut uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPayroll.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="text-center py-12 text-sm text-text-mut">No payroll data found.</td>
+                      </tr>
+                    ) : (
+                      filteredPayroll.map(user => (
+                        <tr key={user.uid} className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-extrabold text-text-main">{user.name}</span>
+                              <span className="text-[10px] font-bold text-text-sec uppercase mt-0.5">{user.designation || user.role}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-xs font-extrabold text-text-main flex items-center gap-0.5"><IndianRupee size={12} /> {user.gross.toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="py-3 px-4 text-xs font-bold text-text-sec">₹{user.basic.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-text-sec">₹{user.hra.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-brand-danger">₹{user.pf.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-brand-danger">₹{user.esi.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4">
+                            <span className="text-xs font-extrabold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-[6px] border border-emerald-500/20">₹{user.net.toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button 
+                                onClick={() => {
+                                  setSelectedPayrollUser(user);
+                                  setEditSalaryValue(user.gross);
+                                  setEditLeaveDaysValue(user.paidDays !== undefined ? Math.max(0, (companyPayrollSettings?.workingDays || 30) - user.paidDays) : 0);
                                   setShowEditSalaryModal(true);
                                 }}
                                 className="p-1.5 text-text-mut hover:text-brand-primary bg-bg-base hover:bg-brand-primary/10 rounded-lg transition-colors border border-border-card/60"
@@ -5696,7 +7575,7 @@ export default function AdminDashboard() {
               <button 
                 onClick={async () => {
                   try {
-                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue, editPaidDaysValue !== "" ? editPaidDaysValue : (companyPayrollSettings?.workingDays || 30));
+                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue, editLeaveDaysValue !== "" ? editLeaveDaysValue : (companyPayrollSettings?.workingDays || 30));
                     showToast("Salary updated successfully", "success");
                     setShowEditSalaryModal(false);
                     loadDirectoryData();

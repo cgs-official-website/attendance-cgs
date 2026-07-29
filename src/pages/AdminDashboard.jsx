@@ -5752,8 +5752,8 @@ export default function AdminDashboard() {
                   {companyPayrollSettings?.payslipFields?.location !== false && selectedPayrollUser.location && <div className="grid grid-cols-3"><span className="col-span-1">Location</span><span className="col-span-2">: {selectedPayrollUser.location}</span></div>}
                   {companyPayrollSettings?.payslipFields?.unit !== false && selectedPayrollUser.unit && <div className="grid grid-cols-3"><span className="col-span-1">Unit</span><span className="col-span-2">: {selectedPayrollUser.unit}</span></div>}
                   {companyPayrollSettings?.payslipFields?.joiningDate !== false && selectedPayrollUser.joiningDate && <div className="grid grid-cols-3"><span className="col-span-1">Joining Date</span><span className="col-span-2">: {selectedPayrollUser.joiningDate}</span></div>}
-                  <div className="grid grid-cols-3"><span className="col-span-1">Paid Days</span><span className="col-span-2">: {selectedPayrollUser.paidDays || "30.00"}</span></div>
-                  <div className="grid grid-cols-3"><span className="col-span-1">Working Days</span><span className="col-span-2">: {selectedPayrollUser.workingDays || "30.00"}</span></div>
+                  <div className="grid grid-cols-3"><span className="col-span-1">Paid Days</span><span className="col-span-2">: {selectedPayrollUser.paidDays || companyPayrollSettings?.workingDays?.toFixed(2) || "30.00"}</span></div>
+                  <div className="grid grid-cols-3"><span className="col-span-1">Working Days</span><span className="col-span-2">: {selectedPayrollUser.workingDays || companyPayrollSettings?.workingDays?.toFixed(2) || "30.00"}</span></div>
                   {companyPayrollSettings?.payslipFields?.costCenter !== false && selectedPayrollUser.costCenter && <div className="grid grid-cols-3"><span className="col-span-1">Cost Center</span><span className="col-span-2">: {selectedPayrollUser.costCenter}</span></div>}
                   {companyPayrollSettings?.payslipFields?.pan !== false && selectedPayrollUser.pan && <div className="grid grid-cols-3"><span className="col-span-1">PAN</span><span className="col-span-2">: {selectedPayrollUser.pan}</span></div>}
                   {selectedPayrollUser.gender && <div className="grid grid-cols-3"><span className="col-span-1">Gender</span><span className="col-span-2">: {selectedPayrollUser.gender}</span></div>}
@@ -5978,6 +5978,18 @@ export default function AdminDashboard() {
                   <input type="checkbox" className="hidden" checked={companyPayrollSettings.insurance} onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, insurance: e.target.checked }))} />
                 </label>
                 
+                <div className="pt-2 animate-fade-in border-t border-border-card/30 mt-4">
+                  <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2 mt-4">Standard Working Days (Per Month)</label>
+                  <input 
+                    type="number" 
+                    value={companyPayrollSettings.workingDays || 30}
+                    onChange={(e) => setCompanyPayrollSettings(prev => ({ ...prev, workingDays: Number(e.target.value) }))}
+                    className="w-full bg-bg-base border border-border-card text-text-main text-sm rounded-[12px] px-4 py-2.5 focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition-all"
+                    placeholder="e.g. 26 or 30"
+                  />
+                  <p className="text-[10px] text-text-mut mt-1">This will be used as the default working days for payslip generation.</p>
+                </div>
+
                 {companyPayrollSettings.insurance && (
                   <div className="pt-2 animate-fade-in">
                     <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Insurance Deduction Amount (₹)</label>

@@ -57,6 +57,24 @@ import {
 } from "lucide-react";
 import CustomDateRangePicker from "../components/CustomDateRangePicker";
 
+
+const numberToWords = (num) => {
+  const a = ['','one ','two ','three ','four ', 'five ','six ','seven ','eight ','nine ','ten ','eleven ','twelve ','thirteen ','fourteen ','fifteen ','sixteen ','seventeen ','eighteen ','nineteen '];
+  const b = ['', '', 'twenty','thirty','forty','fifty', 'sixty','seventy','eighty','ninety'];
+  if (!num && num !== 0) return '';
+  num = Math.round(Number(num));
+  if ((num = num.toString()).length > 9) return 'overflow';
+  const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  if (!n) return '';
+  let str = '';
+  str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'crore ' : '';
+  str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'lakh ' : '';
+  str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'thousand ' : '';
+  str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'hundred ' : '';
+  str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+  return str || 'zero';
+};
+
 export default function UserDashboard() {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
@@ -992,7 +1010,7 @@ export default function UserDashboard() {
                   <div className="space-y-4 flex-grow z-10">
                     <div>
                       <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block mb-1">Net Payable</span>
-                      <span className="text-2xl font-extrabold text-emerald-500 flex items-center gap-1"><IndianRupee size={20} /> {calc.net.toLocaleString('en-IN')}</span>
+                      <span className="text-2xl font-extrabold text-emerald-500 flex items-center gap-1"><IndianRupee size={20} /> {(payslip.net !== undefined ? payslip.net : calc.net).toLocaleString('en-IN')}</span>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 border-t border-border-card pt-4 mt-4">
@@ -1002,7 +1020,7 @@ export default function UserDashboard() {
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block mb-1">Deductions</span>
-                        <span className="text-sm font-bold text-brand-danger">₹{(calc.pf + calc.esi + calc.pt + calc.tds).toLocaleString('en-IN')}</span>
+                        <span className="text-sm font-bold text-brand-danger">₹{((payslip.pf !== undefined ? payslip.pf : calc.pf) + (payslip.esi !== undefined ? payslip.esi : calc.esi) + (payslip.pt !== undefined ? payslip.pt : calc.pt) + (payslip.tds !== undefined ? payslip.tds : calc.tds) + (payslip.lopAmount || 0)).toLocaleString('en-IN')}</span>
                       </div>
                     </div>
                   </div>
@@ -1010,7 +1028,7 @@ export default function UserDashboard() {
                   <div className="pt-6 mt-6 border-t border-border-card z-10">
                     <button 
                       onClick={() => {
-                        setSelectedPayslip({ ...payslip, ...calc });
+                        setSelectedPayslip({ ...calc, ...payslip });
                         setShowPayslipModal(true);
                       }}
                       className="w-full flex items-center justify-center gap-2 py-2.5 bg-bg-base hover:bg-brand-primary/10 text-brand-primary font-bold text-xs rounded-[12px] transition-colors"

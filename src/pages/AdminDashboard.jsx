@@ -460,6 +460,9 @@ export default function AdminDashboard() {
           setCompanyName(data.name || "ZUNA HRMS");
           setCompanyLogo(data.logoBase64 || "");
           setCompanyAddress(data.address || "");
+          if (data.payrollSettings) {
+            setCompanyPayrollSettings(data.payrollSettings);
+          }
         }
       });
       return () => unsub();

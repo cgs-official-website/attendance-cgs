@@ -108,6 +108,9 @@ export default function UserDashboard() {
           setCompanyName(data.name || "ZUNA HRMS");
           setCompanyLogo(data.logoBase64 || "");
           setCompanyAddress(data.address || "");
+          if (data.payrollSettings) {
+            setCompanyPayrollSettings(data.payrollSettings);
+          }
         }
       });
       

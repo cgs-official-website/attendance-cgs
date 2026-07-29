@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData, deleteCompany, updateCompanyDetails } from "../firebase";
+import { getCompanies, createCompany, registerUser, autoMigrateFirebase, getCompanyStats, approveCompany, updateCompanyStatus, recoverLostData, deleteCompany, updateCompanyDetails, getLandingPageConfig, updateLandingPageConfig } from "../firebase";
 import { useToast } from "../context/ToastContext";
 import { useModal } from "../context/ModalContext";
-import { Building2, Plus, Users, ShieldAlert, Link as LinkIcon, X, CheckSquare, Calendar as CalendarIcon, Download, FileText, Trash2 } from "lucide-react";
+import { Building2, Plus, Users, ShieldAlert, Link as LinkIcon, X, CheckSquare, Calendar as CalendarIcon, Download, FileText, Trash2, Layout } from "lucide-react";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
@@ -16,6 +16,27 @@ export default function SuperAdminDashboard() {
   const [showModal, setShowModal] = useState(false);
   const [newCompany, setNewCompany] = useState({ name: "", slug: "", adminEmail: "", adminPassword: "", adminName: "" });
   const [submitting, setSubmitting] = useState(false);
+
+  const [showLandingModal, setShowLandingModal] = useState(false);
+  const [landingTab, setLandingTab] = useState("hero"); // hero, features, pricing, trust
+  const [landingConfig, setLandingConfig] = useState({
+    // Hero
+    heroBadgeText: "", heroTitlePart1: "", heroTitlePart2: "", heroSubtitle: "",
+    // Features
+    featuresTitle: "", featuresSubtitle: "",
+    feature1Title: "", feature1Desc: "",
+    feature2Title: "", feature2Desc: "",
+    feature3Title: "", feature3Desc: "",
+    feature4Title: "", feature4Desc: "",
+    // Pricing
+    pricingTitle: "", pricingSubtitle: "", pricingPlanName: "", pricingPlanDesc: "", pricingAmount: "", pricingPeriod: "",
+    // Trust/Testimonials
+    testimonialsTitle: "",
+    testimonial1Title: "", testimonial1Desc: "",
+    testimonial2Title: "", testimonial2Desc: "",
+    testimonial3Title: "", testimonial3Desc: ""
+  });
+  const [savingLanding, setSavingLanding] = useState(false);
 
   // Stats Modal State
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -33,7 +54,30 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => {
     fetchCompanies();
+    fetchLandingConfig();
   }, []);
+
+  const fetchLandingConfig = async () => {
+    const config = await getLandingPageConfig();
+    if (config) {
+      setLandingConfig(config);
+    }
+  };
+
+  const handleSaveLandingConfig = async (e) => {
+    e.preventDefault();
+    setSavingLanding(true);
+    try {
+      await updateLandingPageConfig(landingConfig);
+      showToast("Landing page updated successfully!", "success");
+      setShowLandingModal(false);
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to update landing page", "error");
+    } finally {
+      setSavingLanding(false);
+    }
+  };
 
   const fetchCompanies = async () => {
     try {
@@ -333,6 +377,13 @@ export default function SuperAdminDashboard() {
           >
             <ShieldAlert size={18} className="shrink-0" />
             <span className="whitespace-nowrap">Recover Data</span>
+          </button>
+          <button 
+            onClick={() => setShowLandingModal(true)}
+            className="w-full sm:w-auto py-2.5 px-5 bg-purple-500/10 text-purple-500 font-bold rounded-[12px] hover:bg-purple-500 hover:text-white transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2 text-sm"
+          >
+            <Layout size={18} className="shrink-0" />
+            <span className="whitespace-nowrap">Manage Landing Page</span>
           </button>
           <button 
             onClick={() => setShowModal(true)}
@@ -728,6 +779,125 @@ export default function SuperAdminDashboard() {
                 </div>
               </div>
             )}
+
+          </div>
+        </div>,
+        document.body
+      )}
+      {showLandingModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center z-[9999] p-4 animate-fade-in">
+          <div className="bg-bg-card border border-border-card rounded-[24px] p-8 w-full max-w-3xl shadow-2xl relative animate-scale-up flex flex-col max-h-[90vh]">
+            <h2 className="text-2xl font-black text-text-main mb-6 flex items-center gap-2 shrink-0">
+              <Layout size={24} className="text-brand-primary" />
+              Manage Landing Page
+            </h2>
+            
+            <div className="flex gap-2 border-b border-border-card mb-6 shrink-0 overflow-x-auto custom-scrollbar pb-2">
+              {[
+                { id: "hero", label: "Hero Section" },
+                { id: "features", label: "Features" },
+                { id: "pricing", label: "Pricing" },
+                { id: "trust", label: "Trust/Security" }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setLandingTab(tab.id)}
+                  className={`px-4 py-2 text-sm font-bold rounded-full transition-colors whitespace-nowrap ${landingTab === tab.id ? 'bg-brand-primary text-white' : 'text-text-sec hover:bg-bg-base'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="overflow-y-auto custom-scrollbar flex-1 pr-2">
+              <form id="landingConfigForm" onSubmit={handleSaveLandingConfig} className="space-y-6">
+                
+                {landingTab === "hero" && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div>
+                      <label className="block text-xs font-bold text-text-mut mb-2">Hero Badge Text</label>
+                      <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-3 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.heroBadgeText || ""} onChange={(e) => setLandingConfig({...landingConfig, heroBadgeText: e.target.value})} placeholder="e.g. The Future of Work is Here" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-text-mut mb-2">Hero Title Part 1</label>
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-3 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.heroTitlePart1 || ""} onChange={(e) => setLandingConfig({...landingConfig, heroTitlePart1: e.target.value})} placeholder="e.g. Unify Your" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-text-mut mb-2">Hero Title Part 2 (Gradient)</label>
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-3 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.heroTitlePart2 || ""} onChange={(e) => setLandingConfig({...landingConfig, heroTitlePart2: e.target.value})} placeholder="e.g. Multi-Vendor Teams" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-text-mut mb-2">Hero Subtitle</label>
+                      <textarea className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-3 text-sm text-text-main focus:border-brand-primary outline-none min-h-[100px]" value={landingConfig.heroSubtitle || ""} onChange={(e) => setLandingConfig({...landingConfig, heroSubtitle: e.target.value})} placeholder="e.g. An enterprise-grade HRMS..." />
+                    </div>
+                  </div>
+                )}
+
+                {landingTab === "features" && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="bg-bg-base/50 p-4 rounded-xl border border-border-card space-y-4">
+                      <h4 className="font-bold text-sm text-brand-primary">Section Header</h4>
+                      <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.featuresTitle || ""} onChange={(e) => setLandingConfig({...landingConfig, featuresTitle: e.target.value})} placeholder="Everything to manage your workforce" />
+                      <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.featuresSubtitle || ""} onChange={(e) => setLandingConfig({...landingConfig, featuresSubtitle: e.target.value})} placeholder="From precise GPS attendance to..." />
+                    </div>
+                    
+                    {[1,2,3,4].map(num => (
+                      <div key={num} className="bg-bg-base/50 p-4 rounded-xl border border-border-card space-y-3">
+                        <h4 className="font-bold text-sm text-brand-primary">Feature {num}</h4>
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig[`feature${num}Title`] || ""} onChange={(e) => setLandingConfig({...landingConfig, [`feature${num}Title`]: e.target.value})} placeholder={`Feature ${num} Title`} />
+                        <textarea className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none h-20" value={landingConfig[`feature${num}Desc`] || ""} onChange={(e) => setLandingConfig({...landingConfig, [`feature${num}Desc`]: e.target.value})} placeholder={`Feature ${num} Description`} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {landingTab === "pricing" && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div className="bg-bg-base/50 p-4 rounded-xl border border-border-card space-y-4">
+                      <h4 className="font-bold text-sm text-brand-primary">Section Header</h4>
+                      <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.pricingTitle || ""} onChange={(e) => setLandingConfig({...landingConfig, pricingTitle: e.target.value})} placeholder="Simple, Transparent Pricing" />
+                      <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.pricingSubtitle || ""} onChange={(e) => setLandingConfig({...landingConfig, pricingSubtitle: e.target.value})} placeholder="One powerful enterprise plan..." />
+                    </div>
+                    <div className="bg-bg-base/50 p-4 rounded-xl border border-border-card space-y-4">
+                      <h4 className="font-bold text-sm text-brand-primary">Plan Details</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.pricingPlanName || ""} onChange={(e) => setLandingConfig({...landingConfig, pricingPlanName: e.target.value})} placeholder="Plan Name (e.g. Enterprise)" />
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.pricingPlanDesc || ""} onChange={(e) => setLandingConfig({...landingConfig, pricingPlanDesc: e.target.value})} placeholder="For growing organizations" />
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.pricingAmount || ""} onChange={(e) => setLandingConfig({...landingConfig, pricingAmount: e.target.value})} placeholder="Amount (e.g. INR 0)" />
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.pricingPeriod || ""} onChange={(e) => setLandingConfig({...landingConfig, pricingPeriod: e.target.value})} placeholder="Period (e.g. / 30-day trial)" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {landingTab === "trust" && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="bg-bg-base/50 p-4 rounded-xl border border-border-card space-y-4">
+                      <h4 className="font-bold text-sm text-brand-primary">Section Header</h4>
+                      <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig.testimonialsTitle || ""} onChange={(e) => setLandingConfig({...landingConfig, testimonialsTitle: e.target.value})} placeholder="Enterprise-Grade Security..." />
+                    </div>
+                    {[1,2,3].map(num => (
+                      <div key={num} className="bg-bg-base/50 p-4 rounded-xl border border-border-card space-y-3">
+                        <h4 className="font-bold text-sm text-brand-primary">Trust Point {num}</h4>
+                        <input type="text" className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none" value={landingConfig[`testimonial${num}Title`] || ""} onChange={(e) => setLandingConfig({...landingConfig, [`testimonial${num}Title`]: e.target.value})} placeholder={`Title ${num}`} />
+                        <textarea className="w-full bg-bg-base border border-border-card rounded-[12px] px-4 py-2 text-sm text-text-main focus:border-brand-primary outline-none h-20" value={landingConfig[`testimonial${num}Desc`] || ""} onChange={(e) => setLandingConfig({...landingConfig, [`testimonial${num}Desc`]: e.target.value})} placeholder={`Description ${num}`} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div className="flex gap-4 pt-6 mt-4 border-t border-border-card shrink-0">
+              <button type="button" onClick={() => setShowLandingModal(false)} className="flex-1 py-3 font-bold text-text-sec bg-bg-base hover:bg-border-card rounded-full transition-colors">
+                Cancel
+              </button>
+              <button type="submit" form="landingConfigForm" disabled={savingLanding} className="flex-1 py-3 font-bold text-white bg-brand-primary hover:bg-brand-hover rounded-full transition-colors disabled:opacity-50">
+                {savingLanding ? "Saving..." : "Save All Changes"}
+              </button>
+            </div>
 
           </div>
         </div>,

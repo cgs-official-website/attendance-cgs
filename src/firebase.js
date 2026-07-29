@@ -3650,3 +3650,36 @@ export const updateProject = async (projectId, updates) => {
     }
   }
 };
+
+// ----------------------------------------------------
+// LANDING PAGE CONFIG
+// ----------------------------------------------------
+
+export const getLandingPageConfig = async () => {
+  if (getDbType() === 'firebase') {
+    try {
+      const docRef = doc(db, 'settings', 'landing_page');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data();
+      }
+      return null;
+    } catch (e) {
+      console.warn("Error fetching landing page config", e);
+      return null;
+    }
+  } else {
+    const config = localStorage.getItem('att_landing_page_config');
+    return config ? JSON.parse(config) : null;
+  }
+};
+
+export const updateLandingPageConfig = async (configData) => {
+  if (getDbType() === 'firebase') {
+    const docRef = doc(db, 'settings', 'landing_page');
+    await setDoc(docRef, configData, { merge: true });
+  } else {
+    localStorage.setItem('att_landing_page_config', JSON.stringify(configData));
+  }
+  return true;
+};

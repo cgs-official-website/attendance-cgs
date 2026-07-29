@@ -4,6 +4,7 @@ import { Moon, Sun, ArrowRight, Shield, Users, Clock, CheckCircle, BarChart, Bri
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import logoImg from "../assets/zuna-logo.png";
 import Logo from "../components/Logo";
+import { getLandingPageConfig } from "../firebase";
 
 // Imported Assets
 import dashboardMockup from "../assets/landing_dashboard.png";
@@ -13,6 +14,7 @@ export default function LandingPage() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [landingConfig, setLandingConfig] = useState(null);
   
   const { scrollY } = useScroll();
   const yHeroText = useTransform(scrollY, [0, 500], [0, 100]);
@@ -29,6 +31,11 @@ export default function LandingPage() {
       setScrolled(window.scrollY > 50);
     };
     window.addEventListener("scroll", handleScroll);
+
+    getLandingPageConfig().then((config) => {
+      if (config) setLandingConfig(config);
+    });
+
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -156,7 +163,7 @@ export default function LandingPage() {
                 >
                   <Zap size={14} className="text-brand-primary drop-shadow-[0_0_5px_rgba(139,92,246,0.5)]" />
                 </motion.div>
-                The Future of Work is Here
+                {landingConfig?.heroBadgeText || "The Future of Work is Here"}
               </motion.div>
 
               <motion.h1 
@@ -165,14 +172,14 @@ export default function LandingPage() {
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-text-main mb-6 leading-[1.1]"
               >
-                Unify Your <br/>
+                {landingConfig?.heroTitlePart1 || "Unify Your"} <br/>
                 <motion.span 
                   animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
                   transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
                   style={{ backgroundSize: "200% auto" }}
                   className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary via-[#a855f7] to-[#6366f1] inline-block pb-2 drop-shadow-sm"
                 >
-                  Multi-Vendor Teams
+                  {landingConfig?.heroTitlePart2 || "Multi-Vendor Teams"}
                 </motion.span>
               </motion.h1>
               
@@ -182,7 +189,7 @@ export default function LandingPage() {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 className="text-lg sm:text-xl text-text-sec max-w-lg mb-10 font-medium leading-relaxed"
               >
-                An enterprise-grade HRMS that seamlessly tracks attendance, manages projects, and aligns your entire distributed workforce across multiple organizations.
+                {landingConfig?.heroSubtitle || "An enterprise-grade HRMS that seamlessly tracks attendance, manages projects, and aligns your entire distributed workforce across multiple organizations."}
               </motion.p>
 
               <motion.div 
@@ -200,26 +207,6 @@ export default function LandingPage() {
                 </Link>
               </motion.div>
               
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 1, delay: 0.6 }}
-                className="mt-10 flex items-center gap-4 text-sm font-semibold text-text-sec"
-              >
-                <div className="flex -space-x-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="w-10 h-10 rounded-full border-2 border-bg-base bg-bg-card overflow-hidden">
-                      <img src={avatarImg} alt="User" className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <div className="flex items-center gap-1 text-amber-500 mb-1">
-                    {[1,2,3,4,5].map(s => <Star key={s} size={14} fill="currentColor" />)}
-                  </div>
-                  <p>Trusted by 5,000+ modern teams</p>
-                </div>
-              </motion.div>
             </motion.div>
 
             {/* Right Dashboard Mockup (Floating & 3D) */}
@@ -301,8 +288,8 @@ export default function LandingPage() {
       <section id="features" className="py-32 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-20">
-            <h2 className="text-4xl md:text-5xl font-black text-text-main mb-6 tracking-tight">Everything to manage your <span className="text-brand-primary">workforce</span></h2>
-            <p className="text-text-sec text-lg font-medium">From precise GPS attendance to complex project tracking, Zuna handles it all with an elegant, intuitive interface.</p>
+            <h2 className="text-4xl md:text-5xl font-black text-text-main mb-6 tracking-tight">{landingConfig?.featuresTitle || "Everything to manage your"} <span className="text-brand-primary">workforce</span></h2>
+            <p className="text-text-sec text-lg font-medium">{landingConfig?.featuresSubtitle || "From precise GPS attendance to complex project tracking, Zuna handles it all with an elegant, intuitive interface."}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[320px]">
@@ -315,9 +302,9 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-brand-primary mb-6 relative z-10 shadow-sm">
                 <Clock size={28} />
               </div>
-              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Live GPS Attendance</h3>
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">{landingConfig?.feature1Title || "Live GPS Attendance"}</h3>
               <p className="text-text-sec leading-relaxed font-medium max-w-md relative z-10">
-                Precision tracking with geofencing. Know exactly when and where your remote or on-site team members clock in, complete with automated break timers.
+                {landingConfig?.feature1Desc || "Precision tracking with geofencing. Know exactly when and where your remote or on-site team members clock in, complete with automated break timers."}
               </p>
             </motion.div>
 
@@ -329,9 +316,9 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-purple-500 mb-6 relative z-10 shadow-sm">
                 <Shield size={28} />
               </div>
-              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Leave Management</h3>
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">{landingConfig?.feature2Title || "Leave Management"}</h3>
               <p className="text-text-sec leading-relaxed font-medium relative z-10">
-                Automated workflows for sick, casual, and paid leaves with instant manager approvals.
+                {landingConfig?.feature2Desc || "Automated workflows for sick, casual, and paid leaves with instant manager approvals."}
               </p>
             </motion.div>
 
@@ -343,9 +330,9 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-indigo-500 mb-6 relative z-10 shadow-sm">
                 <Users size={28} />
               </div>
-              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Multi-Vendor</h3>
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">{landingConfig?.feature3Title || "Multi-Vendor"}</h3>
               <p className="text-text-sec leading-relaxed font-medium relative z-10">
-                Manage multiple organizations and sub-contractors from a single super-admin pane of glass.
+                {landingConfig?.feature3Desc || "Manage multiple organizations and sub-contractors from a single super-admin pane of glass."}
               </p>
             </motion.div>
 
@@ -358,9 +345,9 @@ export default function LandingPage() {
               <div className="w-14 h-14 bg-bg-base border border-border-card rounded-2xl flex items-center justify-center text-emerald-500 mb-6 relative z-10 shadow-sm">
                 <Briefcase size={28} />
               </div>
-              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">Project & Task Mastery</h3>
+              <h3 className="text-2xl font-bold text-text-main mb-3 relative z-10">{landingConfig?.feature4Title || "Project & Task Mastery"}</h3>
               <p className="text-text-sec leading-relaxed font-medium max-w-md relative z-10">
-                Assign tasks, track progress in real-time, and manage multi-vendor projects effortlessly with tailored access controls and agile kanban boards.
+                {landingConfig?.feature4Desc || "Assign tasks, track progress in real-time, and manage multi-vendor projects effortlessly with tailored access controls and agile kanban boards."}
               </p>
             </motion.div>
           </div>
@@ -371,8 +358,8 @@ export default function LandingPage() {
       <section id="pricing" className="py-24 relative z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-4xl font-black text-text-main mb-4 tracking-tight">Simple, Transparent Pricing</h2>
-            <p className="text-text-sec text-lg font-medium">One powerful enterprise plan designed to scale with your organization.</p>
+            <h2 className="text-4xl font-black text-text-main mb-4 tracking-tight">{landingConfig?.pricingTitle || "Simple, Transparent Pricing"}</h2>
+            <p className="text-text-sec text-lg font-medium">{landingConfig?.pricingSubtitle || "One powerful enterprise plan designed to scale with your organization."}</p>
           </div>
 
           <div className="max-w-lg mx-auto bg-bg-card/60 backdrop-blur-3xl border-2 border-brand-primary/40 rounded-[3rem] p-10 sm:p-12 shadow-[0_0_50px_rgba(139,92,246,0.15)] relative overflow-hidden">
@@ -380,8 +367,8 @@ export default function LandingPage() {
             
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h3 className="text-2xl font-black text-text-main">Enterprise</h3>
-                <p className="text-text-sec text-sm font-semibold mt-1">For growing organizations</p>
+                <h3 className="text-2xl font-black text-text-main">{landingConfig?.pricingPlanName || "Enterprise"}</h3>
+                <p className="text-text-sec text-sm font-semibold mt-1">{landingConfig?.pricingPlanDesc || "For growing organizations"}</p>
               </div>
               <div className="px-4 py-1.5 bg-brand-primary/10 text-brand-primary text-xs font-bold uppercase tracking-wider rounded-full border border-brand-primary/20">
                 Popular
@@ -389,8 +376,8 @@ export default function LandingPage() {
             </div>
 
             <div className="mb-8">
-              <span className="text-5xl font-black text-text-main">INR 0</span>
-              <span className="text-text-mut font-bold"> / 30-day trial</span>
+              <span className="text-5xl font-black text-text-main">{landingConfig?.pricingAmount || "INR 0"}</span>
+              <span className="text-text-mut font-bold"> {landingConfig?.pricingPeriod || "/ 30-day trial"}</span>
             </div>
 
             <ul className="space-y-4 mb-10">
@@ -414,15 +401,15 @@ export default function LandingPage() {
       {/* Why Choose Zuna */}
       <section id="testimonials" className="py-24 relative z-10 border-y border-border-card bg-bg-card/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-black text-center mb-16 text-text-main">Enterprise-Grade Security & Reliability</h2>
+          <h2 className="text-3xl font-black text-center mb-16 text-text-main">{landingConfig?.testimonialsTitle || "Enterprise-Grade Security & Reliability"}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <div className="bg-bg-card border border-border-card p-8 rounded-3xl relative">
               <div className="flex gap-1 text-brand-primary mb-6">
                 <Shield size={24} />
               </div>
-              <h4 className="font-bold text-text-main text-lg mb-2">Secure by Design</h4>
+              <h4 className="font-bold text-text-main text-lg mb-2">{landingConfig?.testimonial1Title || "Secure by Design"}</h4>
               <p className="text-text-sec font-medium leading-relaxed mb-4 relative z-10">
-                End-to-end encryption for all organizational data. Role-based access control guarantees that super-admins, admins, and employees only see exactly what they need.
+                {landingConfig?.testimonial1Desc || "End-to-end encryption for all organizational data. Role-based access control guarantees that super-admins, admins, and employees only see exactly what they need."}
               </p>
             </div>
             
@@ -430,9 +417,9 @@ export default function LandingPage() {
               <div className="flex gap-1 text-emerald-500 mb-6">
                 <CheckCircle size={24} />
               </div>
-              <h4 className="font-bold text-text-main text-lg mb-2">Multi-Tenant Architecture</h4>
+              <h4 className="font-bold text-text-main text-lg mb-2">{landingConfig?.testimonial2Title || "Multi-Tenant Architecture"}</h4>
               <p className="text-text-sec font-medium leading-relaxed mb-4 relative z-10">
-                Manage multiple workspaces securely. Complete data isolation between different vendor organizations with a unified interface for Super Admins.
+                {landingConfig?.testimonial2Desc || "Manage multiple workspaces securely. Complete data isolation between different vendor organizations with a unified interface for Super Admins."}
               </p>
             </div>
 
@@ -440,9 +427,9 @@ export default function LandingPage() {
               <div className="flex gap-1 text-purple-500 mb-6">
                 <Clock size={24} />
               </div>
-              <h4 className="font-bold text-text-main text-lg mb-2">Real-Time Sync</h4>
+              <h4 className="font-bold text-text-main text-lg mb-2">{landingConfig?.testimonial3Title || "Real-Time Sync"}</h4>
               <p className="text-text-sec font-medium leading-relaxed mb-4 relative z-10">
-                Instantly track GPS attendance, timesheets, and live chat across distributed global teams with zero delay and perfect accuracy.
+                {landingConfig?.testimonial3Desc || "Instantly track GPS attendance, timesheets, and live chat across distributed global teams with zero delay and perfect accuracy."}
               </p>
             </div>
           </div>

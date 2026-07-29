@@ -44,6 +44,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Default fallback for other collections (leaves, attendance, tasks, etc)
     match /{document=**} {
       allow read, write: if isAuthenticated();

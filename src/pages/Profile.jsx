@@ -32,6 +32,7 @@ export default function Profile() {
   // Organization Branding State
   const [orgName, setOrgName] = useState("");
   const [orgLogo, setOrgLogo] = useState("");
+  const [orgAddress, setOrgAddress] = useState("");
   const [cloudinaryCloudName, setCloudinaryCloudName] = useState("");
   const [cloudinaryUploadPreset, setCloudinaryUploadPreset] = useState("");
   const [orgLoading, setOrgLoading] = useState(false);
@@ -48,6 +49,7 @@ export default function Profile() {
           setAdminCompany(found);
           setOrgName(found.name || "");
           setOrgLogo(found.logoBase64 || "");
+          setOrgAddress(found.address || "");
           setCloudinaryCloudName(found.cloudinaryCloudName || "");
           setCloudinaryUploadPreset(found.cloudinaryUploadPreset || "");
         }
@@ -128,6 +130,7 @@ export default function Profile() {
       await updateCompanyDetails(adminCompany.id, { 
         name: orgName, 
         logoBase64: orgLogo,
+        address: orgAddress,
         cloudinaryCloudName,
         cloudinaryUploadPreset
       });
@@ -613,6 +616,20 @@ export default function Profile() {
                       onChange={(e) => setOrgName(e.target.value)}
                       placeholder="e.g. Acme Corp"
                       required
+                    />
+                  </div>
+                  
+                  {/* Org Address */}
+                  <div className="flex-grow flex flex-col gap-1.5 w-full mt-4">
+                    <label className="text-xs font-bold text-text-sec" htmlFor="org-address">
+                      Company Address (For Payslip)
+                    </label>
+                    <textarea
+                      id="org-address"
+                      className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[80px]"
+                      value={orgAddress}
+                      onChange={(e) => setOrgAddress(e.target.value)}
+                      placeholder="e.g. 22/33, Kovai Main Road..."
                     />
                   </div>
                 </div>

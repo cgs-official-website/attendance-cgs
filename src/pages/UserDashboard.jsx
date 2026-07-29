@@ -99,6 +99,7 @@ export default function UserDashboard() {
   const [companyName, setCompanyName] = useState("");
   const [companyPayrollSettings, setCompanyPayrollSettings] = useState({ pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0 });
   const [companyLogo, setCompanyLogo] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
 
   useEffect(() => {
     if (currentUser?.companyId) {
@@ -106,9 +107,23 @@ export default function UserDashboard() {
         if(data) {
           setCompanyName(data.name || "ZUNA HRMS");
           setCompanyLogo(data.logoBase64 || "");
+          setCompanyAddress(data.address || "");
         }
       });
-      return () => unsub();
+      
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return () => unsub();
     }
   }, [currentUser?.companyId]);
   const [todayLog, setTodayLog] = useState(null);
@@ -237,7 +252,20 @@ export default function UserDashboard() {
   // Ticking time effect
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return () => clearInterval(timer);
   }, []);
 
   // Reset pagination on tab change
@@ -300,7 +328,20 @@ export default function UserDashboard() {
         if (parts.length !== 3) return false;
         const month = parseInt(parts[1], 10);
         const day = parseInt(parts[2], 10);
-        return (month === todayMonth && day === todayDay) || (month === tmrwMonth && day === tmrwDay);
+        
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (month === todayMonth && day === todayDay) || (month === tmrwMonth && day === tmrwDay);
       }).map(u => {
         const parts = u.dob.split('-');
         const month = parseInt(parts[1], 10);
@@ -318,7 +359,20 @@ export default function UserDashboard() {
       setMyPayslips(list.filter(p => p.employeeId === currentUser.uid));
     });
 
-    return () => {
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return () => {
       unsubscribe();
       unsubscribePaid();
       unsubscribeLeaves();
@@ -366,7 +420,20 @@ export default function UserDashboard() {
       }
     }
 
-    return () => {
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [todayLog]);
@@ -780,7 +847,20 @@ export default function UserDashboard() {
   const recentActivities = getRecentActivitiesList();
 
   if (loading) {
-    return (
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
       <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
         {/* Welcome Panel Skeleton */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -821,7 +901,20 @@ export default function UserDashboard() {
   }
 
   if (activeTab === "payslips") {
-    return (
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
       <div className="space-y-6 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
         {/* Breadcrumb & Header */}
         <div className="mb-6">
@@ -865,7 +958,20 @@ export default function UserDashboard() {
 
               const calc = calculatePayroll(payslip.grossSalary || 0);
 
-              return (
+              
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                 <div key={idx} className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col group hover:shadow-md transition-shadow relative overflow-hidden text-left">
                   <div className="flex justify-between items-start mb-6 z-10">
                     <div className="flex items-center gap-3">
@@ -931,62 +1037,129 @@ export default function UserDashboard() {
                 <button onClick={() => setShowPayslipModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1 rounded-lg hover:bg-bg-base"><X size={18} /></button>
               </div>
               <div className="p-8 text-left" id="payslip-content">
-                <div className="flex justify-between items-start border-b border-border-card pb-6 mb-6">
-                  <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    {companyLogo && (
-                      <img src={companyLogo} alt={companyName} className="h-10 object-contain" />
-                    )}
-                    <h1 className="text-2xl font-extrabold text-brand-primary tracking-tight">{companyName || "ZUNA HRMS"}</h1>
-                  </div>
-                    <p className="text-xs text-text-sec font-medium mt-1">Salary Slip for {selectedPayslip.month} {selectedPayslip.year}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-text-main">{currentUser.name}</p>
-                    <p className="text-xs text-text-sec mt-1 uppercase tracking-wider">{currentUser.designation || currentUser.role}</p>
-                    <p className="text-[10px] text-text-mut mt-0.5">Emp ID: {currentUser.employeeId || currentUser.uid.substring(0,6).toUpperCase()}</p>
-                  </div>
+                {/* Header */}
+                <div className="flex justify-center flex-col items-center mb-6">
+                  {companyLogo && <img src={companyLogo} alt={companyName} className="h-16 object-contain mb-2" />}
+                  <h1 className="text-2xl font-bold text-black">{companyName || "ZUNA HRMS"}</h1>
+                  {companyAddress && <p className="text-sm font-semibold text-black text-center mt-1 max-w-2xl whitespace-pre-wrap">{companyAddress}</p>}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-8">
+                <div className="text-center mb-6">
+                  <h2 className="text-xl font-bold text-black uppercase tracking-widest mb-1">PAYSLIP</h2>
+                  <p className="text-md font-semibold text-black">Payslip for the month of {selectedPayslip.month}, {selectedPayslip.year}</p>
+                </div>
+                
+                <div className="border-t-2 border-black w-full my-2"></div>
+                
+                {/* Employee Info Grid */}
+                <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs font-semibold text-black mb-4">
+                  {/* Left Column */}
                   <div>
-                    <h4 className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider border-b border-border-card pb-2 mb-3">Earnings</h4>
-                    <div className="space-y-3">
-                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Basic Salary</span><span className="text-xs font-bold text-text-main">₹{(selectedPayslip.basic || 0).toLocaleString('en-IN')}</span></div>
-                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">House Rent Allowance (HRA)</span><span className="text-xs font-bold text-text-main">₹{(selectedPayslip.hra || 0).toLocaleString('en-IN')}</span></div>
-                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Special Allowance</span><span className="text-xs font-bold text-text-main">₹{(selectedPayslip.special || 0).toLocaleString('en-IN')}</span></div>
-                    </div>
-                    <div className="flex justify-between border-t border-border-card mt-3 pt-3">
-                      <span className="text-xs font-extrabold text-text-main">Total Earnings</span>
-                      <span className="text-xs font-extrabold text-text-main">₹{(selectedPayslip.grossSalary || 0).toLocaleString('en-IN')}</span>
-                    </div>
+                    <div className="grid grid-cols-3"><span className="col-span-1">Emp Name</span><span className="col-span-2">: {currentUser.name}</span></div>
+                    {companyPayrollSettings?.payslipFields?.empCode !== false && currentUser.employeeId && <div className="grid grid-cols-3"><span className="col-span-1">Emp Code</span><span className="col-span-2">: {currentUser.employeeId}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.department !== false && currentUser.department && <div className="grid grid-cols-3"><span className="col-span-1">Department</span><span className="col-span-2">: {currentUser.department}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.designation !== false && currentUser.designation && <div className="grid grid-cols-3"><span className="col-span-1">Designation</span><span className="col-span-2">: {currentUser.designation}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.grade !== false && currentUser.grade && <div className="grid grid-cols-3"><span className="col-span-1">Grade</span><span className="col-span-2">: {currentUser.grade}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.pfNo !== false && currentUser.pfNo && <div className="grid grid-cols-3"><span className="col-span-1">PF No.</span><span className="col-span-2">: {currentUser.pfNo}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.uan !== false && currentUser.uan && <div className="grid grid-cols-3"><span className="col-span-1">PF UAN</span><span className="col-span-2">: {currentUser.uan}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.bankAcNo !== false && currentUser.bankAcNo && <div className="grid grid-cols-3"><span className="col-span-1">Bank Account No.</span><span className="col-span-2">: {currentUser.bankAcNo}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.ifscCode !== false && currentUser.ifscCode && <div className="grid grid-cols-3"><span className="col-span-1">IFSC</span><span className="col-span-2">: {currentUser.ifscCode}</span></div>}
                   </div>
+                  {/* Right Column */}
+                  <div>
+                    {companyPayrollSettings?.payslipFields?.location !== false && currentUser.location && <div className="grid grid-cols-3"><span className="col-span-1">Location</span><span className="col-span-2">: {currentUser.location}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.unit !== false && currentUser.unit && <div className="grid grid-cols-3"><span className="col-span-1">Unit</span><span className="col-span-2">: {currentUser.unit}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.joiningDate !== false && currentUser.joiningDate && <div className="grid grid-cols-3"><span className="col-span-1">Joining Date</span><span className="col-span-2">: {currentUser.joiningDate}</span></div>}
+                    <div className="grid grid-cols-3"><span className="col-span-1">Paid Days</span><span className="col-span-2">: {currentUser.paidDays || "30.00"}</span></div>
+                    <div className="grid grid-cols-3"><span className="col-span-1">Working Days</span><span className="col-span-2">: {currentUser.workingDays || "30.00"}</span></div>
+                    {companyPayrollSettings?.payslipFields?.costCenter !== false && currentUser.costCenter && <div className="grid grid-cols-3"><span className="col-span-1">Cost Center</span><span className="col-span-2">: {currentUser.costCenter}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.pan !== false && currentUser.pan && <div className="grid grid-cols-3"><span className="col-span-1">PAN</span><span className="col-span-2">: {currentUser.pan}</span></div>}
+                    {currentUser.gender && <div className="grid grid-cols-3"><span className="col-span-1">Gender</span><span className="col-span-2">: {currentUser.gender}</span></div>}
+                    <div className="grid grid-cols-3"><span className="col-span-1">Loss of Pay</span><span className="col-span-2">: 0.00</span></div>
+                  </div>
+                </div>
 
-                  <div>
-                    <h4 className="text-[10px] font-extrabold text-text-mut uppercase tracking-wider border-b border-border-card pb-2 mb-3">Deductions</h4>
-                    <div className="space-y-3">
-                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">EPF (12%)</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.pf || 0).toLocaleString('en-IN')}</span></div>
-                      {selectedPayslip.esi > 0 && <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">ESI (0.75%)</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.esi || 0).toLocaleString('en-IN')}</span></div>}
-                      <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">Professional Tax</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.pt || 0).toLocaleString('en-IN')}</span></div>
-                      {selectedPayslip.tds > 0 && <div className="flex justify-between"><span className="text-xs font-semibold text-text-sec">TDS</span><span className="text-xs font-bold text-brand-danger">₹{(selectedPayslip.tds || 0).toLocaleString('en-IN')}</span></div>}
-                    </div>
-                    <div className="flex justify-between border-t border-border-card mt-3 pt-3">
-                      <span className="text-xs font-extrabold text-text-main">Total Deductions</span>
-                      <span className="text-xs font-extrabold text-brand-danger">₹{((selectedPayslip.pf || 0) + (selectedPayslip.esi || 0) + (selectedPayslip.pt || 0) + (selectedPayslip.tds || 0)).toLocaleString('en-IN')}</span>
-                    </div>
-                  </div>
+                <div className="border-t-2 border-black w-full my-2"></div>
+
+                {/* Financial Table */}
+                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-black mb-2 mt-2">
+                  <div className="col-span-4">Earnings</div>
+                  <div className="col-span-2 text-right">Earned Amt.</div>
+                  <div className="col-span-2 text-right">Arrears</div>
+                  <div className="col-span-3">Deductions</div>
+                  <div className="col-span-1 text-right">Amount</div>
+                </div>
+                <div className="border-t-2 border-black w-full mb-2"></div>
+
+                <div className="grid grid-cols-12 gap-2 text-xs text-black">
+                  {/* Row 1 */}
+                  <div className="col-span-4 font-semibold">Basic</div>
+                  <div className="col-span-2 text-right">{selectedPayslip.basic.toFixed(2)}</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  {selectedPayslip.pf > 0 ? (
+                    <>
+                      <div className="col-span-3 font-semibold">Provident Fund</div>
+                      <div className="col-span-1 text-right">{selectedPayslip.pf.toFixed(2)}</div>
+                    </>
+                  ) : (
+                    <><div className="col-span-3"></div><div className="col-span-1"></div></>
+                  )}
+
+                  {/* Row 2 */}
+                  <div className="col-span-4 font-semibold">House Rent Allowance</div>
+                  <div className="col-span-2 text-right">{selectedPayslip.hra.toFixed(2)}</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  {/* Loss of Pay deduction could go here, currently 0 */}
+                  <div className="col-span-3 font-semibold">Loss of Pay</div>
+                  <div className="col-span-1 text-right">0.00</div>
+
+                  {/* Row 3 */}
+                  {selectedPayslip.special > 0 ? (
+                    <>
+                      <div className="col-span-4 font-semibold">Special Allowance</div>
+                      <div className="col-span-2 text-right">{selectedPayslip.special.toFixed(2)}</div>
+                      <div className="col-span-2 text-right">0.00</div>
+                    </>
+                  ) : (
+                    <><div className="col-span-8"></div></>
+                  )}
+                  {selectedPayslip.pt > 0 ? (
+                    <>
+                      <div className="col-span-3 font-semibold -mt-4">Professional Tax</div>
+                      <div className="col-span-1 text-right -mt-4">{selectedPayslip.pt.toFixed(2)}</div>
+                    </>
+                  ) : <><div className="col-span-4"></div></>}
+
+                  {/* Row 4 (ESI/TDS if they exist) */}
+                  {selectedPayslip.esi > 0 ? (
+                    <><div className="col-span-8"></div><div className="col-span-3 font-semibold">ESI</div><div className="col-span-1 text-right">{selectedPayslip.esi.toFixed(2)}</div></>
+                  ) : null}
+                  {selectedPayslip.tds > 0 ? (
+                    <><div className="col-span-8"></div><div className="col-span-3 font-semibold">TDS</div><div className="col-span-1 text-right">{selectedPayslip.tds.toFixed(2)}</div></>
+                  ) : null}
+
                 </div>
                 
-                <div className="mt-8 bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-[16px] flex items-center justify-between">
-                  <span className="text-sm font-extrabold text-text-main">Net Salary Payable</span>
-                  <span className="text-2xl font-extrabold text-emerald-500">₹{(selectedPayslip.net || 0).toLocaleString('en-IN')}</span>
-                </div>
+                <div className="border-t-2 border-black w-full mt-6 mb-2"></div>
                 
-                <div className="mt-8 text-center border-t border-border-card pt-6">
-                  <p className="text-[10px] text-text-mut italic">This is a system generated payslip and does not require a physical signature.</p>
+                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-black mb-2 mt-2">
+                  <div className="col-span-4">Gross Earning</div>
+                  <div className="col-span-2 text-right">{selectedPayslip.grossSalary.toFixed(2)}</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-3">Gross Deduction</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.pf + selectedPayslip.pt + selectedPayslip.esi + selectedPayslip.tds).toFixed(2)}</div>
                 </div>
+
+                <div className="border-t-2 border-black w-full mb-2"></div>
+
+                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-black mb-4 mt-2">
+                  <div className="col-span-4">Net Amount</div>
+                  <div className="col-span-2 text-right">{selectedPayslip.net.toFixed(2)}</div>
+                </div>
+
+                <p className="text-xs text-black mt-6 mb-4">Net Amount in words: ( {numberToWords(selectedPayslip.net).toUpperCase()}ONLY )</p>
+                <p className="text-xs text-black font-bold mb-4">Disclaimer: This is a system generated payslip, does not require any signature.</p>
               </div>
-              
               <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
                 <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
                 <button 
@@ -1007,7 +1180,20 @@ export default function UserDashboard() {
   }
 
   if (activeTab === "assets") {
-    return (
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
       <div className="space-y-6 w-full max-w-[1400px] mx-auto text-left animate-fade-in">
         {/* Breadcrumb & Header */}
         <div className="mb-6">
@@ -1038,7 +1224,20 @@ export default function UserDashboard() {
                 statusColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
               }
 
-              return (
+              
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                 <div key={asset.id} className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden">
                   <div className="flex justify-between items-start gap-4 mb-4">
                     <div>
@@ -1087,7 +1286,20 @@ export default function UserDashboard() {
     const paginatedLeaveRequests = myLeaveRequests.slice(leavesStartIndex, leavesStartIndex + 10);
     const leavesTotalPages = Math.ceil(myLeaveRequests.length / 10) || 1;
 
-    return (
+    
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
       <div className="space-y-6 w-full max-w-[1400px] mx-auto text-left">
         {/* Breadcrumb & Header */}
         <div className="mb-6">
@@ -1256,7 +1468,20 @@ export default function UserDashboard() {
                         const startF = req.startDate ? new Date(req.startDate).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
                         const endF = req.endDate ? new Date(req.endDate).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
 
-                        return (
+                        
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                           <tr key={req.id} className="hover:bg-bg-base/30">
                             <td className="py-3.5 pr-4 text-text-main font-bold">
                               <div className="flex items-center gap-1.5">
@@ -1306,7 +1531,20 @@ export default function UserDashboard() {
                         }
                         return null;
                       }
-                      return (
+                      
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                         <button
                           key={p}
                           onClick={() => setLeavesPage(p)}
@@ -1489,6 +1727,19 @@ export default function UserDashboard() {
   const activePaidLeaves = paidLeaves
     .filter(pl => (pl.status || "active") === "active" && !dismissedLeaves.includes(pl.id))
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
+
+  
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
 
   return (
     <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto">
@@ -1760,7 +2011,20 @@ export default function UserDashboard() {
               const longBalMin = Math.max(0, Math.round(longBreakBalance / 60));
               const bioBalMin = Math.max(0, Math.round(bioBreakBalance / 60));
 
-              return (
+              
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                 <div className="w-full text-center p-2">
                   <div className="w-16 h-16 rounded-full bg-brand-success/10 text-brand-success flex items-center justify-center mx-auto mb-5">
                     <CheckCircle size={28} />
@@ -1979,7 +2243,20 @@ export default function UserDashboard() {
               </h3>
               <div className="space-y-3">
                 {currentUser.tasks.filter(t => t.timerStartedAt && !t.completed).map(task => {
-                  return (
+                  
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                     <div key={task.id} className="p-3 bg-bg-base/30 border border-border-card rounded-[16px]">
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="font-bold text-sm text-text-main pr-2">{task.title}</h4>
@@ -2118,7 +2395,20 @@ export default function UserDashboard() {
                 if (act.type === "work") dotColor = "bg-brand-primary";
                 if (act.type === "in") dotColor = "bg-brand-success";
 
-                return (
+                
+  const handleDownloadPayslip = () => {
+    const element = document.getElementById('payslip-content');
+    const opt = {
+      margin:       0.5,
+      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+  };
+
+  return (
                   <div key={idx} className="relative min-w-[130px] pt-7 flex-shrink-0">
                     {/* Node Dot */}
                     <div className={`absolute left-0 top-[11px] w-3 h-3 rounded-full border-2 border-bg-card ${dotColor} z-10`} />

@@ -1086,8 +1086,8 @@ export default function UserDashboard() {
                     {companyPayrollSettings?.payslipFields?.grade !== false && currentUser.grade && <div className="grid grid-cols-3"><span className="col-span-1">Grade</span><span className="col-span-2">: {currentUser.grade}</span></div>}
                     {companyPayrollSettings?.payslipFields?.pfNo !== false && currentUser.pfNo && <div className="grid grid-cols-3"><span className="col-span-1">PF No.</span><span className="col-span-2">: {currentUser.pfNo}</span></div>}
                     {companyPayrollSettings?.payslipFields?.uan !== false && currentUser.uan && <div className="grid grid-cols-3"><span className="col-span-1">PF UAN</span><span className="col-span-2">: {currentUser.uan}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.bankAcNo !== false && currentUser.bankAcNo && <div className="grid grid-cols-3"><span className="col-span-1">Bank Account No.</span><span className="col-span-2">: {currentUser.bankAcNo}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.ifscCode !== false && currentUser.ifscCode && <div className="grid grid-cols-3"><span className="col-span-1">IFSC</span><span className="col-span-2">: {currentUser.ifscCode}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.bankAcNo !== false && <div className="grid grid-cols-3"><span className="col-span-1">Bank Account No.</span><span className="col-span-2">: {currentUser.bankAcNo || 'NaN'}</span></div>}
+                    {companyPayrollSettings?.payslipFields?.ifscCode !== false && <div className="grid grid-cols-3"><span className="col-span-1">IFSC</span><span className="col-span-2">: {currentUser.ifscCode || 'NaN'}</span></div>}
                   </div>
                   {/* Right Column */}
                   <div>

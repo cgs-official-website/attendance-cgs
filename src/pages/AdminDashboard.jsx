@@ -5916,7 +5916,7 @@ export default function AdminDashboard() {
               <p className="text-xs text-black font-bold mb-4">Disclaimer: This is a system generated payslip, does not require any signature.</p>
               <div className="mt-12 flex justify-center items-center gap-2 pb-2 opacity-80">
                 <span className="text-sm font-extrabold text-black">Powered by</span>
-                <img src={zunaLogo} alt="Zuna Logo" className="h-6 object-contain" />
+                <img src={zunaLogo} alt="Zuna Logo" className="h-6 object-contain translate-y-0.5" />
                 <span className="text-sm font-extrabold text-black ml-1">Simplify payroll and compliance.</span>
               </div>
 

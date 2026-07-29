@@ -1174,7 +1174,15 @@ export default function UserDashboard() {
                 <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>
                 <button 
                   onClick={() => {
-                    window.print(); 
+                                        const element = document.getElementById('payslip-content');
+                    const opt = {
+                      margin:       0,
+                      filename:     `Payslip_${selectedPayslip.month}_${selectedPayslip.year}.pdf`,
+                      image:        { type: 'jpeg', quality: 0.98 },
+                      html2canvas:  { scale: 2, useCORS: true },
+                      jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                    };
+                    html2pdf().set(opt).from(element).save(); 
                   }} 
                   className="px-6 py-2.5 flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
                 >

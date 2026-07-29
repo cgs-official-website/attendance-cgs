@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import html2pdf from "html2pdf.js";
 import zunaLogo from "../assets/zuna-logo.png";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
@@ -5955,7 +5956,15 @@ export default function AdminDashboard() {
               </button>
               <button 
                 onClick={() => {
-                  window.print(); 
+                                      const element = document.getElementById('payslip-content');
+                    const opt = {
+                      margin:       0,
+                      filename:     `Payslip_${selectedPayrollUser.name}_${payrollMonth}_${payrollYear}.pdf`,
+                      image:        { type: 'jpeg', quality: 0.98 },
+                      html2canvas:  { scale: 2, useCORS: true },
+                      jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                    };
+                    html2pdf().set(opt).from(element).save(); 
                 }} 
                 className="w-full sm:w-auto px-6 py-2.5 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[12px] text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
               >

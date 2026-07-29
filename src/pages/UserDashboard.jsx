@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import html2pdf from "html2pdf.js";
 import zunaLogo from "../assets/zuna-logo.png";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";

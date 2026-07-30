@@ -1060,135 +1060,156 @@ export default function UserDashboard() {
                 </div>
                 <button onClick={() => setShowPayslipModal(false)} className="text-text-mut hover:text-text-main transition-colors p-1 rounded-lg hover:bg-bg-base"><X size={18} /></button>
               </div>
-              <div className="p-8 text-left" id="payslip-content">
+              <div className="p-8 text-left bg-white font-sans" id="payslip-content">
                 {/* Header */}
-                <div className="flex justify-center flex-col items-center mb-6">
-                  {companyLogo && <img src={companyLogo} crossOrigin="anonymous" alt={companyName} className="h-16 object-contain mb-2" />}
-                  <h1 className="text-2xl font-bold text-black">{companyName || "ZUNA HRMS"}</h1>
-                  {companyAddress && <p className="text-sm font-semibold text-black text-center mt-1 max-w-2xl whitespace-pre-wrap">{companyAddress}</p>}
+                <div className="flex items-center mb-6">
+                  <div className="w-1/3">
+                    {companyLogo && <img src={companyLogo} crossOrigin="anonymous" alt={companyName} className="h-14 object-contain" />}
+                  </div>
+                  <div className="w-1/3 flex flex-col items-center justify-center text-center">
+                    <h1 className="text-lg font-extrabold text-[#000080] whitespace-nowrap">{companyName || "ZUNA HRMS"}</h1>
+                  </div>
+                  <div className="w-1/3"></div>
+                </div>
+                <div className="text-center mb-4 -mt-4">
+                  {companyAddress && <p className="text-[11px] font-bold text-black mt-1 whitespace-pre-wrap">{companyAddress}</p>}
                 </div>
                 
-                <div className="text-center mb-6">
-                  <h2 className="text-xl font-bold text-black uppercase tracking-widest mb-1">PAYSLIP</h2>
-                  <p className="text-md font-semibold text-black">Payslip for the month of {selectedPayslip.month}, {selectedPayslip.year}</p>
+                <div className="text-center mb-2 mt-4">
+                  <h2 className="text-xl font-extrabold text-black tracking-wider uppercase">PAYSLIP</h2>
                 </div>
                 
-                <div className="border-t-2 border-black w-full my-2"></div>
+                <div className="border-t-[3px] border-black w-full my-2"></div>
+
+                <div className="text-center mb-2 mt-2">
+                  <p className="text-sm font-extrabold text-black">Payslip for the month of {selectedPayslip.month}, {selectedPayslip.year}</p>
+                </div>
+
+                <div className="border-t-[3px] border-black w-full mb-4"></div>
                 
                 {/* Employee Info Grid */}
-                <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs font-semibold text-black mb-4">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-[10px] font-normal text-black mb-4">
                   {/* Left Column */}
                   <div>
-                    <div className="grid grid-cols-3"><span className="col-span-1">Emp Name</span><span className="col-span-2">: {currentUser.name}</span></div>
-                    {companyPayrollSettings?.payslipFields?.empCode !== false && currentUser.employeeId && <div className="grid grid-cols-3"><span className="col-span-1">Emp Code</span><span className="col-span-2">: {currentUser.employeeId}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.department !== false && currentUser.department && <div className="grid grid-cols-3"><span className="col-span-1">Department</span><span className="col-span-2">: {currentUser.department}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.designation !== false && currentUser.designation && <div className="grid grid-cols-3"><span className="col-span-1">Designation</span><span className="col-span-2">: {currentUser.designation}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.grade !== false && currentUser.grade && <div className="grid grid-cols-3"><span className="col-span-1">Grade</span><span className="col-span-2">: {currentUser.grade}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.pfNo !== false && currentUser.pfNo && <div className="grid grid-cols-3"><span className="col-span-1">PF No.</span><span className="col-span-2">: {currentUser.pfNo}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.uan !== false && currentUser.uan && <div className="grid grid-cols-3"><span className="col-span-1">PF UAN</span><span className="col-span-2">: {currentUser.uan}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.bankAcNo !== false && <div className="grid grid-cols-3"><span className="col-span-1">Bank Account No.</span><span className="col-span-2">: {currentUser.bankAcNo || 'NaN'}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.ifscCode !== false && <div className="grid grid-cols-3"><span className="col-span-1">IFSC</span><span className="col-span-2">: {currentUser.ifscCode || 'NaN'}</span></div>}
+                    <div className="grid grid-cols-[120px_1fr]"><span>Emp Name</span><span>: {currentUser.name || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Emp Code</span><span>: {currentUser.employeeId || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Department</span><span>: {currentUser.department || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Designation</span><span>: {currentUser.designation || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Grade</span><span>: {currentUser.grade || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>PF No.</span><span>: {currentUser.pfNo || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>PF UAN</span><span>: {currentUser.uan || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Bank Account No.</span><span>: {currentUser.bankAcNo || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>IFSC</span><span>: {currentUser.ifscCode || 'NaN'}</span></div>
                   </div>
                   {/* Right Column */}
                   <div>
-                    {companyPayrollSettings?.payslipFields?.location !== false && currentUser.location && <div className="grid grid-cols-3"><span className="col-span-1">Location</span><span className="col-span-2">: {currentUser.location}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.unit !== false && currentUser.unit && <div className="grid grid-cols-3"><span className="col-span-1">Unit</span><span className="col-span-2">: {currentUser.unit}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.joiningDate !== false && currentUser.joiningDate && <div className="grid grid-cols-3"><span className="col-span-1">Joining Date</span><span className="col-span-2">: {currentUser.joiningDate}</span></div>}
-                    <div className="grid grid-cols-3"><span className="col-span-1">Paid Days</span><span className="col-span-2">: {currentUser.paidDays || companyPayrollSettings?.workingDays?.toFixed(2) || "30.00"}</span></div>
-                    <div className="grid grid-cols-3"><span className="col-span-1">Working Days</span><span className="col-span-2">: {currentUser.workingDays || companyPayrollSettings?.workingDays?.toFixed(2) || "30.00"}</span></div>
-                    {companyPayrollSettings?.payslipFields?.costCenter !== false && currentUser.costCenter && <div className="grid grid-cols-3"><span className="col-span-1">Cost Center</span><span className="col-span-2">: {currentUser.costCenter}</span></div>}
-                    {companyPayrollSettings?.payslipFields?.pan !== false && currentUser.pan && <div className="grid grid-cols-3"><span className="col-span-1">PAN</span><span className="col-span-2">: {currentUser.pan}</span></div>}
-                    {currentUser.gender && <div className="grid grid-cols-3"><span className="col-span-1">Gender</span><span className="col-span-2">: {currentUser.gender}</span></div>}
-                    <div className="grid grid-cols-3"><span className="col-span-1">Loss of Pay</span><span className="col-span-2">: {(selectedPayslip.lopAmount || 0).toFixed(2)}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Location</span><span>: {currentUser.location || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Unit</span><span>: {currentUser.unit || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Joining Date</span><span>: {currentUser.joiningDate || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Paid Days</span><span>: {Number(currentUser.paidDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Working Days</span><span>: {Number(currentUser.workingDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Cost Center</span><span>: {currentUser.costCenter || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>PAN</span><span>: {currentUser.pan || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Gender</span><span>: {currentUser.gender || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay</span><span>: {Math.max(0, (selectedPayslip.lopAmount || 0)).toFixed(2)}</span></div>
                   </div>
                 </div>
 
-                <div className="border-t-2 border-black w-full my-2"></div>
+                <div className="border-t-[3px] border-black w-full my-2"></div>
 
-                {/* Financial Table */}
-                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-black mb-2 mt-2">
+                {/* Financial Table Header */}
+                <div className="grid grid-cols-12 gap-2 text-[10px] font-extrabold text-black py-1">
                   <div className="col-span-4">Earnings</div>
                   <div className="col-span-2 text-right">Earned Amt.</div>
                   <div className="col-span-2 text-right">Arrears</div>
-                  <div className="col-span-3">Deductions</div>
+                  <div className="col-span-3 pl-4">Deductions</div>
                   <div className="col-span-1 text-right">Amount</div>
                 </div>
-                <div className="border-t-2 border-black w-full mb-2"></div>
+                
+                <div className="border-t-[3px] border-black w-full mb-3"></div>
 
-                <div className="grid grid-cols-12 gap-2 text-xs text-black">
+                <div className="grid grid-cols-12 gap-y-1 gap-x-2 text-[10px] text-black pb-4 font-normal">
                   {/* Row 1 */}
-                  <div className="col-span-4 font-semibold">Basic</div>
-                  <div className="col-span-2 text-right">{selectedPayslip.basic.toFixed(2)}</div>
+                  <div className="col-span-4">Basic</div>
+                  <div className="col-span-2 text-right">{(selectedPayslip.basic || 0).toFixed(2)}</div>
                   <div className="col-span-2 text-right">0.00</div>
-                  {selectedPayslip.pf > 0 ? (
-                    <>
-                      <div className="col-span-3 font-semibold">Provident Fund</div>
-                      <div className="col-span-1 text-right">{selectedPayslip.pf.toFixed(2)}</div>
-                    </>
-                  ) : (
-                    <><div className="col-span-3"></div><div className="col-span-1"></div></>
-                  )}
+                  <div className="col-span-3 pl-4">Provident Fund</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.pf || 0).toFixed(2)}</div>
 
                   {/* Row 2 */}
-                  <div className="col-span-4 font-semibold">House Rent Allowance</div>
-                  <div className="col-span-2 text-right">{selectedPayslip.hra.toFixed(2)}</div>
+                  <div className="col-span-4">House Rent Allowance</div>
+                  <div className="col-span-2 text-right">{(selectedPayslip.hra || 0).toFixed(2)}</div>
                   <div className="col-span-2 text-right">0.00</div>
-                  {/* Loss of Pay deduction could go here, currently 0 */}
-                  <div className="col-span-3 font-semibold">Loss of Pay</div>
+                  <div className="col-span-3 pl-4">Loss of Pay</div>
                   <div className="col-span-1 text-right">{(selectedPayslip.lopAmount || 0).toFixed(2)}</div>
 
                   {/* Row 3 */}
-                  {selectedPayslip.special > 0 ? (
-                    <>
-                      <div className="col-span-4 font-semibold">Special Allowance</div>
-                      <div className="col-span-2 text-right">{selectedPayslip.special.toFixed(2)}</div>
-                      <div className="col-span-2 text-right">0.00</div>
-                    </>
-                  ) : (
-                    <><div className="col-span-8"></div></>
-                  )}
-                  {selectedPayslip.pt > 0 ? (
-                    <>
-                      <div className="col-span-3 font-semibold -mt-4">Professional Tax</div>
-                      <div className="col-span-1 text-right -mt-4">{selectedPayslip.pt.toFixed(2)}</div>
-                    </>
-                  ) : <><div className="col-span-4"></div></>}
+                  <div className="col-span-4">Conveyance</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-3 pl-4">Professional Tax</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.pt || 0).toFixed(2)}</div>
 
-                  {/* Row 4 (ESI/TDS if they exist) */}
-                  {selectedPayslip.esi > 0 ? (
-                    <><div className="col-span-8"></div><div className="col-span-3 font-semibold">ESI</div><div className="col-span-1 text-right">{selectedPayslip.esi.toFixed(2)}</div></>
-                  ) : null}
-                  {selectedPayslip.tds > 0 ? (
-                    <><div className="col-span-8"></div><div className="col-span-3 font-semibold">TDS</div><div className="col-span-1 text-right">{selectedPayslip.tds.toFixed(2)}</div></>
-                  ) : null}
+                  {/* Row 4 */}
+                  <div className="col-span-4">Special Allowance</div>
+                  <div className="col-span-2 text-right">{(selectedPayslip.special || 0).toFixed(2)}</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-3 pl-4">{(selectedPayslip.esi || 0) > 0 ? 'ESI' : ''}</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.esi || 0) > 0 ? selectedPayslip.esi.toFixed(2) : ''}</div>
 
+                  {/* Row 5 */}
+                  <div className="col-span-4">Basic (Prorated)</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-3 pl-4">{(selectedPayslip.tds || 0) > 0 ? 'TDS' : ''}</div>
+                  <div className="col-span-1 text-right">{(selectedPayslip.tds || 0) > 0 ? selectedPayslip.tds.toFixed(2) : ''}</div>
+
+                  {/* Row 6 */}
+                  <div className="col-span-4">HRA (Prorated)</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-3 pl-4"></div>
+                  <div className="col-span-1 text-right"></div>
+
+                  {/* Row 7 */}
+                  <div className="col-span-4">Other Allowance</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-2 text-right">0.00</div>
+                  <div className="col-span-3 pl-4"></div>
+                  <div className="col-span-1 text-right"></div>
                 </div>
                 
-                <div className="border-t-2 border-black w-full mt-6 mb-2"></div>
+                <div className="border-t-[3px] border-black w-full my-1"></div>
                 
-                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-black mb-2 mt-2">
+                <div className="grid grid-cols-12 gap-2 text-[10px] font-extrabold text-black py-1">
                   <div className="col-span-4">Gross Earning</div>
-                  <div className="col-span-2 text-right">{selectedPayslip.grossSalary.toFixed(2)}</div>
+                  <div className="col-span-2 text-right">{(selectedPayslip.grossSalary || 0).toFixed(2)}</div>
                   <div className="col-span-2 text-right">0.00</div>
-                  <div className="col-span-3">Gross Deduction</div>
+                  <div className="col-span-3 pl-4">Gross Deduction</div>
                   <div className="col-span-1 text-right">{(selectedPayslip.pf + selectedPayslip.pt + selectedPayslip.esi + selectedPayslip.tds + (selectedPayslip.lopAmount || 0)).toFixed(2)}</div>
                 </div>
 
-                <div className="border-t-2 border-black w-full mb-2"></div>
+                <div className="border-t-[3px] border-black w-full my-1"></div>
 
-                <div className="grid grid-cols-12 gap-2 text-xs font-bold text-black mb-4 mt-2">
+                <div className="grid grid-cols-12 gap-2 text-[10px] font-extrabold text-black py-1 mb-4">
                   <div className="col-span-4">Net Amount</div>
-                  <div className="col-span-2 text-right">{selectedPayslip.net.toFixed(2)}</div>
+                  <div className="col-span-2 text-right">{(selectedPayslip.net || 0).toFixed(2)}</div>
                 </div>
-
-                <p className="text-xs text-black mt-6 mb-4">Net Amount in words: ( {numberToWords(selectedPayslip.net).toUpperCase()} ONLY )</p>
-                <p className="text-xs text-black font-bold mb-4">Disclaimer: This is a system generated payslip, does not require any signature.</p>
-              <div className="mt-12 flex justify-center items-center gap-2 pb-2 opacity-80">
-                <span className="text-sm font-extrabold text-black">Powered by</span>
-                <img src={zunaLogo} alt="Zuna Logo" className="h-6 object-contain translate-y-0.5" />
-                <span className="text-sm font-extrabold text-black ml-1">Simplify payroll and compliance.</span>
-              </div>
-
+                
+                <div className="text-[10px] text-black mb-4 font-normal">
+                  Net Amount in words: ( {numberToWords(selectedPayslip.net || 0).toUpperCase()} ONLY )
+                </div>
+                
+                <div className="text-[10px] font-extrabold text-black mb-12">
+                  Disclaimer: This is a system generated payslip, does not require any signature.
+                </div>
+                
+                {/* Footer Logo */}
+                <div className="mt-12 flex justify-center items-center gap-2 pb-2">
+                  <span className="text-[11px] font-extrabold text-black">Powered by</span>
+                  <img src={zunaLogo} alt="Zuna Logo" className="h-6 object-contain" />
+                  <span className="text-[11px] font-extrabold text-black ml-1">Simplify payroll and compliance.</span>
+                </div>
               </div>
               <div className="px-6 py-4 border-t border-border-card flex justify-end gap-3 bg-bg-base/30 mt-auto flex-shrink-0">
                 <button onClick={() => setShowPayslipModal(false)} className="px-5 py-2.5 rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors border border-transparent hover:border-border-card">Close</button>

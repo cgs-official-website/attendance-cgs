@@ -22,6 +22,7 @@ import {
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase } from "lucide-react";
 import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import logoImg from '../assets/zuna-logo.png';
 import { addStandardPDFHeader } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";

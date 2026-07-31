@@ -341,10 +341,18 @@ export default function ProjectManagement() {
       if (!isManaged) return false;
 
       const matchEmployee = logFilterEmployee === "All" || r.userId === logFilterEmployee;
-      const matchMonth = logFilterMonth === "All" || new Date(r.date).getMonth() === parseInt(logFilterMonth, 10);
+      
+      let matchDate = true;
+      if (logFilterFromDate) {
+        matchDate = matchDate && new Date(r.date) >= new Date(logFilterFromDate);
+      }
+      if (logFilterToDate) {
+        matchDate = matchDate && new Date(r.date) <= new Date(logFilterToDate);
+      }
+      
       const matchStatus = logFilterStatus === "All" || r.status === logFilterStatus;
 
-      return matchEmployee && matchMonth && matchStatus;
+      return matchEmployee && matchDate && matchStatus;
     });
 
     if (filteredReports.length === 0) {
@@ -418,10 +426,18 @@ export default function ProjectManagement() {
       if (!isManaged) return false;
 
       const matchEmployee = logFilterEmployee === "All" || r.userId === logFilterEmployee;
-      const matchMonth = logFilterMonth === "All" || new Date(r.date).getMonth() === parseInt(logFilterMonth, 10);
+      
+      let matchDate = true;
+      if (logFilterFromDate) {
+        matchDate = matchDate && new Date(r.date) >= new Date(logFilterFromDate);
+      }
+      if (logFilterToDate) {
+        matchDate = matchDate && new Date(r.date) <= new Date(logFilterToDate);
+      }
+      
       const matchStatus = logFilterStatus === "All" || r.status === logFilterStatus;
 
-      return matchEmployee && matchMonth && matchStatus;
+      return matchEmployee && matchDate && matchStatus;
     });
 
     if (filteredReports.length === 0) {

@@ -2975,12 +2975,84 @@ export default function ProjectManagement() {
               </div>
 
               {/* Tasks Section */}
-              <div className="space-y-2">
-                <h5 className="text-xs font-bold text-text-sec flex items-center gap-1.5">
-                  <FileText size={13} className="text-brand-primary" /> Tasks & Activities Completed
-                </h5>
-                <div className="bg-bg-base/40 p-4 rounded-[16px] text-xs leading-relaxed text-text-main border border-border-card whitespace-pre-wrap font-sans">
-                  {selectedWeeklyReport.tasksCompleted || "No tasks recorded for this week."}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                    <FileText size={13} className="text-brand-primary" /> Tasks & Activities Completed
+                  </h5>
+                  <span className="text-[10px] text-text-mut font-semibold">Daily Breakdown</span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {(() => {
+                    const text = selectedWeeklyReport.tasksCompleted || "";
+                    if (!text.trim()) {
+                      return (
+                        <div className="bg-bg-base/40 p-4 rounded-[16px] text-xs text-text-mut border border-border-card text-center">
+                          No tasks recorded for this week.
+                        </div>
+                      );
+                    }
+
+                    const rawLines = text.split("\n").map(l => l.trim()).filter(Boolean);
+                    
+                    const parsedItems = rawLines.map(line => {
+                      const match = line.match(/^(?:•\s*)?\[(\d{4}-\d{2}-\d{2})\]\s*(.*)$/);
+                      if (match) {
+                        const date = match[1];
+                        let content = match[2];
+                        
+                        let hours = "";
+                        const hoursMatch = content.match(/\((\d+(?:\.\d+)?h)\)/i);
+                        if (hoursMatch) {
+                          hours = hoursMatch[1];
+                          content = content.replace(/\((\d+(?:\.\d+)?h)\)/i, "").trim();
+                        }
+
+                        let issue = "";
+                        const issueMatch = content.match(/\[Issue:\s*(.*?)\]/i);
+                        if (issueMatch) {
+                          issue = issueMatch[1];
+                          content = content.replace(/\[Issue:\s*(.*?)\]/i, "").trim();
+                        }
+
+                        return { date, content, hours, issue };
+                      }
+                      return { date: null, content: line, hours: "", issue: "" };
+                    });
+
+                    return parsedItems.map((item, idx) => (
+                      <div 
+                        key={idx} 
+                        className="flex flex-col sm:flex-row sm:items-start gap-3.5 p-3.5 rounded-[14px] bg-bg-base/40 border border-border-card hover:border-brand-primary/30 transition-all shadow-sm"
+                      >
+                        {item.date ? (
+                          <div className="sm:w-36 flex-shrink-0 flex sm:flex-col items-center sm:items-start justify-between gap-1.5 pt-0.5 border-b sm:border-b-0 sm:border-r border-border-card pb-2 sm:pb-0 sm:pr-3">
+                            <span className="text-xs font-bold text-text-main flex items-center gap-1.5 whitespace-nowrap">
+                              <Calendar size={12} className="text-brand-primary flex-shrink-0" />
+                              {item.date}
+                            </span>
+                            {item.hours && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20 whitespace-nowrap">
+                                {item.hours}
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
+                        
+                        <div className="flex-1 space-y-1.5">
+                          <p className="text-xs leading-relaxed text-text-main font-medium">
+                            {item.content}
+                          </p>
+                          {item.issue && item.issue.toLowerCase() !== "none" && (
+                            <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-[6px] border border-amber-500/20">
+                              <span className="font-bold">Issue:</span> {item.issue}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
 

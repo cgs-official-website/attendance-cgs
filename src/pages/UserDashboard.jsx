@@ -23,6 +23,7 @@ import {
   subscribeToCompanyPayroll,
   listenToCompany
 } from "../firebase";
+import { resolveLocationName } from "../utils/locationHelper";
 import {
   Play,
   Square,
@@ -502,11 +503,20 @@ export default function UserDashboard() {
         return;
       }
 
-      const handleSuccess = (position) => {
+      const handleSuccess = async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        let locationName = "";
+        try {
+          locationName = await resolveLocationName(lat, lon);
+        } catch (e) {
+          locationName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+        }
         const loc = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: Math.round(position.coords.accuracy)
+          latitude: lat,
+          longitude: lon,
+          accuracy: Math.round(position.coords.accuracy),
+          locationName: locationName || `${lat.toFixed(4)}, ${lon.toFixed(4)}`
         };
         setGpsLocation(loc);
         resolve(loc);

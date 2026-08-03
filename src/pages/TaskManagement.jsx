@@ -21,7 +21,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import logoImg from '../assets/zuna-logo.png';
-import { addStandardPDFHeader } from "../utils/pdfHeader";
+import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
 import { uploadFileToFirebase } from "../firebase";
 import FileCard from "../components/FileCard";
 export default function TaskManagement() {
@@ -351,8 +351,10 @@ export default function TaskManagement() {
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
+    addPDFFooter(doc);
     const fileNameSuffix = selectedDownloadProject === "All" ? "My_Reports" : `Project_${selectedDownloadProject.replace(/\s+/g, '_')}`;
     doc.save(`${fileNameSuffix}_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast("Task reports PDF exported!", "success");
   };
 
   const handleDownloadExcel = () => {
@@ -441,7 +443,9 @@ export default function TaskManagement() {
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
+    addPDFFooter(doc);
     doc.save(`Task_Report_${task.title.replace(/\s+/g, '_').substring(0,10)}_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast("Task report PDF exported!", "success");
   };
 
   const handleDownloadDailyLogPDF = async () => {
@@ -471,8 +475,9 @@ export default function TaskManagement() {
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
+    addPDFFooter(doc);
     doc.save(`Daily_Activity_Log_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-    showToast("PDF report generated successfully.", "success");
+    showToast("Daily activity log PDF exported successfully.", "success");
   };
 
   const handleDownloadDailyLogExcel = () => {

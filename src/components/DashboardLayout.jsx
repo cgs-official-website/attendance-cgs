@@ -57,6 +57,7 @@ import {
   listenToCompany,
   subscribeToRegularizationRequests
 } from "../firebase";
+import { resolveLocationName } from "../utils/locationHelper";
 
 const DashboardSkeleton = () => (
   <div className="w-full h-[60vh] flex flex-col items-center justify-center animate-fade-in" style={{ perspective: '800px' }}>
@@ -502,11 +503,22 @@ export default function DashboardLayout({ children }) {
         return;
       }
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: Math.round(pos.coords.accuracy)
-        }),
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          let locationName = "";
+          try {
+            locationName = await resolveLocationName(lat, lon);
+          } catch (e) {
+            locationName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+          }
+          resolve({
+            latitude: lat,
+            longitude: lon,
+            accuracy: Math.round(pos.coords.accuracy),
+            locationName: locationName || `${lat.toFixed(4)}, ${lon.toFixed(4)}`
+          });
+        },
         (err) => reject(new Error("Failed to fetch GPS coordinates. Please enable location services.")),
         { enableHighAccuracy: true, timeout: 8000 }
       );

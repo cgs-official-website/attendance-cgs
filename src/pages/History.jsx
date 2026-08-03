@@ -162,16 +162,16 @@ export default function History() {
     if (filteredLogs.length === 0) return showToast("No records to export.", "warning");
 
     const doc = new jsPDF();
-    const titleText = "My Attendance Report";
-    const subtitleText = `Employee: ${currentUser.name} | Generated: ${new Date().toLocaleDateString()}`;
+    const titleText = "EMPLOYEE ATTENDANCE REPORT";
+    const subtitleText = `Employee: ${currentUser.name} | Total Records: ${filteredLogs.length}`;
     const startY = await addStandardPDFHeader(doc, titleText, subtitleText);
 
     const tableData = filteredLogs.map((log) => {
-      const workingHours = log.totalWorkingMinutes ? (log.totalWorkingMinutes / 60).toFixed(1) + " hrs" : "-";
+      const workingHours = log.totalWorkingMinutes ? (log.totalWorkingMinutes / 60).toFixed(1) + " hrs" : "—";
       return [
         log.date,
-        log.checkInTime || "-",
-        log.checkOutTime || "-",
+        log.checkInTime || "—",
+        log.checkOutTime || "—",
         workingHours,
         log.status || "Present"
       ];
@@ -180,36 +180,41 @@ export default function History() {
     autoTable(doc, {
       head: [["Date", "Check In", "Check Out", "Working Hours", "Status"]],
       body: tableData,
-      startY: startY + 5,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: { top: 6, bottom: 6, left: 4, right: 4 }, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", halign: 'center', cellPadding: { top: 8, bottom: 8, left: 4, right: 4 } },
+      startY: startY + 2,
+      styles: { fontSize: 8.5, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", halign: 'center', fontSize: 9 },
       columnStyles: { 
-        0: { halign: 'left' }, 
-        1: { halign: 'center' }, 
-        2: { halign: 'center' }, 
-        3: { halign: 'center' }, 
-        4: { halign: 'center' }
+        0: { halign: 'left', cellWidth: 35 }, 
+        1: { halign: 'center', cellWidth: 35 }, 
+        2: { halign: 'center', cellWidth: 35 }, 
+        3: { halign: 'center', cellWidth: 40 }, 
+        4: { halign: 'center', cellWidth: 35 }
       },
       theme: 'grid',
-      alternateRowStyles: { fillColor: [248, 250, 252] }
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.row.index >= 0 && data.column.index === 4) {
+          const val = data.cell.text[0];
+          if (val === "Present") {
+            data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.textColor = [21, 128, 61];
+            data.cell.styles.fontStyle = "bold";
+          } else if (val === "Late") {
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [146, 64, 14];
+            data.cell.styles.fontStyle = "bold";
+          } else if (val === "Absent") {
+            data.cell.styles.fillColor = [254, 226, 226];
+            data.cell.styles.textColor = [153, 27, 27];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      }
     });
     
-    // Footer
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        `Page ${i} of ${pageCount}`,
-        pageWidth / 2,
-        pageHeight - 10,
-        { align: 'center' }
-      );
-    }
-
+    addPDFFooter(doc);
     doc.save(`Attendance_Report_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-    showToast("PDF report generated successfully.", "success");
+    showToast("Attendance report PDF exported successfully.", "success");
   };
 
   const handleDownloadExcel = () => {

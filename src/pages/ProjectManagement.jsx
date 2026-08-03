@@ -24,7 +24,7 @@ import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, Che
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logoImg from '../assets/zuna-logo.png';
-import { addStandardPDFHeader } from "../utils/pdfHeader";
+import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
 import ClientChatsPMTab from "../components/ClientChatsPMTab";
 import FileCard from "../components/FileCard";
@@ -354,8 +354,8 @@ export default function ProjectManagement() {
 
   const handleDownloadPDF = async () => {
     const doc = new jsPDF();
-    const titleText = "Project Task Reports";
-    const subtitleText = `Project Manager: ${currentUser.name} | Downloaded: ${new Date().toLocaleString()}`;
+    const titleText = "PROJECT TASK PERFORMANCE REPORTS";
+    const subtitleText = `Project Manager: ${currentUser.name} | Consolidated Task Progress & Employee Updates`;
     const startY = await addStandardPDFHeader(doc, titleText, subtitleText);
     
     const tableData = [];
@@ -363,10 +363,10 @@ export default function ProjectManagement() {
       (m.tasks || []).forEach(t => {
         const status = t.completed ? "Done" : "Active";
         tableData.push([
-          { content: m.name, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } },
-          { content: t.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } },
-          { content: status, styles: { fillColor: [243, 244, 246] } },
-          { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }
+          { content: m.name, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+          { content: t.title, styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } },
+          { content: status, styles: { fillColor: status === "Done" ? [220, 252, 231] : [254, 243, 199], textColor: status === "Done" ? [21, 128, 61] : [161, 98, 7], fontStyle: 'bold', halign: 'center' } },
+          { content: `${t.duration || 0}h`, styles: { fillColor: [241, 245, 249], halign: 'right', fontStyle: 'bold' } }
         ]);
         
         const reports = allTaskReports[t.id] || [];
@@ -374,14 +374,14 @@ export default function ProjectManagement() {
           reports.forEach(r => {
             tableData.push([
               "",
-              { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
-              { content: new Date(r.timestamp).toLocaleString(), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 } } }
+              { content: `• Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [51, 65, 85], cellPadding: { left: 8, top: 2.5, bottom: 2.5 } } },
+              { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 7.5, textColor: [100, 116, 139], cellPadding: { top: 2.5, bottom: 2.5 }, halign: 'right' } }
             ]);
           });
         } else {
           tableData.push([
             "",
-            { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [150, 150, 150], cellPadding: { left: 10, top: 3, bottom: 3 } } }
+            { content: "No updates reported yet", colSpan: 3, styles: { fontStyle: 'italic', textColor: [148, 163, 184], cellPadding: { left: 8, top: 2.5, bottom: 2.5 } } }
           ]);
         }
       });
@@ -396,14 +396,16 @@ export default function ProjectManagement() {
       head: [["Employee", "Task Details", "Status", "Duration"]],
       body: tableData,
       startY: startY,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
-      columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 80 }, 2: { halign: 'center' }, 3: { halign: 'right' } },
+      styles: { fontSize: 8.5, font: "helvetica", cellPadding: 3.5, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9, halign: "left" },
+      columnStyles: { 0: { cellWidth: 42 }, 1: { cellWidth: 85 }, 2: { cellWidth: 25, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
+    addPDFFooter(doc);
     doc.save(`Project_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast("Project task reports PDF exported!", "success");
   };
 
   const handleDownloadExcel = () => {
@@ -481,8 +483,8 @@ export default function ProjectManagement() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-    const titleText = "DAILY REPORT LOG";
-    const subtitleText = "Log each intern's daily activity below | All fields required | Rows auto-highlight based on status";
+    const titleText = "DAILY ACTIVITY LOGS REPORT";
+    const subtitleText = "Detailed daily progress, hours worked, completed tasks, and supervisor evaluations across team members.";
     const startY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
 
     const bodyData = filteredReports.map((report, idx) => [
@@ -498,47 +500,48 @@ export default function ProjectManagement() {
     ]);
 
     autoTable(doc, {
-      startY: startY + 5,
-      head: [["#", "Candidate Name", "Date", "Day (Auto)", "Hours", "Tasks Completed", "Issues Faced", "Supervisor Remarks", "Status"]],
+      startY: startY + 2,
+      head: [["#", "Candidate Name", "Date", "Day", "Hours", "Tasks Completed", "Issues Faced", "Supervisor Remarks", "Status"]],
       body: bodyData,
       theme: "grid",
-      styles: { fontSize: 8, cellPadding: 3, font: "helvetica", overflow: "linebreak" },
-      headStyles: { fillColor: [42, 75, 124], textColor: [255, 255, 255], fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 3, font: "helvetica", overflow: "linebreak", lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [49, 46, 129], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5 },
       columnStyles: {
         0: { cellWidth: 10, halign: "center" },
         1: { cellWidth: 35 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 20 },
+        2: { cellWidth: 20, halign: "center" },
+        3: { cellWidth: 18, halign: "center" },
         4: { cellWidth: 15, halign: "center" },
         5: { cellWidth: 55 },
         6: { cellWidth: 42 },
         7: { cellWidth: 42 },
-        8: { cellWidth: 30, halign: "center" }
+        8: { cellWidth: 32, halign: "center" }
       },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
       didParseCell: (data) => {
-        if (data.row.index >= 0) {
-          const statusVal = data.row.cells[8].text[0];
-          const setRowColors = (fillColor, textColor) => {
-            Object.values(data.row.cells).forEach(cell => {
-              cell.styles.fillColor = fillColor;
-              cell.styles.textColor = textColor;
-            });
-          };
-
+        if (data.row.index >= 0 && data.column.index === 8) {
+          const statusVal = data.cell.text[0];
           if (statusVal === "Completed") {
-            setRowColors([212, 237, 218], [21, 87, 36]);
+            data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.textColor = [21, 128, 61];
+            data.cell.styles.fontStyle = "bold";
           } else if (statusVal === "On Hold") {
-            setRowColors([248, 215, 218], [114, 28, 36]);
+            data.cell.styles.fillColor = [254, 226, 226];
+            data.cell.styles.textColor = [153, 27, 27];
+            data.cell.styles.fontStyle = "bold";
           } else if (statusVal === "In Progress") {
-            setRowColors([255, 243, 205], [133, 100, 4]);
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [146, 64, 14];
+            data.cell.styles.fontStyle = "bold";
           }
         }
       }
     });
 
+    addPDFFooter(doc);
     const fileName = `Daily_Report_Log_${new Date().toISOString().split("T")[0]}.pdf`;
     doc.save(fileName);
-    showToast("PDF report generated successfully.", "success");
+    showToast("Daily activity log PDF exported successfully.", "success");
   };
 
   const handleDownloadDailyLogsExcel = () => {
@@ -620,14 +623,54 @@ export default function ProjectManagement() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
     const selectedEmp = weeklyFilterEmployee !== "All" 
       ? allUsers.find(u => u.uid === weeklyFilterEmployee)?.name 
       : null;
     const titleText = selectedEmp 
-      ? `WEEKLY REPORT - ${selectedEmp.toUpperCase()}` 
-      : "TEAM WEEKLY PERFORMANCE REPORTS";
-    const subtitleText = "Consolidated weekly task activities, performance ratings, and supervisor evaluations.";
+      ? `WEEKLY APPRAISAL REPORT — ${selectedEmp.toUpperCase()}` 
+      : "TEAM WEEKLY PERFORMANCE & ACTIVITY REPORTS";
+    const subtitleText = "Consolidated weekly task activities, performance ratings, and supervisor evaluations across team members.";
     const startY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
+
+    let currentY = startY;
+
+    // ── Metric KPI Summary Ribbon at top ──────────────────────────
+    const totalCount = filteredWeeklyReports.length;
+    const excellentCount = filteredWeeklyReports.filter(r => r.rating === "Excellent").length;
+    const goodCount = filteredWeeklyReports.filter(r => r.rating === "Good").length;
+    const averageCount = filteredWeeklyReports.filter(r => r.rating === "Average").length;
+    const needsImpCount = filteredWeeklyReports.filter(r => r.rating === "Needs Improvement").length;
+
+    const kpiBoxWidth = (pageWidth - 28) / 5;
+    const kpiBoxHeight = 11;
+    const kpis = [
+      { label: "TOTAL REPORTS", val: `${totalCount}`, color: [79, 70, 229], bg: [238, 242, 255] },
+      { label: "EXCELLENT", val: `${excellentCount}`, color: [21, 128, 61], bg: [220, 252, 231] },
+      { label: "GOOD", val: `${goodCount}`, color: [30, 64, 175], bg: [219, 234, 254] },
+      { label: "AVERAGE", val: `${averageCount}`, color: [146, 64, 14], bg: [254, 243, 199] },
+      { label: "NEEDS IMP.", val: `${needsImpCount}`, color: [153, 27, 27], bg: [254, 226, 226] }
+    ];
+
+    kpis.forEach((kpi, idx) => {
+      const x = 14 + idx * kpiBoxWidth;
+      doc.setFillColor(kpi.bg[0], kpi.bg[1], kpi.bg[2]);
+      doc.setDrawColor(kpi.bg[0] * 0.9, kpi.bg[1] * 0.9, kpi.bg[2] * 0.9);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(x, currentY, kpiBoxWidth - 2, kpiBoxHeight, 1.5, 1.5, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(kpi.label, x + 3.5, currentY + 4);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+      doc.text(kpi.val, x + 3.5, currentY + 9);
+    });
+
+    currentY += kpiBoxHeight + 4;
 
     const bodyData = filteredWeeklyReports.map((report, idx) => [
       idx + 1,
@@ -639,43 +682,283 @@ export default function ProjectManagement() {
     ]);
 
     autoTable(doc, {
-      startY: startY + 5,
+      startY: currentY,
       head: [["#", "Employee Name", "Week Range", "Rating", "Tasks & Activities Completed", "Supervisor Remarks"]],
       body: bodyData,
       theme: "grid",
-      styles: { fontSize: 8, cellPadding: 3.5, font: "helvetica", overflow: "linebreak" },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 3.5, font: "helvetica", overflow: "linebreak", lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [49, 46, 129], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5 },
       columnStyles: {
         0: { cellWidth: 10, halign: "center" },
-        1: { cellWidth: 35 },
-        2: { cellWidth: 40, halign: "center" },
-        3: { cellWidth: 25, halign: "center" },
-        4: { cellWidth: 95 },
-        5: { cellWidth: 70 }
+        1: { cellWidth: 35, fontStyle: "bold" },
+        2: { cellWidth: 38, halign: "center" },
+        3: { cellWidth: 26, halign: "center" },
+        4: { cellWidth: 93 },
+        5: { cellWidth: 67 }
       },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
       didParseCell: (data) => {
         if (data.row.index >= 0 && data.column.index === 3) {
           const rating = data.cell.text[0];
+          data.cell.styles.fontStyle = "bold";
           if (rating === "Excellent") {
-            data.cell.styles.fillColor = [212, 237, 218];
-            data.cell.styles.textColor = [21, 87, 36];
+            data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.textColor = [21, 128, 61];
           } else if (rating === "Good") {
-            data.cell.styles.fillColor = [207, 226, 255];
-            data.cell.styles.textColor = [8, 66, 152];
+            data.cell.styles.fillColor = [219, 234, 254];
+            data.cell.styles.textColor = [30, 64, 175];
           } else if (rating === "Average") {
-            data.cell.styles.fillColor = [255, 243, 205];
-            data.cell.styles.textColor = [133, 100, 4];
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [146, 64, 14];
           } else if (rating === "Needs Improvement") {
-            data.cell.styles.fillColor = [248, 215, 218];
-            data.cell.styles.textColor = [114, 28, 36];
+            data.cell.styles.fillColor = [254, 226, 226];
+            data.cell.styles.textColor = [153, 27, 27];
           }
         }
       }
     });
 
+    addPDFFooter(doc);
     const fileName = `Weekly_Reports_${weeklyFilterEmployee !== 'All' ? selectedEmp?.replace(/\s+/g, '_') + '_' : ''}${new Date().toISOString().split("T")[0]}.pdf`;
     doc.save(fileName);
     showToast("Weekly reports PDF exported successfully.", "success");
+  };
+
+  const handleDownloadSingleWeeklyReportPDF = async (report) => {
+    if (!report) return;
+
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const titleText = "WEEKLY PERFORMANCE REPORT";
+    const subtitleText = `Employee: ${report.employeeName} | Reporting Period: ${report.weekStartDate} to ${report.weekEndDate}`;
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText, false);
+
+    let currentY = startY;
+
+    // 1. Employee & Appraisal Summary Card (2-column key info block)
+    const cardX = 14;
+    const cardWidth = pageWidth - 28;
+    const cardHeight = 28;
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(cardX, currentY, cardWidth, cardHeight, 3, 3, "FD");
+
+    // Left Col: Employee Name & Manager
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("EMPLOYEE NAME", cardX + 6, currentY + 7);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(report.employeeName || "Unknown", cardX + 6, currentY + 13);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("SUPERVISOR / MANAGER", cardX + 6, currentY + 19);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text(currentUser.name || "Project Manager", cardX + 6, currentY + 24);
+
+    // Mid Col: Week Range & Status
+    const midColX = cardX + (cardWidth / 2) - 15;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("REPORTING PERIOD", midColX, currentY + 7);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${report.weekStartDate} to ${report.weekEndDate}`, midColX, currentY + 13);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("SUBMISSION STATUS", midColX, currentY + 19);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(21, 128, 61);
+    doc.text("Verified & Approved", midColX, currentY + 24);
+
+    // Right Col: Performance Rating Badge
+    const rightColX = cardX + cardWidth - 44;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("PERFORMANCE RATING", rightColX - 6, currentY + 7);
+
+    // Rating Badge Pill
+    const rating = report.rating || "Good";
+    let badgeBg = [219, 234, 254];
+    let badgeText = [30, 64, 175];
+    if (rating === "Excellent") {
+      badgeBg = [220, 252, 231];
+      badgeText = [21, 128, 61];
+    } else if (rating === "Average") {
+      badgeBg = [254, 243, 199];
+      badgeText = [146, 64, 14];
+    } else if (rating === "Needs Improvement") {
+      badgeBg = [254, 226, 226];
+      badgeText = [153, 27, 27];
+    }
+
+    doc.setFillColor(badgeBg[0], badgeBg[1], badgeBg[2]);
+    doc.setDrawColor(badgeBg[0] * 0.9, badgeBg[1] * 0.9, badgeBg[2] * 0.9);
+    doc.roundedRect(rightColX - 6, currentY + 10, 44, 12, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(badgeText[0], badgeText[1], badgeText[2]);
+    doc.text(rating.toUpperCase(), rightColX + 16, currentY + 17.5, { align: "center" });
+
+    currentY += cardHeight + 6;
+
+    // 2. Section Heading: Daily Tasks & Activities
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text("1. WEEKLY DELIVERABLES & DAILY ACTIVITY BREAKDOWN", 14, currentY);
+    currentY += 3;
+
+    // Parse the tasks
+    const rawLines = (report.tasksCompleted || "").split("\n").map(l => l.trim()).filter(Boolean);
+    const parsedRows = [];
+
+    rawLines.forEach((line, idx) => {
+      const match = line.match(/^(?:•\s*)?\[(\d{4}-\d{2}-\d{2})\]\s*(.*)$/);
+      if (match) {
+        const date = match[1];
+        let content = match[2];
+        let hours = "—";
+        const hoursMatch = content.match(/\((\d+(?:\.\d+)?h)\)/i);
+        if (hoursMatch) {
+          hours = hoursMatch[1];
+          content = content.replace(/\((\d+(?:\.\d+)?h)\)/i, "").trim();
+        }
+        let issue = "None";
+        const issueMatch = content.match(/\[Issue:\s*(.*?)\]/i);
+        if (issueMatch) {
+          issue = issueMatch[1];
+          content = content.replace(/\[Issue:\s*(.*?)\]/i, "").trim();
+        }
+        parsedRows.push([idx + 1, date, hours, content, issue]);
+      } else {
+        parsedRows.push([idx + 1, "—", "—", line, "None"]);
+      }
+    });
+
+    if (parsedRows.length === 0) {
+      parsedRows.push([1, "—", "—", "No specific task entries recorded for this week.", "None"]);
+    }
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [["#", "Date", "Hours", "Deliverables & Tasks Accomplished", "Issues Reported"]],
+      body: parsedRows,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3.5, font: "helvetica", overflow: "linebreak", lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: "center" },
+        1: { cellWidth: 24, halign: "center" },
+        2: { cellWidth: 16, halign: "center" },
+        3: { cellWidth: 90 },
+        4: { cellWidth: 44 }
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      didParseCell: (data) => {
+        if (data.row.index >= 0 && data.column.index === 4) {
+          const val = data.cell.text[0];
+          if (val && val !== "None" && val !== "—") {
+            data.cell.styles.textColor = [185, 28, 28];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      }
+    });
+
+    let nextY = doc.lastAutoTable.finalY + 7;
+
+    // Check if we need a new page for remarks & signature
+    if (nextY > 230) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    // 3. Section Heading: Supervisor Evaluation & Remarks
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text("2. SUPERVISOR APPRAISAL & REMARKS", 14, nextY);
+    nextY += 3;
+
+    const remarksBoxHeight = 22;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(14, nextY, pageWidth - 28, remarksBoxHeight, 2, 2, "FD");
+
+    // Purple left accent on remarks box
+    doc.setFillColor(79, 70, 229);
+    doc.roundedRect(14, nextY, 2.5, remarksBoxHeight, 1, 1, "F");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(51, 65, 85);
+    const splitRemarks = doc.splitTextToSize(report.supervisorRemarks || "No additional supervisor remarks recorded for this evaluation period.", pageWidth - 38);
+    doc.text(splitRemarks, 20, nextY + 7);
+
+    nextY += remarksBoxHeight + 10;
+
+    // Check space for signature
+    if (nextY > 250) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    // 4. Sign-off Authorization Blocks
+    const sigBoxWidth = (pageWidth - 36) / 2;
+    const sigBoxHeight = 22;
+
+    // Supervisor Signature Block
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(14, nextY, sigBoxWidth, sigBoxHeight, 2, 2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("SUPERVISOR SIGNATURE & VERIFICATION", 18, nextY + 6);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(`Name: ${currentUser.name}`, 18, nextY + 12);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 18, nextY + 17.5);
+
+    // Employee Acknowledgement Block
+    const empSigX = 14 + sigBoxWidth + 8;
+    doc.roundedRect(empSigX, nextY, sigBoxWidth, sigBoxHeight, 2, 2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("EMPLOYEE ACKNOWLEDGEMENT", empSigX + 4, nextY + 6);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(`Name: ${report.employeeName}`, empSigX + 4, nextY + 12);
+    doc.text("Status: Verified & Electronically Recorded", empSigX + 4, nextY + 17.5);
+
+    // Add universal page footer
+    addPDFFooter(doc);
+
+    const safeName = (report.employeeName || "Employee").replace(/\s+/g, "_");
+    doc.save(`Weekly_Report_${safeName}_${report.weekStartDate}.pdf`);
+    showToast("Individual weekly report PDF exported successfully!", "success");
   };
 
   const handleDownloadWeeklyReportsExcel = () => {
@@ -848,14 +1131,16 @@ export default function ProjectManagement() {
       head: [["Task Details", "Status", "Duration"]],
       body: tableData,
       startY: startY,
-      styles: { fontSize: 9, font: "helvetica", cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 },
-      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10, halign: "left" },
+      styles: { fontSize: 8.5, font: "helvetica", cellPadding: 3.5, lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9, halign: "left" },
       columnStyles: { 0: { cellWidth: 115 }, 1: { halign: 'center', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 42 } },
       theme: 'grid',
       alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
+    addPDFFooter(doc);
     doc.save(`Reports_${selectedMemberForReports.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast("Member task reports PDF exported!", "success");
   };
 
   const handleMemberDownloadExcel = () => {
@@ -3480,7 +3765,17 @@ export default function ProjectManagement() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-border-card bg-bg-base/40 flex justify-end">
+            <div className="px-6 py-4 border-t border-border-card bg-bg-base/40 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => handleDownloadSingleWeeklyReportPDF(selectedWeeklyReport)}
+                className="py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-[12px] text-xs font-bold shadow-md shadow-rose-600/20 transition-all cursor-pointer flex items-center gap-1.5"
+                title="Download this individual weekly report as an executive PDF document"
+              >
+                <Download size={14} />
+                <span>Export Report PDF</span>
+              </button>
+              
               <button 
                 onClick={() => setShowViewWeeklyReportModal(false)} 
                 className="py-2.5 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-md transition-all cursor-pointer"

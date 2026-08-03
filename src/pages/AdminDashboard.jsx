@@ -76,14 +76,23 @@ import {
   Lock,
   Eye,
   IndianRupee,
-  Banknote
+  Banknote,
+  ExternalLink,
+  Navigation,
+  Compass
 } from "lucide-react";
 import { jsPDF } from "jspdf";
-import { addStandardPDFHeader } from "../utils/pdfHeader";
+import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
 import DomainManager from "../components/DomainManager";
 import ExternalLinksTab from "../components/ExternalLinksTab";
+import { 
+  getLocationDisplayName, 
+  formatGpsCoords, 
+  getGoogleMapsUrl, 
+  resolveLocationName 
+} from "../utils/locationHelper";
 const getBase64ImageFromUrl = async (imageUrl) => {
   const res = await fetch(imageUrl);
   const blob = await res.blob();
@@ -319,6 +328,12 @@ export default function AdminDashboard() {
 
   // Detail Modal State
   const [showDetailModal, setShowDetailModal] = useState(false);
+  
+  // Location Details Modal State
+  const [locationModalData, setLocationModalData] = useState(null);
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState("all");
+  const [, setLocationCacheVersion] = useState(0);
+  const [liveViewMode, setLiveViewMode] = useState("live"); // 'live' | 'all-logs'
   
   // Action state loader
   const [actionLoading, setActionLoading] = useState(false);
@@ -593,10 +608,33 @@ export default function AdminDashboard() {
   }, [activeTab, approvalsSubTab, searchQuery, historySearch, historyType, historyStatus, chatFilter, chatTypeFilter, chatThreadFilter]);
 
   useEffect(() => {
-    if (regularizationRequests.length > 0 && (!selectedRegRequestId || !regularizationRequests.some(r => r.id === selectedRegRequestId))) {
-      setSelectedRegRequestId(regularizationRequests[0].id);
-    }
-  }, [regularizationRequests, selectedRegRequestId]);
+    let isMounted = true;
+    const resolveUncached = async () => {
+      if (!logs || logs.length === 0) return;
+      const locationsToResolve = [];
+      logs.forEach(l => {
+        if (l.checkInLocation) locationsToResolve.push(l.checkInLocation);
+        if (l.checkOutLocation) locationsToResolve.push(l.checkOutLocation);
+      });
+
+      let hasUpdate = false;
+      for (const loc of locationsToResolve) {
+        const lat = loc.latitude ?? loc.lat;
+        const lon = loc.longitude ?? loc.lng ?? loc.lon;
+        if (lat && lon && (!loc.locationName || loc.locationName === "Unknown Location")) {
+          const resolved = await resolveLocationName(lat, lon);
+          if (resolved && resolved !== "—") {
+            hasUpdate = true;
+          }
+        }
+      }
+      if (hasUpdate && isMounted) {
+        setLocationCacheVersion(v => v + 1);
+      }
+    };
+    resolveUncached();
+    return () => { isMounted = false; };
+  }, [logs]);
 
   if (currentUser.role !== "admin") {
     return (
@@ -629,14 +667,27 @@ export default function AdminDashboard() {
   // Filter logs for table
   const filteredLogs = logs.filter((log) => {
     const user = users.find((u) => u.uid === log.userId) || { name: log.userName, email: "", department: log.userDept };
+    const inLocName = getLocationDisplayName(log.checkInLocation);
+    const outLocName = getLocationDisplayName(log.checkOutLocation);
+    const inGps = formatGpsCoords(log.checkInLocation);
+    const outGps = formatGpsCoords(log.checkOutLocation);
+
     const matchesSearch = 
       (log.userName || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
       (user.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (log.date || "").includes(searchQuery);
+      (log.date || "").includes(searchQuery) ||
+      inLocName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      outLocName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inGps.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      outGps.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesDept = !selectedDept || log.userDept === selectedDept;
     const matchesDate = !selectedDate || log.date === selectedDate;
+    const matchesLocation = selectedLocationFilter === "all" || 
+      inLocName.toLowerCase().includes(selectedLocationFilter.toLowerCase()) || 
+      outLocName.toLowerCase().includes(selectedLocationFilter.toLowerCase());
     
-    return matchesSearch && matchesDept && matchesDate;
+    return matchesSearch && matchesDept && matchesDate && matchesLocation;
   });
 
   // Filter live users
@@ -648,14 +699,35 @@ export default function AdminDashboard() {
       log: live.details
     };
   }).filter((item) => {
+    const inLocName = getLocationDisplayName(item.log?.checkInLocation);
+    const outLocName = getLocationDisplayName(item.log?.checkOutLocation);
+    const inGps = formatGpsCoords(item.log?.checkInLocation);
+    const outGps = formatGpsCoords(item.log?.checkOutLocation);
+
     const matchesSearch = 
       (item.user.name || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
       (item.user.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.user.role || "").toLowerCase().includes(searchQuery.toLowerCase());
+      (item.user.role || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inLocName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      outLocName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inGps.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      outGps.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesDept = !selectedDept || item.user.department === selectedDept;
+    const matchesLocation = selectedLocationFilter === "all" || 
+      inLocName.toLowerCase().includes(selectedLocationFilter.toLowerCase()) || 
+      outLocName.toLowerCase().includes(selectedLocationFilter.toLowerCase());
     
-    return matchesSearch && matchesDept;
+    return matchesSearch && matchesDept && matchesLocation;
   });
+
+  // Distinct detected location names for location filter dropdown
+  const detectedLocations = [...new Set([
+    ...logs.map(l => [
+      getLocationDisplayName(l.checkInLocation), 
+      getLocationDisplayName(l.checkOutLocation)
+    ]).flat()
+  ])].filter(name => name && name !== "—" && !name.includes("Unknown"));
 
   // Filter user profiles
   const filteredProfiles = staffUsers.filter((u) => {
@@ -1132,6 +1204,7 @@ export default function AdminDashboard() {
       currentY += 6;
     });
     
+    addPDFFooter(doc);
     doc.save(`Assets_Inventory_Report_${new Date().toISOString().split("T")[0]}.pdf`);
     showToast("PDF report downloaded successfully.", "success");
   };
@@ -1272,7 +1345,7 @@ export default function AdminDashboard() {
 
     const aoaData = [
       ["CARREZZA GLOBAL SOLUTIONS PVT LTD"],
-      ["Corporate Attendance Registry Report"],
+      ["Corporate Attendance & Location Registry Report"],
       [`Scope: All Employees`, `Record Count: ${filteredLogs.length}`],
       [`Generated On: ${new Date().toLocaleString()}`],
       [], // Blank row
@@ -1282,13 +1355,15 @@ export default function AdminDashboard() {
         "Department", 
         "Program Type", 
         "Check-In Time", 
+        "Check-In Location (Name)",
+        "Check-In GPS",
         "Check-Out Time", 
+        "Check-Out Location (Name)",
+        "Check-Out GPS",
         "Break 1", 
         "Break 2", 
         "Active Minutes", 
-        "Active Hours", 
-        "GPS Check-In", 
-        "GPS Check-Out"
+        "Active Hours"
       ]
     ];
 
@@ -1301,13 +1376,15 @@ export default function AdminDashboard() {
         log.userDept || "—",
         log.programType || "—",
         log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString() : "—",
+        getLocationDisplayName(log.checkInLocation),
+        formatGpsCoords(log.checkInLocation),
         log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString() : "—",
+        getLocationDisplayName(log.checkOutLocation),
+        formatGpsCoords(log.checkOutLocation),
         shorts,
         longs,
         log.totalWorkingMinutes || 0,
-        ((log.totalWorkingMinutes || 0) / 60).toFixed(2),
-        log.checkInLocation ? `${log.checkInLocation.latitude}, ${log.checkInLocation.longitude}` : "—",
-        log.checkOutLocation ? `${log.checkOutLocation.latitude}, ${log.checkOutLocation.longitude}` : "—"
+        ((log.totalWorkingMinutes || 0) / 60).toFixed(2)
       ]);
     });
 
@@ -1335,13 +1412,13 @@ export default function AdminDashboard() {
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-    const titleText = "Corporate Attendance Registry Report";
+    const titleText = "Corporate Attendance & Location Registry Report";
     const subtitleText = `Generated: ${new Date().toLocaleString()} | Filtered Count: ${filteredLogs.length} record(s)`;
     let currentY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
     
     // Table Headers
-    const headers = ["Date", "Name", "Department", "Program", "Check In", "Check Out", "Breaks", "Working Hrs"];
-    const colWidths = [24, 45, 35, 30, 25, 25, 30, 25];
+    const headers = ["Date", "Name", "Dept", "Check In", "In Location", "Check Out", "Out Location", "Hours"];
+    const colWidths = [24, 38, 28, 22, 54, 22, 54, 24];
     
     // Print header background band
     doc.setFillColor(0, 97, 224);
@@ -1393,33 +1470,35 @@ export default function AdminDashboard() {
       const checkInStr = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—";
       const checkOutStr = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—";
       
-      const shorts = log.breaks?.filter(b => b.type === "short").length || 0;
-      const longs = log.breaks?.filter(b => b.type === "long").length || 0;
-      const breaksStr = `${shorts} Break 1, ${longs} Break 2`;
+      const inLoc = getLocationDisplayName(log.checkInLocation);
+      const outLoc = getLocationDisplayName(log.checkOutLocation);
+      const inLocTruncated = inLoc.length > 25 ? inLoc.substring(0, 23) + ".." : inLoc;
+      const outLocTruncated = outLoc.length > 25 ? outLoc.substring(0, 23) + ".." : outLoc;
+
       const hrsStr = `${((log.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs`;
 
       xOffset = 14;
       doc.text(log.date || "—", xOffset + 2, currentY);
       xOffset += colWidths[0];
       
-      const truncatedName = log.userName.length > 20 ? log.userName.substring(0, 18) + ".." : log.userName;
+      const truncatedName = log.userName.length > 18 ? log.userName.substring(0, 16) + ".." : log.userName;
       doc.text(truncatedName, xOffset + 2, currentY);
       xOffset += colWidths[1];
       
-      const truncatedDept = (log.userDept || "").length > 15 ? log.userDept.substring(0, 13) + ".." : (log.userDept || "—");
+      const truncatedDept = (log.userDept || "").length > 13 ? log.userDept.substring(0, 11) + ".." : (log.userDept || "—");
       doc.text(truncatedDept, xOffset + 2, currentY);
       xOffset += colWidths[2];
       
-      doc.text(log.programType || "—", xOffset + 2, currentY);
+      doc.text(checkInStr, xOffset + 2, currentY);
       xOffset += colWidths[3];
       
-      doc.text(checkInStr, xOffset + 2, currentY);
+      doc.text(inLocTruncated, xOffset + 2, currentY);
       xOffset += colWidths[4];
       
       doc.text(checkOutStr, xOffset + 2, currentY);
       xOffset += colWidths[5];
       
-      doc.text(breaksStr, xOffset + 2, currentY);
+      doc.text(outLocTruncated, xOffset + 2, currentY);
       xOffset += colWidths[6];
       
       doc.setFont("helvetica", "bold");
@@ -1429,32 +1508,35 @@ export default function AdminDashboard() {
       currentY += 6;
     });
 
+    addPDFFooter(doc);
     doc.save(`Corporate_Attendance_Report_${new Date().toISOString().split("T")[0]}.pdf`);
     showToast("PDF corporate report downloaded successfully.", "success");
   };
 
   const exportSingleUserExcel = (user) => {
-    const userLogs = logs.filter(l => l.userId === user.uid);
+    const userLogs = logs.filter(l => l.userId === user.uid || l.uid === user.uid);
     if (userLogs.length === 0) {
       return showToast(`No attendance logs found for ${user.name}.`, "warning");
     }
 
     const aoaData = [
       ["CARREZZA GLOBAL SOLUTIONS PVT LTD"],
-      [`Attendance History Report for ${user.name}`],
+      [`Attendance & Location History Report for ${user.name}`],
       [`Department: ${user.department || "—"}`, `Email: ${user.email || "—"}`],
       [`Generated On: ${new Date().toLocaleString()}`],
       [], // Blank row
       [
         "Date", 
         "Check-In Time", 
+        "Check-In Location (Name)",
+        "Check-In GPS",
         "Check-Out Time", 
+        "Check-Out Location (Name)",
+        "Check-Out GPS",
         "Break 1", 
         "Break 2", 
         "Active Minutes", 
-        "Active Hours", 
-        "GPS Check-In", 
-        "GPS Check-Out"
+        "Active Hours"
       ]
     ];
 
@@ -1464,13 +1546,15 @@ export default function AdminDashboard() {
       aoaData.push([
         log.date,
         log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString() : "—",
+        getLocationDisplayName(log.checkInLocation),
+        formatGpsCoords(log.checkInLocation),
         log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString() : "—",
+        getLocationDisplayName(log.checkOutLocation),
+        formatGpsCoords(log.checkOutLocation),
         shorts,
         longs,
         log.totalWorkingMinutes || 0,
-        ((log.totalWorkingMinutes || 0) / 60).toFixed(2),
-        log.checkInLocation ? `${log.checkInLocation.latitude}, ${log.checkInLocation.longitude}` : "—",
-        log.checkOutLocation ? `${log.checkOutLocation.latitude}, ${log.checkOutLocation.longitude}` : "—"
+        ((log.totalWorkingMinutes || 0) / 60).toFixed(2)
       ]);
     });
 
@@ -1493,19 +1577,19 @@ export default function AdminDashboard() {
   };
 
   const exportSingleUserPDF = async (user) => {
-    const userLogs = logs.filter(l => l.userId === user.uid);
+    const userLogs = logs.filter(l => l.userId === user.uid || l.uid === user.uid);
     if (userLogs.length === 0) {
       return showToast(`No attendance logs found for ${user.name}.`, "warning");
     }
 
     const doc = new jsPDF("l", "mm", "a4");
-    const titleText = `Individual Attendance History for ${user.name} (${user.email})`;
+    const titleText = `Individual Attendance & Location History for ${user.name} (${user.email})`;
     const subtitleText = `Department: ${user.department || "N/A"} | Generated: ${new Date().toLocaleString()}`;
     let currentY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
     
     // Table Headers
-    const headers = ["Date", "Check In", "Check Out", "Breaks Summary", "GPS Check-In", "GPS Check-Out", "Active Hours"];
-    const colWidths = [30, 30, 30, 45, 55, 55, 25];
+    const headers = ["Date", "Check In", "In Location", "Check Out", "Out Location", "Breaks", "Hours"];
+    const colWidths = [28, 24, 60, 24, 60, 45, 25];
     
     // Print header backgrounds
     doc.setFillColor(0, 97, 224);
@@ -1557,12 +1641,15 @@ export default function AdminDashboard() {
       const checkInStr = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—";
       const checkOutStr = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—";
       
+      const inLoc = getLocationDisplayName(log.checkInLocation);
+      const outLoc = getLocationDisplayName(log.checkOutLocation);
+      const inLocTrunc = inLoc.length > 28 ? inLoc.substring(0, 26) + ".." : inLoc;
+      const outLocTrunc = outLoc.length > 28 ? outLoc.substring(0, 26) + ".." : outLoc;
+
       const shorts = log.breaks?.filter(b => b.type === "short").length || 0;
       const longs = log.breaks?.filter(b => b.type === "long").length || 0;
       const breaksStr = `${shorts} short, ${longs} long`;
       
-      const gpsInStr = log.checkInLocation ? `${log.checkInLocation.latitude.toFixed(4)}, ${log.checkInLocation.longitude.toFixed(4)}` : "—";
-      const gpsOutStr = log.checkOutLocation ? `${log.checkOutLocation.latitude.toFixed(4)}, ${log.checkOutLocation.longitude.toFixed(4)}` : "—";
       const hrsStr = `${((log.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs`;
 
       xOffset = 14;
@@ -1572,16 +1659,16 @@ export default function AdminDashboard() {
       doc.text(checkInStr, xOffset + 2, currentY);
       xOffset += colWidths[1];
       
-      doc.text(checkOutStr, xOffset + 2, currentY);
+      doc.text(inLocTrunc, xOffset + 2, currentY);
       xOffset += colWidths[2];
-      
-      doc.text(breaksStr, xOffset + 2, currentY);
+
+      doc.text(checkOutStr, xOffset + 2, currentY);
       xOffset += colWidths[3];
       
-      doc.text(gpsInStr, xOffset + 2, currentY);
+      doc.text(outLocTrunc, xOffset + 2, currentY);
       xOffset += colWidths[4];
       
-      doc.text(gpsOutStr, xOffset + 2, currentY);
+      doc.text(breaksStr, xOffset + 2, currentY);
       xOffset += colWidths[5];
       
       doc.setFont("helvetica", "bold");
@@ -1591,6 +1678,7 @@ export default function AdminDashboard() {
       currentY += 6;
     });
 
+    addPDFFooter(doc);
     doc.save(`Attendance_Report_${user.name.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`);
     showToast(`PDF report for ${user.name} downloaded.`, "success");
   };
@@ -1968,172 +2056,467 @@ export default function AdminDashboard() {
           </div>
 
           {/* Double Columns: Live Attendance list vs Leave Requests list */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Live Attendance Table */}
-            <div className="lg:col-span-2 bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-extrabold text-base text-text-main tracking-tight">Live Attendance</h3>
-                <button 
-                  onClick={() => setActiveTab("users")}
-                  className="text-xs font-bold text-brand-primary hover:text-brand-hover hover:underline cursor-pointer"
-                >
-                  View All Records
-                </button>
-              </div>
+          <div clas            {/* Live Attendance Table */}
+            <div className="lg:col-span-2 bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+                  <div>
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight flex items-center gap-2">
+                      <span>Live Attendance & Location Logs</span>
+                      <span className="flex h-2 w-2 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                    </h3>
+                    <p className="text-xs text-text-sec mt-0.5">Real-time GPS coordinates and resolved geocoded locations.</p>
+                  </div>
 
-              {liveStatusList.length === 0 ? (
-                <div className="text-center py-16 text-text-mut text-sm">No employee logs available today.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
-                        <th className="pb-3 pr-4">Staff Member</th>
-                        <th className="pb-3 px-4">Department</th>
-                        <th className="pb-3 px-4">Check-In</th>
-                        <th className="pb-3 px-4">Check-Out</th>
-                        <th className="pb-3 px-4 text-center">Breaks (Taken)</th>
-                        <th className="pb-3 px-4 text-center">Total Hours</th>
-                        <th className="pb-3 pl-4 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
-                      {paginatedLiveStatus.map(({ user, status, log }) => {
-                        const inTime = log?.checkInTime 
-                          ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                          : "—";
-                        const outTime = log?.checkOutTime
-                          ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                          : "—";
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* View Switcher: Live vs All Logs */}
+                    <div className="inline-flex p-1 bg-bg-base/80 border border-border-card rounded-[12px]">
+                      <button
+                        type="button"
+                        onClick={() => setLiveViewMode("live")}
+                        className={`px-3 py-1.5 rounded-[9px] text-xs font-bold transition-all cursor-pointer ${
+                          liveViewMode === "live"
+                            ? "bg-brand-primary text-white shadow-sm"
+                            : "text-text-sec hover:text-text-main"
+                        }`}
+                      >
+                        Today's Live
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLiveViewMode("all-logs")}
+                        className={`px-3 py-1.5 rounded-[9px] text-xs font-bold transition-all cursor-pointer ${
+                          liveViewMode === "all-logs"
+                            ? "bg-brand-primary text-white shadow-sm"
+                            : "text-text-sec hover:text-text-main"
+                        }`}
+                      >
+                        All Registry Logs
+                      </button>
+                    </div>
 
-                        let totalHrsStr = "—";
-                        let shortTaken = 0;
-                        let longTaken = 0;
-                        let bioTaken = 0;
-                        
-                        if (log) {
-                          if (log.breaks) {
-                            log.breaks.forEach(b => {
-                              const bStart = new Date(b.startTime).getTime();
-                              const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
-                              const mins = Math.round((bEnd - bStart) / 60000);
-                              if (b.type === "short") shortTaken += mins;
-                              else if (b.type === "long") longTaken += mins;
-                              else if (b.type === "bio") bioTaken += mins;
-                            });
-                          }
-                          
-                          if (log.totalWorkingMinutes !== undefined) {
-                            totalHrsStr = (log.totalWorkingMinutes / 60).toFixed(2) + "h";
-                          } else if (log.checkInTime) {
-                            const start = new Date(log.checkInTime).getTime();
-                            const now = new Date().getTime();
-                            const end = log.checkOutTime ? new Date(log.checkOutTime).getTime() : now;
-                            
-                            const breakMinutes = log.breaks?.reduce((acc, b) => {
-                              const bStart = new Date(b.startTime).getTime();
-                              const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
-                              return acc + ((bEnd - bStart) / 60000);
-                            }, 0) || 0;
-                            
-                            const elapsedMins = Math.max(0, ((end - start) / 60000) - breakMinutes);
-                            totalHrsStr = (elapsedMins / 60).toFixed(2) + "h";
-                          }
-                        }
-
-                        return (
-                          <tr key={user.uid} className="hover:bg-bg-base/30">
-                            <td 
-                              className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
-                              onClick={() => { setSelectedUser(user); setShowDetailModal(true); }}
-                              title="View Records"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">{user.avatar ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" /> : (user.name ? getInitials(user.name) : "U")}</div>
-                              <span className="font-bold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{user.name}</span>
-                            </td>
-                            <td className="py-3.5 px-4 text-text-sec">{user.department || "Engineering"}</td>
-                            <td className="py-3.5 px-4 text-brand-primary font-bold">{inTime}</td>
-                            <td className="py-3.5 px-4 text-text-sec">{outTime}</td>
-                            <td className="py-3.5 px-4 text-center">
-                              {(shortTaken > 0 || longTaken > 0 || bioTaken > 0) ? (
-                                <div className="flex flex-col gap-1 items-center text-[9px] font-extrabold uppercase">
-                                  {shortTaken > 0 && <span className="text-brand-warning bg-brand-warning/10 px-1.5 py-0.5 rounded shadow-sm">B1: {shortTaken}m</span>}
-                                  {longTaken > 0 && <span className="text-brand-warning bg-brand-warning/10 px-1.5 py-0.5 rounded shadow-sm">B2: {longTaken}m</span>}
-                                  {bioTaken > 0 && <span className="text-brand-success bg-brand-success/10 px-1.5 py-0.5 rounded shadow-sm">Bio: {bioTaken}m</span>}
-                                </div>
-                              ) : (
-                                <span className="text-text-mut font-semibold">—</span>
-                              )}
-                            </td>
-                            <td className="py-3.5 px-4 text-brand-primary font-bold text-center">{totalHrsStr}</td>
-                            <td className="py-3.5 pl-4 text-right flex justify-end items-center">{getStatusBadge(status)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {liveStatusList.length > 10 && (
-                <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
-                  <div className="flex items-center gap-4">
-                    <span className="text-text-mut font-semibold">
-                      Showing {liveStartIndex + 1} to {Math.min(liveStatusList.length, liveStartIndex + rowsPerPage)} of {liveStatusList.length} entries
-                    </span>
-                    <select 
-                      value={rowsPerPage} 
-                      onChange={(e) => {
-                        setRowsPerPage(Number(e.target.value));
-                        setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
-                      }}
-                      className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                    {/* Export Dropdown / Buttons */}
+                    <button 
+                      onClick={handleExportExcel}
+                      className="px-2.5 py-1.5 border border-border-card hover:bg-bg-base rounded-[10px] text-xs font-bold text-text-sec hover:text-text-main transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      title="Export Excel with Location Details"
                     >
-                      <option value={10}>10 / page</option>
-                      <option value={20}>20 / page</option>
-                      <option value={50}>50 / page</option>
-                      <option value={100}>100 / page</option>
+                      <Download size={13} className="text-emerald-500" />
+                      <span>Excel</span>
+                    </button>
+                    <button 
+                      onClick={handleExportPDF}
+                      className="px-2.5 py-1.5 border border-border-card hover:bg-bg-base rounded-[10px] text-xs font-bold text-text-sec hover:text-text-main transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      title="Export PDF with Location Details"
+                    >
+                      <FileText size={13} className="text-rose-500" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Controls Bar */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 p-3 rounded-[16px] bg-bg-base/40 border border-border-card">
+                  {/* Search Input */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-mut" size={14} />
+                    <input
+                      type="text"
+                      placeholder="Search name, location, GPS..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-bg-card border border-border-card rounded-[10px] text-xs text-text-main placeholder:text-text-mut focus:outline-none focus:border-brand-primary font-medium"
+                    />
+                  </div>
+
+                  {/* Location Filter Dropdown */}
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-text-mut" size={14} />
+                    <select
+                      value={selectedLocationFilter}
+                      onChange={(e) => setSelectedLocationFilter(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-bg-card border border-border-card rounded-[10px] text-xs font-bold text-text-sec focus:outline-none focus:border-brand-primary cursor-pointer appearance-none truncate"
+                    >
+                      <option value="all">📍 All Locations ({detectedLocations.length > 0 ? detectedLocations.length : "GPS"})</option>
+                      {detectedLocations.map((locName, idx) => (
+                        <option key={idx} value={locName}>
+                          📍 {locName}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setLivePage(prev => Math.max(1, prev - 1))}
-                      disabled={livePage === 1}
-                      className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+
+                  {/* Department Filter */}
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedDept}
+                      onChange={(e) => setSelectedDept(e.target.value)}
+                      className="w-full px-3 py-2 bg-bg-card border border-border-card rounded-[10px] text-xs font-bold text-text-sec focus:outline-none focus:border-brand-primary cursor-pointer appearance-none truncate"
                     >
-                      Prev
-                    </button>
-                    {Array.from({ length: liveTotalPages }, (_, i) => i + 1).map((p) => {
-                      if (liveTotalPages > 5 && p !== 1 && p !== liveTotalPages && Math.abs(p - livePage) > 1) {
-                        if (p === 2 || p === liveTotalPages - 1) {
-                          return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
-                        }
-                        return null;
-                      }
-                      return (
-                        <button
-                          key={p}
-                          onClick={() => setLivePage(p)}
-                          className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
-                            livePage === p
-                              ? "bg-brand-primary border-brand-primary text-white"
-                              : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      );
-                    })}
-                    <button
-                      onClick={() => setLivePage(prev => Math.min(liveTotalPages, prev + 1))}
-                      disabled={livePage === liveTotalPages}
-                      className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
-                    >
-                      Next
-                    </button>
+                      <option value="">🏢 All Departments</option>
+                      {departments.map((dept, idx) => (
+                        <option key={idx} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+
+                    {(searchQuery || selectedLocationFilter !== "all" || selectedDept) && (
+                      <button
+                        onClick={() => { setSearchQuery(""); setSelectedLocationFilter("all"); setSelectedDept(""); }}
+                        className="px-2.5 py-2 rounded-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold transition-colors cursor-pointer flex-shrink-0"
+                        title="Clear Filters"
+                      >
+                        Reset
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
+
+                {/* Table Content */}
+                {liveViewMode === "live" ? (
+                  liveStatusList.length === 0 ? (
+                    <div className="text-center py-16 text-text-mut text-sm">
+                      <MapPin size={36} className="mx-auto mb-2 opacity-30 text-text-mut" />
+                      No employee check logs found matching current filters today.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
+                            <th className="pb-3 pr-4">Staff Member</th>
+                            <th className="pb-3 px-3">Department</th>
+                            <th className="pb-3 px-3">Check-In & Location</th>
+                            <th className="pb-3 px-3">Check-Out & Location</th>
+                            <th className="pb-3 px-3 text-center">Breaks</th>
+                            <th className="pb-3 px-3 text-center">Hours</th>
+                            <th className="pb-3 pl-3 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
+                          {paginatedLiveStatus.map(({ user, status, log }) => {
+                            const inTime = log?.checkInTime 
+                              ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : "—";
+                            const outTime = log?.checkOutTime
+                              ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : "—";
+
+                            const inLocDisplayName = getLocationDisplayName(log?.checkInLocation);
+                            const outLocDisplayName = getLocationDisplayName(log?.checkOutLocation);
+
+                            let totalHrsStr = "—";
+                            let shortTaken = 0;
+                            let longTaken = 0;
+                            let bioTaken = 0;
+                            
+                            if (log) {
+                              if (log.breaks) {
+                                log.breaks.forEach(b => {
+                                  const bStart = new Date(b.startTime).getTime();
+                                  const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
+                                  const mins = Math.round((bEnd - bStart) / 60000);
+                                  if (b.type === "short") shortTaken += mins;
+                                  else if (b.type === "long") longTaken += mins;
+                                  else if (b.type === "bio") bioTaken += mins;
+                                });
+                              }
+                              
+                              if (log.totalWorkingMinutes !== undefined) {
+                                totalHrsStr = (log.totalWorkingMinutes / 60).toFixed(2) + "h";
+                              } else if (log.checkInTime) {
+                                const start = new Date(log.checkInTime).getTime();
+                                const now = new Date().getTime();
+                                const end = log.checkOutTime ? new Date(log.checkOutTime).getTime() : now;
+                                
+                                const breakMinutes = log.breaks?.reduce((acc, b) => {
+                                  const bStart = new Date(b.startTime).getTime();
+                                  const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
+                                  return acc + ((bEnd - bStart) / 60000);
+                                }, 0) || 0;
+                                
+                                const elapsedMins = Math.max(0, ((end - start) / 60000) - breakMinutes);
+                                totalHrsStr = (elapsedMins / 60).toFixed(2) + "h";
+                              }
+                            }
+
+                            return (
+                              <tr key={user.uid} className="hover:bg-bg-base/30 transition-colors">
+                                <td 
+                                  className="py-3.5 pr-4 flex items-center gap-3 cursor-pointer hover:bg-bg-base/50 rounded-lg transition-colors"
+                                  onClick={() => { setSelectedUser(user); setShowDetailModal(true); }}
+                                  title="View Records"
+                                >
+                                  <div className="w-8 h-8 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 flex items-center justify-center font-extrabold text-xs uppercase shadow-sm flex-shrink-0 overflow-hidden">
+                                    {user.avatar ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" /> : (user.name ? getInitials(user.name) : "U")}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-bold text-text-main truncate max-w-[130px] hover:text-brand-primary transition-colors">{user.name}</span>
+                                    <span className="text-[10px] text-text-mut truncate max-w-[130px] font-normal">{user.email}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-3 text-text-sec">{user.department || "Engineering"}</td>
+                                
+                                {/* Check-In Time & Resolved Location */}
+                                <td className="py-3.5 px-3">
+                                  <div className="text-brand-primary font-bold text-xs">{inTime}</div>
+                                  {log?.checkInLocation ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLocationModalData({
+                                          isOpen: true,
+                                          title: "Check-In Location Details",
+                                          employeeName: user.name,
+                                          userAvatar: user.avatar,
+                                          type: "Check-In",
+                                          time: inTime,
+                                          date: log?.date || "Today",
+                                          location: log.checkInLocation
+                                        });
+                                      }}
+                                      className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold border border-blue-500/20 transition-all cursor-pointer group max-w-[150px] truncate"
+                                      title={`📍 ${inLocDisplayName}\nGPS: ${formatGpsCoords(log.checkInLocation)}\nClick to view map & details`}
+                                    >
+                                      <MapPin size={10} className="flex-shrink-0 text-blue-500 group-hover:scale-110 transition-transform" />
+                                      <span className="truncate">{inLocDisplayName}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-text-mut block mt-0.5">—</span>
+                                  )}
+                                </td>
+
+                                {/* Check-Out Time & Resolved Location */}
+                                <td className="py-3.5 px-3">
+                                  <div className="text-text-sec font-bold text-xs">{outTime}</div>
+                                  {log?.checkOutLocation ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLocationModalData({
+                                          isOpen: true,
+                                          title: "Check-Out Location Details",
+                                          employeeName: user.name,
+                                          userAvatar: user.avatar,
+                                          type: "Check-Out",
+                                          time: outTime,
+                                          date: log?.date || "Today",
+                                          location: log.checkOutLocation
+                                        });
+                                      }}
+                                      className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20 transition-all cursor-pointer group max-w-[150px] truncate"
+                                      title={`📍 ${outLocDisplayName}\nGPS: ${formatGpsCoords(log.checkOutLocation)}\nClick to view map & details`}
+                                    >
+                                      <MapPin size={10} className="flex-shrink-0 text-amber-500 group-hover:scale-110 transition-transform" />
+                                      <span className="truncate">{outLocDisplayName}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-text-mut block mt-0.5">—</span>
+                                  )}
+                                </td>
+
+                                <td className="py-3.5 px-3 text-center">
+                                  {(shortTaken > 0 || longTaken > 0 || bioTaken > 0) ? (
+                                    <div className="flex flex-col gap-1 items-center text-[9px] font-extrabold uppercase">
+                                      {shortTaken > 0 && <span className="text-brand-warning bg-brand-warning/10 px-1.5 py-0.5 rounded shadow-sm">B1: {shortTaken}m</span>}
+                                      {longTaken > 0 && <span className="text-brand-warning bg-brand-warning/10 px-1.5 py-0.5 rounded shadow-sm">B2: {longTaken}m</span>}
+                                      {bioTaken > 0 && <span className="text-brand-success bg-brand-success/10 px-1.5 py-0.5 rounded shadow-sm">Bio: {bioTaken}m</span>}
+                                    </div>
+                                  ) : (
+                                    <span className="text-text-mut font-semibold">—</span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-3 text-brand-primary font-bold text-center">{totalHrsStr}</td>
+                                <td className="py-3.5 pl-3 text-right flex justify-end items-center">{getStatusBadge(status)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                ) : (
+                  /* All Logs Registry View */
+                  filteredLogs.length === 0 ? (
+                    <div className="text-center py-16 text-text-mut text-sm">
+                      <MapPin size={36} className="mx-auto mb-2 opacity-30 text-text-mut" />
+                      No attendance registry records match the selected filters.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border-card text-[10px] font-bold text-text-mut uppercase tracking-wider">
+                            <th className="pb-3 pr-3">Date</th>
+                            <th className="pb-3 px-3">Employee</th>
+                            <th className="pb-3 px-3">Department</th>
+                            <th className="pb-3 px-3">Check-In & Location</th>
+                            <th className="pb-3 px-3">Check-Out & Location</th>
+                            <th className="pb-3 px-3 text-center">Active Hours</th>
+                            <th className="pb-3 pl-3 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-card text-xs text-text-main font-semibold">
+                          {filteredLogs.slice((livePage - 1) * rowsPerPage, livePage * rowsPerPage).map((log, idx) => {
+                            const checkInTimeStr = log.checkInTime 
+                              ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : "—";
+                            const checkOutTimeStr = log.checkOutTime
+                              ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : "—";
+
+                            const inLocDisplayName = getLocationDisplayName(log.checkInLocation);
+                            const outLocDisplayName = getLocationDisplayName(log.checkOutLocation);
+                            const hrs = log.totalWorkingMinutes ? ((log.totalWorkingMinutes / 60).toFixed(2) + "h") : "—";
+
+                            return (
+                              <tr key={log.id || idx} className="hover:bg-bg-base/30 transition-colors">
+                                <td className="py-3.5 pr-3 font-mono font-bold text-text-sec text-xs">{log.date || "—"}</td>
+                                <td className="py-3.5 px-3">
+                                  <span className="font-bold text-text-main block">{log.userName}</span>
+                                </td>
+                                <td className="py-3.5 px-3 text-text-sec">{log.userDept || "—"}</td>
+
+                                {/* Check In Location */}
+                                <td className="py-3.5 px-3">
+                                  <div className="text-brand-primary font-bold text-xs">{checkInTimeStr}</div>
+                                  {log.checkInLocation ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLocationModalData({
+                                          isOpen: true,
+                                          title: "Check-In Location Details",
+                                          employeeName: log.userName,
+                                          type: "Check-In",
+                                          time: checkInTimeStr,
+                                          date: log.date,
+                                          location: log.checkInLocation
+                                        });
+                                      }}
+                                      className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold border border-blue-500/20 transition-all cursor-pointer max-w-[150px] truncate"
+                                      title={`📍 ${inLocDisplayName}\nGPS: ${formatGpsCoords(log.checkInLocation)}`}
+                                    >
+                                      <MapPin size={10} className="flex-shrink-0 text-blue-500" />
+                                      <span className="truncate">{inLocDisplayName}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-text-mut block mt-0.5">—</span>
+                                  )}
+                                </td>
+
+                                {/* Check Out Location */}
+                                <td className="py-3.5 px-3">
+                                  <div className="text-text-sec font-bold text-xs">{checkOutTimeStr}</div>
+                                  {log.checkOutLocation ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLocationModalData({
+                                          isOpen: true,
+                                          title: "Check-Out Location Details",
+                                          employeeName: log.userName,
+                                          type: "Check-Out",
+                                          time: checkOutTimeStr,
+                                          date: log.date,
+                                          location: log.checkOutLocation
+                                        });
+                                      }}
+                                      className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20 transition-all cursor-pointer max-w-[150px] truncate"
+                                      title={`📍 ${outLocDisplayName}\nGPS: ${formatGpsCoords(log.checkOutLocation)}`}
+                                    >
+                                      <MapPin size={10} className="flex-shrink-0 text-amber-500" />
+                                      <span className="truncate">{outLocDisplayName}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-text-mut block mt-0.5">—</span>
+                                  )}
+                                </td>
+
+                                <td className="py-3.5 px-3 text-brand-primary font-bold text-center">{hrs}</td>
+                                <td className="py-3.5 pl-3 text-right flex justify-end items-center">{getStatusBadge(log.status || (log.checkOutTime ? "checked-out" : "working"))}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Dynamic Pagination Bar */}
+              {(() => {
+                const totalItems = liveViewMode === "live" ? liveStatusList.length : filteredLogs.length;
+                const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+                const startIndex = (livePage - 1) * rowsPerPage;
+
+                if (totalItems <= 10) return null;
+
+                return (
+                  <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-card text-xs flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                      <span className="text-text-mut font-semibold">
+                        Showing {startIndex + 1} to {Math.min(totalItems, startIndex + rowsPerPage)} of {totalItems} entries
+                      </span>
+                      <select 
+                        value={rowsPerPage} 
+                        onChange={(e) => {
+                          setRowsPerPage(Number(e.target.value));
+                          setLivePage(1); setUsersPage(1); setLeavesPendingPage(1); setRegsPendingPage(1); setHistoryPage(1); setAssetsPage(1);
+                        }}
+                        className="px-2 py-1 bg-bg-card border border-border-card rounded-[6px] text-xs font-bold text-text-sec cursor-pointer outline-none focus:border-brand-primary"
+                      >
+                        <option value={10}>10 / page</option>
+                        <option value={20}>20 / page</option>
+                        <option value={50}>50 / page</option>
+                        <option value={100}>100 / page</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setLivePage(prev => Math.max(1, prev - 1))}
+                        disabled={livePage === 1}
+                        className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                      >
+                        Prev
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
+                        if (totalPages > 5 && p !== 1 && p !== totalPages && Math.abs(p - livePage) > 1) {
+                          if (p === 2 || p === totalPages - 1) {
+                            return <span key={p} className="px-1 text-text-mut font-bold">...</span>;
+                          }
+                          return null;
+                        }
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => setLivePage(p)}
+                            className={`w-8 h-8 rounded-[8px] border transition-all cursor-pointer font-bold ${
+                              livePage === p
+                                ? "bg-brand-primary border-brand-primary text-white"
+                                : "border-border-card bg-bg-card text-text-sec hover:bg-bg-base"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                      <button
+                        onClick={() => setLivePage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={livePage === totalPages}
+                        className="px-3 py-1.5 border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec disabled:opacity-40 disabled:hover:bg-bg-card cursor-pointer font-bold transition-all"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Leave Requests Panel */}
@@ -6362,6 +6745,154 @@ export default function AdminDashboard() {
       )}
 
       
+      {/* Location Details Modal */}
+      {locationModalData && locationModalData.isOpen && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-bg-card w-full max-w-lg rounded-[24px] shadow-2xl border border-border-card overflow-hidden animate-scale-up flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-border-card flex items-center justify-between bg-bg-base/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-[14px] bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-text-main flex items-center gap-2">
+                    {locationModalData.title || "Location Inspection"}
+                  </h2>
+                  <p className="text-xs text-text-sec">
+                    {locationModalData.employeeName} • {locationModalData.type} ({locationModalData.time})
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setLocationModalData(null)} 
+                className="text-text-mut hover:text-text-main transition-colors p-2 rounded-xl hover:bg-bg-base cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+              {/* Resolved Location Highlight */}
+              <div className="p-4 rounded-[18px] bg-brand-primary/5 border border-brand-primary/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-primary">
+                    Identified Location
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/10 text-emerald-500">
+                    GPS Geocoded
+                  </span>
+                </div>
+                <div className="text-sm font-bold text-text-main leading-relaxed">
+                  {getLocationDisplayName(locationModalData.location)}
+                </div>
+              </div>
+
+              {/* GPS Coordinates Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-[14px] bg-bg-base/50 border border-border-card">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Latitude</span>
+                  <span className="text-xs font-mono font-bold text-text-main mt-0.5 block">
+                    {locationModalData.location?.latitude?.toFixed(6) ?? locationModalData.location?.lat ?? "—"}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-[14px] bg-bg-base/50 border border-border-card">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Longitude</span>
+                  <span className="text-xs font-mono font-bold text-text-main mt-0.5 block">
+                    {locationModalData.location?.longitude?.toFixed(6) ?? locationModalData.location?.lng ?? locationModalData.location?.lon ?? "—"}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-[14px] bg-bg-base/50 border border-border-card">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Accuracy Radius</span>
+                  <span className="text-xs font-mono font-bold text-emerald-500 mt-0.5 block">
+                    {locationModalData.location?.accuracy ? `±${Math.round(locationModalData.location.accuracy)} meters` : "High Precision GPS"}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-[14px] bg-bg-base/50 border border-border-card">
+                  <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Logged Date</span>
+                  <span className="text-xs font-bold text-text-sec mt-0.5 block">
+                    {locationModalData.date || "Today"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Embedded Interactive Map Preview */}
+              {(() => {
+                const lat = locationModalData.location?.latitude ?? locationModalData.location?.lat;
+                const lon = locationModalData.location?.longitude ?? locationModalData.location?.lng ?? locationModalData.location?.lon;
+                if (!lat || !lon) return null;
+
+                const bboxDelta = 0.005;
+                const bbox = `${lon - bboxDelta},${lat - bboxDelta},${lon + bboxDelta},${lat + bboxDelta}`;
+                const osmEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
+
+                return (
+                  <div className="rounded-[18px] overflow-hidden border border-border-card shadow-sm bg-bg-base/60">
+                    <div className="relative w-full h-[200px]">
+                      <iframe
+                        title="Location Map"
+                        src={osmEmbedUrl}
+                        className="w-full h-full border-0 pointer-events-auto"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-5 border-t border-border-card bg-bg-base/40 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const lat = locationModalData.location?.latitude ?? locationModalData.location?.lat;
+                  const lon = locationModalData.location?.longitude ?? locationModalData.location?.lng ?? locationModalData.location?.lon;
+                  if (lat && lon) {
+                    navigator.clipboard.writeText(`${lat}, ${lon}`);
+                    showToast("GPS coordinates copied to clipboard!", "success");
+                  }
+                }}
+                className="px-4 py-2.5 rounded-[12px] text-xs font-bold bg-bg-card border border-border-card hover:bg-bg-base text-text-main transition-colors cursor-pointer flex items-center gap-2 shadow-sm"
+              >
+                <Navigation size={14} className="text-brand-primary" />
+                <span>Copy Coords</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const lat = locationModalData.location?.latitude ?? locationModalData.location?.lat;
+                  const lon = locationModalData.location?.longitude ?? locationModalData.location?.lng ?? locationModalData.location?.lon;
+                  const mapsUrl = (lat && lon) ? getGoogleMapsUrl(lat, lon) : "#";
+
+                  return (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2.5 rounded-[12px] text-xs font-bold bg-brand-primary hover:bg-brand-hover text-white transition-colors cursor-pointer flex items-center gap-2 shadow-lg shadow-brand-primary/20"
+                    >
+                      <ExternalLink size={14} />
+                      <span>Open in Google Maps</span>
+                    </a>
+                  );
+                })()}
+
+                <button
+                  type="button"
+                  onClick={() => setLocationModalData(null)}
+                  className="px-4 py-2.5 rounded-[12px] text-xs font-bold bg-bg-base hover:bg-border-card text-text-sec transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {activeTab === "domains" && (
         <DomainManager companyId={currentUser.companyId} />
       )}

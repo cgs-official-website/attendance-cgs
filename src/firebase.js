@@ -2218,7 +2218,7 @@ export const subscribeToMessages = (threadId, callback) => {
         where("threadId", "==", threadId)
       ),
       (snapshot) => {
-        const msgs = snapshot.docs.map(d => d.data()).filter(m => m.isDeleted === false);
+        const msgs = snapshot.docs.map(d => d.data()); // include deleted so UI can show 'This message was deleted'
         msgs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
         callback(msgs);
       },
@@ -2232,7 +2232,7 @@ export const subscribeToMessages = (threadId, callback) => {
     }
     const handler = () => {
       const all = getLocalMessages()
-        .filter(m => m.threadId === threadId && !m.isDeleted)
+        .filter(m => m.threadId === threadId) // include deleted for UI display
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       callback(all);
     };

@@ -4952,7 +4952,7 @@ export default function AdminDashboard() {
             (m.senderName || "").toLowerCase().includes(q) ||
             (m.text || "").toLowerCase().includes(q) ||
             getThreadLabel(m).toLowerCase().includes(q);
-          return matchType && matchThread && matchSearch && !m.isDeleted;
+          return matchType && matchThread && matchSearch;
         });
 
         const handleDeleteMsg = async (id) => {
@@ -5037,7 +5037,8 @@ export default function AdminDashboard() {
             {/* Stats Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Total Messages", val: chatMessages.filter(m => !m.isDeleted).length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary" },
+                { label: "Total Messages", val: chatMessages.length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary" },
+                { label: "Deleted Messages", val: chatMessages.filter(m => m.isDeleted).length, icon: <Trash2 size={18} className='inline-block mr-1' />, color: "text-red-500" },
                 { label: "Channels", val: chatChannels.length, icon: "#", color: "text-indigo-500" },
                 { label: "DM Threads", val: chatDmThreads.length, icon: <Mail size={18} className='inline-block mr-1' />, color: "text-amber-500" },
                 { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: <Paperclip size={18} className='inline-block mr-1' />, color: "text-emerald-500" }
@@ -5118,7 +5119,7 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {filteredMsgs.slice((chatPage - 1) * 20, chatPage * 20).map(msg => (
-                        <tr key={msg.id} className="border-b border-border-card hover:bg-bg-base transition-colors">
+                        <tr key={msg.id} className={`border-b border-border-card hover:bg-bg-base transition-colors ${msg.isDeleted ? "bg-red-500/5" : ""}`}>
                           <td className="px-4 py-3 text-[11px] text-text-mut whitespace-nowrap">
                             {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : "—"}
                           </td>
@@ -5137,7 +5138,13 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td className="px-4 py-3 max-w-[260px]">
-                            <span className="text-xs text-text-sec line-clamp-2">{msg.text || <span className="text-text-mut italic">—</span>}</span>
+                            {msg.isDeleted ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20">
+                                <AlertCircle size={10} /> Message deleted
+                              </span>
+                            ) : (
+                              <span className="text-xs text-text-sec line-clamp-2">{msg.text || <span className="text-text-mut italic">—</span>}</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             {msg.fileData ? (

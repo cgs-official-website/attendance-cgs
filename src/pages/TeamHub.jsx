@@ -73,8 +73,18 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
 
   if (msg.isDeleted) {
     return (
-      <div className="flex items-center gap-2 py-1 px-3 text-[11px] text-text-mut italic">
-        <AlertCircle size={12} /> Message deleted
+      <div className={`flex gap-3 px-4 py-1.5 rounded-[10px] ${isOwn ? "flex-row-reverse" : ""}`}>
+        <Avatar src={msg.senderAvatar} name={msg.senderName} />
+        <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[11px] font-bold text-text-sec">{isOwn ? "You" : msg.senderName}</span>
+            <span className="text-[10px] text-text-mut">{formatTime(msg.timestamp)}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-[14px] border border-dashed border-border-card bg-bg-base text-[11px] text-text-mut italic">
+            <AlertCircle size={11} className="flex-shrink-0" />
+            This message was deleted
+          </div>
+        </div>
       </div>
     );
   }
@@ -1021,11 +1031,13 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
   // Filter messages if search is active
   const cleanSearch = inChatSearch.trim().toLowerCase();
   const visibleMessages = cleanSearch
-    ? messages.filter(m => !m.isDeleted && (
-        m.text?.toLowerCase().includes(cleanSearch) ||
-        m.senderName?.toLowerCase().includes(cleanSearch) ||
-        m.fileData?.name?.toLowerCase().includes(cleanSearch)
-      ))
+    ? messages.filter(m =>
+        !m.isDeleted && (
+          m.text?.toLowerCase().includes(cleanSearch) ||
+          m.senderName?.toLowerCase().includes(cleanSearch) ||
+          m.fileData?.name?.toLowerCase().includes(cleanSearch)
+        )
+      )
     : messages;
 
   // Group messages by date

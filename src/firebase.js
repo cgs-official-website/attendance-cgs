@@ -494,50 +494,164 @@ export const getLocalDateString = () => {
  */
 export const checkIn = async (user, location) => {
   const dateStr = getLocalDateString();
-
-  let checkInDate = new Date();
-  
+  const checkInDate = new Date();
   const timeStr = checkInDate.toISOString();
-
   const recordId = `${user.uid}_${dateStr}`;
-  const data = {
-    id: recordId,
-    userId: user.uid,
-    userName: user.name,
-    userDept: user.department,
-    programType: user.programType,
-    date: dateStr,
-    checkInTime: timeStr,
-    checkInLocation: location,
-    checkOutTime: null,
-    checkOutLocation: null,
-    status: "checked-in",
-    breaks: [],
-    totalWorkingMinutes: 0,
-    shortBreakBalance: 1800, // 30 mins in seconds
-    longBreakBalance: 1800,   // 30 mins in seconds
-    bioBreakBalance: 900,      // 15 mins in seconds
-    companyId: user.companyId || ""
-  };
 
   if (dbType === "firebase") {
     // Check if document already exists
     const docRef = doc(db, "attendance", recordId);
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists() && docSnap.data().checkInTime) {
-      throw new Error("You have already checked in today.");
+
+    if (docSnap.exists()) {
+      const existingData = docSnap.data();
+
+      // If already actively checked in or on break
+      if (existingData.status === "checked-in" || existingData.status === "on-break") {
+        throw new Error("You are already checked in.");
+      }
+
+      // If user is re-checking in after checking out
+      if (existingData.status === "checked-out" || existingData.checkOutTime) {
+        const previousSession = {
+          checkInTime: existingData.lastCheckInTime || existingData.checkInTime,
+          checkInLocation: existingData.lastCheckInLocation || existingData.checkInLocation,
+          checkOutTime: existingData.checkOutTime,
+          checkOutLocation: existingData.checkOutLocation,
+          workingMinutes: existingData.currentSessionWorkingMinutes || (existingData.totalWorkingMinutes - (existingData.accumulatedWorkingMinutes || 0)) || 0,
+          breaks: existingData.currentSessionBreaks || []
+        };
+
+        const existingSessions = Array.isArray(existingData.sessions) ? existingData.sessions : [];
+        const newSessions = [...existingSessions, previousSession];
+        const prevAccumulated = (existingData.accumulatedWorkingMinutes || 0) + (previousSession.workingMinutes || 0);
+
+        const updates = {
+          lastCheckInTime: timeStr,
+          lastCheckInLocation: location,
+          checkOutTime: null,
+          checkOutLocation: null,
+          status: "checked-in",
+          sessions: newSessions,
+          accumulatedWorkingMinutes: prevAccumulated,
+          currentSessionBreaks: [],
+          currentSessionWorkingMinutes: 0,
+          // Keep original first check-in time for records/punctuality
+          checkInTime: existingData.checkInTime || timeStr,
+          checkInLocation: existingData.checkInLocation || location,
+          currentBreakTimerEnd: null
+        };
+
+        await updateDoc(docRef, updates);
+        return { ...existingData, ...updates };
+      }
     }
+
+    const data = {
+      id: recordId,
+      userId: user.uid,
+      userName: user.name,
+      userDept: user.department,
+      programType: user.programType,
+      date: dateStr,
+      checkInTime: timeStr,
+      checkInLocation: location,
+      lastCheckInTime: timeStr,
+      lastCheckInLocation: location,
+      checkOutTime: null,
+      checkOutLocation: null,
+      status: "checked-in",
+      breaks: [],
+      currentSessionBreaks: [],
+      sessions: [],
+      accumulatedWorkingMinutes: 0,
+      currentSessionWorkingMinutes: 0,
+      totalWorkingMinutes: 0,
+      shortBreakBalance: 1800, // 30 mins in seconds
+      longBreakBalance: 1800,   // 30 mins in seconds
+      bioBreakBalance: 900,      // 15 mins in seconds
+      companyId: user.companyId || ""
+    };
+
     await setDoc(docRef, data);
     return data;
   } else {
     const logs = localDb.getAttendance();
-    if (logs.some(log => log.userId === user.uid && log.date === dateStr)) {
-      throw new Error("You have already checked in today.");
+    const logIndex = logs.findIndex(log => log.userId === user.uid && log.date === dateStr);
+
+    if (logIndex !== -1) {
+      const existingData = logs[logIndex];
+      if (existingData.status === "checked-in" || existingData.status === "on-break") {
+        throw new Error("You are already checked in.");
+      }
+
+      if (existingData.status === "checked-out" || existingData.checkOutTime) {
+        const previousSession = {
+          checkInTime: existingData.lastCheckInTime || existingData.checkInTime,
+          checkInLocation: existingData.lastCheckInLocation || existingData.checkInLocation,
+          checkOutTime: existingData.checkOutTime,
+          checkOutLocation: existingData.checkOutLocation,
+          workingMinutes: existingData.currentSessionWorkingMinutes || (existingData.totalWorkingMinutes - (existingData.accumulatedWorkingMinutes || 0)) || 0,
+          breaks: existingData.currentSessionBreaks || []
+        };
+
+        const existingSessions = Array.isArray(existingData.sessions) ? existingData.sessions : [];
+        const newSessions = [...existingSessions, previousSession];
+        const prevAccumulated = (existingData.accumulatedWorkingMinutes || 0) + (previousSession.workingMinutes || 0);
+
+        const updatedLog = {
+          ...existingData,
+          lastCheckInTime: timeStr,
+          lastCheckInLocation: location,
+          checkOutTime: null,
+          checkOutLocation: null,
+          status: "checked-in",
+          sessions: newSessions,
+          accumulatedWorkingMinutes: prevAccumulated,
+          currentSessionBreaks: [],
+          currentSessionWorkingMinutes: 0,
+          checkInTime: existingData.checkInTime || timeStr,
+          checkInLocation: existingData.checkInLocation || location,
+          currentBreakTimerEnd: null
+        };
+
+        logs[logIndex] = updatedLog;
+        localDb.saveAttendance(logs);
+        notifyAttendanceListeners();
+        return updatedLog;
+      }
     }
+
+    const data = {
+      id: recordId,
+      userId: user.uid,
+      userName: user.name,
+      userDept: user.department,
+      programType: user.programType,
+      date: dateStr,
+      checkInTime: timeStr,
+      checkInLocation: location,
+      lastCheckInTime: timeStr,
+      lastCheckInLocation: location,
+      checkOutTime: null,
+      checkOutLocation: null,
+      status: "checked-in",
+      breaks: [],
+      currentSessionBreaks: [],
+      sessions: [],
+      accumulatedWorkingMinutes: 0,
+      currentSessionWorkingMinutes: 0,
+      totalWorkingMinutes: 0,
+      shortBreakBalance: 1800,
+      longBreakBalance: 1800,
+      bioBreakBalance: 900,
+      companyId: user.companyId || ""
+    };
+
     logs.push(data);
     localDb.saveAttendance(logs);
     notifyAttendanceListeners();
-    return true;
+    return data;
   }
 };
 
@@ -599,30 +713,44 @@ export const checkOut = async (userId, location) => {
     }
 
     const currentData = docSnap.data();
-    if (currentData.checkOutTime) {
-      throw new Error("You have already checked out today.");
+    if (currentData.status === "checked-out" && currentData.checkOutTime) {
+      throw new Error("You have already checked out.");
     }
 
     // If user is on break, resume first or close break
     let updatedBreaks = [...(currentData.breaks || [])];
-    let status = "checked-out";
+    let updatedCurrentSessionBreaks = [...(currentData.currentSessionBreaks || [])];
     if (currentData.status === "on-break") {
       const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
       if (activeBreakIndex !== -1) {
         updatedBreaks[activeBreakIndex].resumeTime = timeStr;
         updatedBreaks[activeBreakIndex].resumeLocation = location;
       }
+      const activeSessionBreakIndex = updatedCurrentSessionBreaks.findIndex(b => !b.resumeTime);
+      if (activeSessionBreakIndex !== -1) {
+        updatedCurrentSessionBreaks[activeSessionBreakIndex].resumeTime = timeStr;
+        updatedCurrentSessionBreaks[activeSessionBreakIndex].resumeLocation = location;
+      }
     }
 
-    // Calculate total working minutes
-    const workingMinutes = calculateWorkingMinutes(currentData.checkInTime, timeStr, updatedBreaks);
+    // Calculate current session working minutes
+    const sessionCheckIn = currentData.lastCheckInTime || currentData.checkInTime;
+    const sessionBreaks = (currentData.sessions && currentData.sessions.length > 0)
+      ? updatedCurrentSessionBreaks
+      : updatedBreaks;
+    const sessionWorkingMinutes = calculateWorkingMinutes(sessionCheckIn, timeStr, sessionBreaks);
+
+    const prevAccumulated = currentData.accumulatedWorkingMinutes || 0;
+    const totalWorkingMinutes = parseFloat((prevAccumulated + sessionWorkingMinutes).toFixed(1));
 
     const updates = {
       checkOutTime: timeStr,
       checkOutLocation: location,
       status: "checked-out",
       breaks: updatedBreaks,
-      totalWorkingMinutes: workingMinutes
+      currentSessionBreaks: updatedCurrentSessionBreaks,
+      currentSessionWorkingMinutes: sessionWorkingMinutes,
+      totalWorkingMinutes: totalWorkingMinutes
     };
 
     await updateDoc(docRef, updates);
@@ -636,20 +764,33 @@ export const checkOut = async (userId, location) => {
     }
 
     const currentData = logs[logIndex];
-    if (currentData.checkOutTime) {
-      throw new Error("You have already checked out today.");
+    if (currentData.status === "checked-out" && currentData.checkOutTime) {
+      throw new Error("You have already checked out.");
     }
 
     let updatedBreaks = [...(currentData.breaks || [])];
+    let updatedCurrentSessionBreaks = [...(currentData.currentSessionBreaks || [])];
     if (currentData.status === "on-break") {
       const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
       if (activeBreakIndex !== -1) {
         updatedBreaks[activeBreakIndex].resumeTime = timeStr;
         updatedBreaks[activeBreakIndex].resumeLocation = location;
       }
+      const activeSessionBreakIndex = updatedCurrentSessionBreaks.findIndex(b => !b.resumeTime);
+      if (activeSessionBreakIndex !== -1) {
+        updatedCurrentSessionBreaks[activeSessionBreakIndex].resumeTime = timeStr;
+        updatedCurrentSessionBreaks[activeSessionBreakIndex].resumeLocation = location;
+      }
     }
 
-    const workingMinutes = calculateWorkingMinutes(currentData.checkInTime, timeStr, updatedBreaks);
+    const sessionCheckIn = currentData.lastCheckInTime || currentData.checkInTime;
+    const sessionBreaks = (currentData.sessions && currentData.sessions.length > 0)
+      ? updatedCurrentSessionBreaks
+      : updatedBreaks;
+    const sessionWorkingMinutes = calculateWorkingMinutes(sessionCheckIn, timeStr, sessionBreaks);
+
+    const prevAccumulated = currentData.accumulatedWorkingMinutes || 0;
+    const totalWorkingMinutes = parseFloat((prevAccumulated + sessionWorkingMinutes).toFixed(1));
 
     logs[logIndex] = {
       ...currentData,
@@ -657,7 +798,9 @@ export const checkOut = async (userId, location) => {
       checkOutLocation: location,
       status: "checked-out",
       breaks: updatedBreaks,
-      totalWorkingMinutes: workingMinutes
+      currentSessionBreaks: updatedCurrentSessionBreaks,
+      currentSessionWorkingMinutes: sessionWorkingMinutes,
+      totalWorkingMinutes: totalWorkingMinutes
     };
 
     localDb.saveAttendance(logs);
@@ -743,9 +886,11 @@ export const startBreak = async (userId, breakType, location) => {
     };
 
     const updatedBreaks = [...(currentData.breaks || []), newBreak];
+    const updatedSessionBreaks = [...(currentData.currentSessionBreaks || []), newBreak];
     const updates = {
       status: "on-break",
       breaks: updatedBreaks,
+      currentSessionBreaks: updatedSessionBreaks,
       currentBreakTimerEnd: endTimeStr,
       pausedTaskId: pausedTaskId || null
     };
@@ -790,10 +935,12 @@ export const startBreak = async (userId, breakType, location) => {
     };
 
     const updatedBreaks = [...(currentData.breaks || []), newBreak];
+    const updatedSessionBreaks = [...(currentData.currentSessionBreaks || []), newBreak];
     logs[logIndex] = {
       ...currentData,
       status: "on-break",
       breaks: updatedBreaks,
+      currentSessionBreaks: updatedSessionBreaks,
       currentBreakTimerEnd: endTimeStr,
       pausedTaskId: pausedTaskId || null
     };
@@ -826,6 +973,7 @@ export const resumeWork = async (userId, location) => {
     }
 
     const updatedBreaks = [...(currentData.breaks || [])];
+    const updatedSessionBreaks = [...(currentData.currentSessionBreaks || [])];
     const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
 
     if (activeBreakIndex === -1) {
@@ -835,6 +983,12 @@ export const resumeWork = async (userId, location) => {
     const activeBreak = updatedBreaks[activeBreakIndex];
     activeBreak.resumeTime = timeStr;
     activeBreak.resumeLocation = location;
+
+    const activeSessionBreakIndex = updatedSessionBreaks.findIndex(b => !b.resumeTime);
+    if (activeSessionBreakIndex !== -1) {
+      updatedSessionBreaks[activeSessionBreakIndex].resumeTime = timeStr;
+      updatedSessionBreaks[activeSessionBreakIndex].resumeLocation = location;
+    }
 
     const durationSeconds = Math.max(0, Math.floor((new Date(timeStr).getTime() - new Date(activeBreak.startTime).getTime()) / 1000));
     activeBreak.duration = Math.round(durationSeconds / 60);
@@ -855,6 +1009,7 @@ export const resumeWork = async (userId, location) => {
     const updates = {
       status: "checked-in",
       breaks: updatedBreaks,
+      currentSessionBreaks: updatedSessionBreaks,
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
       longBreakBalance: newLongBalance,
@@ -887,6 +1042,7 @@ export const resumeWork = async (userId, location) => {
     }
 
     const updatedBreaks = [...(currentData.breaks || [])];
+    const updatedSessionBreaks = [...(currentData.currentSessionBreaks || [])];
     const activeBreakIndex = updatedBreaks.findIndex(b => !b.resumeTime);
 
     if (activeBreakIndex === -1) {
@@ -896,6 +1052,12 @@ export const resumeWork = async (userId, location) => {
     const activeBreak = updatedBreaks[activeBreakIndex];
     activeBreak.resumeTime = timeStr;
     activeBreak.resumeLocation = location;
+
+    const activeSessionBreakIndex = updatedSessionBreaks.findIndex(b => !b.resumeTime);
+    if (activeSessionBreakIndex !== -1) {
+      updatedSessionBreaks[activeSessionBreakIndex].resumeTime = timeStr;
+      updatedSessionBreakIndex[activeSessionBreakIndex].resumeLocation = location;
+    }
 
     const durationSeconds = Math.max(0, Math.floor((new Date(timeStr).getTime() - new Date(activeBreak.startTime).getTime()) / 1000));
     activeBreak.duration = Math.round(durationSeconds / 60);
@@ -917,6 +1079,7 @@ export const resumeWork = async (userId, location) => {
       ...currentData,
       status: "checked-in",
       breaks: updatedBreaks,
+      currentSessionBreaks: updatedSessionBreaks,
       currentBreakTimerEnd: null,
       shortBreakBalance: newShortBalance,
       longBreakBalance: newLongBalance,

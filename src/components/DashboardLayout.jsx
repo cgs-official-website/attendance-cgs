@@ -1603,9 +1603,19 @@ export default function DashboardLayout({ children }) {
               )}
 
               {todayLog && todayLog.status === "checked-out" && (
-                <p className="text-xs text-brand-success font-bold">
-                  <Check size={16} className='inline-block mr-1 text-emerald-500' /> Shift completed for today!
-                </p>
+                <div className="space-y-3">
+                  <p className="text-xs text-brand-success font-bold text-center">
+                    <Check size={16} className='inline-block mr-1 text-emerald-500' /> Shift checked out! You can check in again anytime.
+                  </p>
+                  <button
+                    onClick={handleQuickCheckIn}
+                    disabled={loadingAction}
+                    className="w-full py-3 px-4 bg-brand-primary text-white font-bold rounded-[12px] flex items-center justify-center gap-2 hover:bg-brand-hover shadow-md shadow-brand-primary/10 transition-all cursor-pointer"
+                  >
+                    <Play size={16} fill="#fff" />
+                    <span>{loadingAction ? "Processing..." : "Check In Again"}</span>
+                  </button>
+                </div>
               )}
 
               <button

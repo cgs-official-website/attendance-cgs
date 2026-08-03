@@ -183,19 +183,28 @@ export default function UserDashboard() {
   const getElapsedWorkingMs = () => {
     if (!todayLog) return 0;
     
-    const checkInDate = new Date(todayLog.checkInTime);
+    // If today is checked out and totalWorkingMinutes is calculated
+    if (todayLog.status === "checked-out" && todayLog.totalWorkingMinutes !== undefined) {
+      return (todayLog.totalWorkingMinutes || 0) * 60 * 1000;
+    }
+
+    const accumulatedMs = (todayLog.accumulatedWorkingMinutes || 0) * 60 * 1000;
+
+    const activeCheckIn = todayLog.lastCheckInTime || todayLog.checkInTime;
+    if (!activeCheckIn) return accumulatedMs;
+
+    const checkInDate = new Date(activeCheckIn);
     const checkOutDate = todayLog.checkOutTime ? new Date(todayLog.checkOutTime) : currentTime;
     
-    const totalElapsedMs = checkOutDate.getTime() - checkInDate.getTime();
-    
-    // If the elapsed time from check-in to check-out/now exceeds 9 hours, cap working time at exactly 8 hours.
-    if (totalElapsedMs > 9 * 60 * 60 * 1000) {
-      return 8 * 60 * 60 * 1000;
-    }
+    const sessionElapsedMs = checkOutDate.getTime() - checkInDate.getTime();
     
     let breakMs = 0;
-    if (todayLog.breaks && todayLog.breaks.length > 0) {
-      todayLog.breaks.forEach(b => {
+    const activeBreaks = (todayLog.sessions && todayLog.sessions.length > 0)
+      ? (todayLog.currentSessionBreaks || [])
+      : (todayLog.breaks || []);
+
+    if (activeBreaks && activeBreaks.length > 0) {
+      activeBreaks.forEach(b => {
         if (b.startTime) {
           const start = new Date(b.startTime);
           const resume = b.resumeTime ? new Date(b.resumeTime) : (todayLog.checkOutTime ? new Date(todayLog.checkOutTime) : currentTime);
@@ -204,7 +213,15 @@ export default function UserDashboard() {
       });
     }
     
-    return Math.max(0, totalElapsedMs - breakMs);
+    const currentSessionWorkingMs = Math.max(0, sessionElapsedMs - breakMs);
+    const totalWorkingMs = accumulatedMs + currentSessionWorkingMs;
+
+    // If total working time exceeds 9 hours, cap at 8 hours
+    if (totalWorkingMs > 9 * 60 * 60 * 1000) {
+      return 8 * 60 * 60 * 1000;
+    }
+    
+    return totalWorkingMs;
   };
 
   const formatDuration = (ms) => {
@@ -712,25 +729,15 @@ export default function UserDashboard() {
   };
 
   const getShiftProgress = () => {
-    if (!todayLog || !todayLog.checkInTime) return 0;
-    if (todayLog.status === "checked-out" && todayLog.totalWorkingMinutes) {
-      const targetMin = getShiftDurationMinutes();
+    if (!todayLog || (!todayLog.checkInTime && !todayLog.lastCheckInTime)) return 0;
+    const targetMin = getShiftDurationMinutes();
+    if (todayLog.status === "checked-out" && todayLog.totalWorkingMinutes !== undefined) {
       return Math.min(100, Math.round((todayLog.totalWorkingMinutes / targetMin) * 100));
     }
 
-    const start = new Date(todayLog.checkInTime).getTime();
-    const now = todayLog.checkOutTime ? new Date(todayLog.checkOutTime).getTime() : new Date().getTime();
-
-    const breakMinutes = todayLog.breaks?.reduce((acc, b) => {
-      const bStart = new Date(b.startTime).getTime();
-      const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
-      return acc + ((bEnd - bStart) / 60000);
-    }, 0) || 0;
-
-    const elapsedMinutes = Math.max(0, ((now - start) / 60000) - breakMinutes);
-    const targetMinutes = getShiftDurationMinutes();
-
-    return Math.min(100, Math.round((elapsedMinutes / targetMinutes) * 100));
+    const elapsedMs = getElapsedWorkingMs();
+    const elapsedMinutes = elapsedMs / 60000;
+    return Math.min(100, Math.round((elapsedMinutes / targetMin) * 100));
   };
 
   const getActiveHoursText = () => {
@@ -741,20 +748,12 @@ export default function UserDashboard() {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
 
-    if (!todayLog || !todayLog.checkInTime) return "00:00:00";
+    if (!todayLog || (!todayLog.checkInTime && !todayLog.lastCheckInTime)) return "00:00:00";
     if (todayLog.status === "checked-out" && todayLog.totalWorkingMinutes !== undefined) {
       return formatTime(todayLog.totalWorkingMinutes);
     }
-    const start = new Date(todayLog.checkInTime).getTime();
-    const now = new Date().getTime();
-    const breakMinutes = todayLog.breaks?.reduce((acc, b) => {
-      const bStart = new Date(b.startTime).getTime();
-      const bEnd = b.resumeTime ? new Date(b.resumeTime).getTime() : new Date().getTime();
-      return acc + ((bEnd - bStart) / 60000);
-    }, 0) || 0;
-
-    const elapsedMinutes = Math.max(0, ((now - start) / 60000) - breakMinutes);
-    return formatTime(elapsedMinutes);
+    const elapsedMs = getElapsedWorkingMs();
+    return formatDuration(elapsedMs);
   };
 
   const getWeeklyHours = () => {
@@ -2202,24 +2201,37 @@ export default function UserDashboard() {
                 <div className="w-16 h-16 rounded-full bg-brand-success/10 text-brand-success flex items-center justify-center mx-auto mb-5">
                   <CheckCircle size={28} />
                 </div>
-                <h3 className="text-xl font-bold text-text-main mb-1.5">Workday Completed</h3>
+                <h3 className="text-xl font-bold text-text-main mb-1.5">Shift Completed / Checked Out</h3>
                 <p className="text-sm text-text-sec mb-4">
                   You checked out today at <strong className="text-text-main">{new Date(todayLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
                 </p>
 
                 {/* Frozen Digital Clock Shift Duration */}
-                <div className="relative w-full max-w-[320px] bg-bg-base/70 p-4 rounded-[20px] border border-dashed border-border-card flex flex-col items-center justify-center mx-auto mb-5 overflow-hidden">
+                <div className="relative w-full max-w-[320px] bg-bg-base/70 p-4 rounded-[20px] border border-dashed border-border-card flex flex-col items-center justify-center mx-auto mb-4 overflow-hidden">
                   <div className="text-3xl font-mono font-extrabold text-brand-success tracking-wider drop-shadow-sm mb-1">
                     {formatDuration(getElapsedWorkingMs())}
                   </div>
                   <span className="text-[9px] font-bold text-text-sec uppercase tracking-wide">
-                    Total Shift Duration
+                    Total Logged Shift Duration
                   </span>
                 </div>
 
-                <div className="inline-flex py-2.5 px-4 bg-brand-success/5 border border-brand-success/20 rounded-[12px] text-xs font-bold text-brand-success gap-1.5 uppercase tracking-wide">
+                <div className="inline-flex py-2 px-4 bg-brand-success/5 border border-brand-success/20 rounded-[12px] text-xs font-bold text-brand-success gap-1.5 uppercase tracking-wide mb-5">
                   <span>Logged:</span>
                   <strong>{((todayLog.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs</strong>
+                </div>
+
+                {/* Re-check-in CTA */}
+                <div className="pt-2 border-t border-border-card/60 max-w-md mx-auto">
+                  <p className="text-xs text-text-sec mb-3">Need to continue working today? You can check in again anytime.</p>
+                  <button
+                    onClick={handleCheckIn}
+                    disabled={actionLoading || fetchingGps || !!gpsError}
+                    className="px-8 py-3 bg-brand-primary hover:bg-brand-hover text-white font-extrabold text-xs rounded-[14px] flex items-center justify-center gap-2 mx-auto shadow-md shadow-brand-primary/15 transition-all cursor-pointer"
+                  >
+                    <Play size={14} fill="#fff" />
+                    <span>Check In Again</span>
+                  </button>
                 </div>
               </div>
             )}

@@ -2056,7 +2056,8 @@ export default function AdminDashboard() {
           </div>
 
           {/* Double Columns: Live Attendance list vs Leave Requests list */}
-          <div clas            {/* Live Attendance Table */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Live Attendance Table */}
             <div className="lg:col-span-2 bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">

@@ -220,6 +220,37 @@ export default function ProjectManagement() {
     return unsubscribe;
   }, [currentUser]);
 
+  // Auto-generate weekly report fields based on selected employee and date range
+  useEffect(() => {
+    if (showAddWeeklyReportModal && weeklyReportEmployee && weeklyReportStartDate && weeklyReportEndDate) {
+      const start = new Date(weeklyReportStartDate);
+      const end = new Date(weeklyReportEndDate);
+      end.setHours(23, 59, 59, 999);
+
+      const employeeLogs = dailyReports.filter(report => {
+        if (report.userId !== weeklyReportEmployee) return false;
+        const reportDate = new Date(report.date);
+        return reportDate >= start && reportDate <= end;
+      });
+
+      if (employeeLogs.length > 0) {
+        let tasksStr = "";
+        let totalHours = 0;
+        
+        employeeLogs.forEach(log => {
+          tasksStr += `[${log.date}] ${log.tasksCompleted || "No tasks recorded"}\n`;
+          totalHours += parseFloat(log.hours || 0);
+        });
+        
+        setWeeklyReportTasks(tasksStr.trim());
+        setWeeklyReportRemarks(`Total Hours Worked: ${totalHours}h\n`);
+      } else {
+        setWeeklyReportTasks("");
+        setWeeklyReportRemarks("No daily logs found for this period.");
+      }
+    }
+  }, [weeklyReportEmployee, weeklyReportStartDate, weeklyReportEndDate, dailyReports, showAddWeeklyReportModal]);
+
   const calculateTimeSpent = (reports) => {
     if (!reports || reports.length === 0) return 0;
     let totalMinutes = 0;

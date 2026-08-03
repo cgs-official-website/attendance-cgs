@@ -43,6 +43,17 @@ const formatTime = (iso) => {
     d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
+const formatDateGroup = (iso) => {
+  if (!iso) return "Unknown";
+  const d = new Date(iso);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+};
+
 // ─── Avatar Component ─────────────────────────────────────────
 function Avatar({ src, name, size = "w-8 h-8", textSize = "text-xs" }) {
   return (

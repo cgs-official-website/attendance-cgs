@@ -1766,7 +1766,8 @@ export default function AdminDashboard() {
         reportingManager: newReportingManager, uan: newUan, pan: newPan, aadharNum: newAadharNum,
         bankAcNo: newBankAcNo, ifscCode: newIfscCode, permanentAddress: newPermanentAddress,
         specialization: newSpecialization, instituteName: newInstituteName, yearOfCompletion: newYearOfCompletion,
-        dateOfExit: newDateOfExit, photo: newPhoto, age: newAge, employeeId: newEmployeeId
+        dateOfExit: newDateOfExit, photo: newPhoto, age: newAge, employeeId: newEmployeeId,
+        location: newLocation, unit: newUnit, grade: newGrade, costCenter: newCostCenter, pfNo: newPfNo
       };
       
       await registerUser(newName, newDept, newProgram, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, newEmployeeId, "", roleStr, currentUser.companyId, additionalData);
@@ -1794,6 +1795,7 @@ export default function AdminDashboard() {
       setNewCurrentExperience(""); setNewReportingManager(""); setNewUan(""); setNewPan("");
       setNewAadharNum(""); setNewBankAcNo(""); setNewIfscCode(""); setNewPermanentAddress("");
       setNewSpecialization(""); setNewInstituteName(""); setNewYearOfCompletion(""); setNewDateOfExit("");
+      setNewLocation(""); setNewUnit(""); setNewGrade(""); setNewCostCenter(""); setNewPfNo("");
       setNewEmployeeId(""); setNewPhoto(""); setNewAge(""); setNewAddTab("Personal");
       
       // Refresh list
@@ -1844,6 +1846,11 @@ export default function AdminDashboard() {
     setEditDateOfExit(user.dateOfExit || "");
     setEditPhoto(user.photo || "");
     setEditAge(user.age || "");
+    setEditLocation(user.location || "");
+    setEditUnit(user.unit || "");
+    setEditGrade(user.grade || "");
+    setEditCostCenter(user.costCenter || "");
+    setEditPfNo(user.pfNo || "");
     setEditTab("Personal");
     
     let currentRole = "Employee";
@@ -4523,6 +4530,26 @@ export default function AdminDashboard() {
                         <label className="text-[10px] font-bold text-text-sec uppercase">Date of Exit</label>
                         <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDateOfExit} onChange={(e) => setNewDateOfExit(e.target.value)} />
                       </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Location</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="e.g. Bangalore" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Unit</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newUnit} onChange={(e) => setNewUnit(e.target.value)} placeholder="e.g. Unit 1" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Grade</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newGrade} onChange={(e) => setNewGrade(e.target.value)} placeholder="e.g. G3" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Cost Center</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newCostCenter} onChange={(e) => setNewCostCenter(e.target.value)} placeholder="e.g. CC001" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">PF Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newPfNo} onChange={(e) => setNewPfNo(e.target.value)} placeholder="e.g. PF123456" />
+                      </div>
                       
                       <div className="flex flex-col gap-1 mt-2 col-span-3">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Shift Type *</label>
@@ -4776,6 +4803,26 @@ export default function AdminDashboard() {
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Date of Exit</label>
                         <input type="date" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDateOfExit} onChange={(e) => setEditDateOfExit(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Location</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editLocation} onChange={(e) => setEditLocation(e.target.value)} placeholder="e.g. Bangalore" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Unit</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} placeholder="e.g. Unit 1" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Grade</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editGrade} onChange={(e) => setEditGrade(e.target.value)} placeholder="e.g. G3" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Cost Center</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editCostCenter} onChange={(e) => setEditCostCenter(e.target.value)} placeholder="e.g. CC001" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">PF Number</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPfNo} onChange={(e) => setEditPfNo(e.target.value)} placeholder="e.g. PF123456" />
                       </div>
                       
                       <div className="flex flex-col gap-1 mt-2 col-span-3">

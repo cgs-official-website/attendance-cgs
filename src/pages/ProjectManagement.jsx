@@ -228,17 +228,61 @@ export default function ProjectManagement() {
 
   // Helper to calculate Monday to Friday of a given date (default current week)
   const getWeekRange = (targetDate = new Date()) => {
-    const d = new Date(targetDate);
+    let d;
+    if (typeof targetDate === "string") {
+      const cleanDate = targetDate.includes("T") ? targetDate.split("T")[0] : targetDate;
+      const parts = cleanDate.split("-");
+      if (parts.length === 3) {
+        d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0);
+      } else {
+        d = new Date(targetDate);
+      }
+    } else {
+      d = new Date(targetDate);
+    }
+    
     const day = d.getDay(); // 0 is Sun, 1 is Mon...
     const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d);
     monday.setDate(diffToMonday);
     const friday = new Date(monday);
     friday.setDate(monday.getDate() + 4);
-    return {
-      start: monday.toISOString().split("T")[0],
-      end: friday.toISOString().split("T")[0]
+    
+    const formatYMD = (dateObj) => {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const dayNum = String(dateObj.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dayNum}`;
     };
+
+    return {
+      start: formatYMD(monday),
+      end: formatYMD(friday)
+    };
+  };
+
+  // Helper to get all distinct week ranges with daily logs for an employee (or all team members)
+  const getAvailableWeeksForEmployee = (empId) => {
+    const logs = empId ? dailyReports.filter(r => r.userId === empId) : dailyReports;
+    const weekMap = new Map();
+    
+    logs.forEach(log => {
+      if (!log.date) return;
+      const range = getWeekRange(log.date);
+      const key = `${range.start}_${range.end}`;
+      if (!weekMap.has(key)) {
+        weekMap.set(key, {
+          start: range.start,
+          end: range.end,
+          logCount: 1
+        });
+      } else {
+        const item = weekMap.get(key);
+        item.logCount += 1;
+      }
+    });
+
+    return Array.from(weekMap.values()).sort((a, b) => b.start.localeCompare(a.start));
   };
 
   // Helper to aggregate Daily Reports into Weekly Report structure
@@ -246,15 +290,14 @@ export default function ProjectManagement() {
     const employee = allUsers.find(u => u.uid === empId);
     if (!employee) return null;
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-
     const employeeLogs = dailyReports.filter(report => {
-      if (report.userId !== empId) return false;
-      const reportDate = new Date(report.date);
-      return reportDate >= start && reportDate <= end;
+      if (report.userId !== empId || !report.date) return false;
+      const reportDate = report.date.includes("T") ? report.date.split("T")[0] : report.date;
+      return reportDate >= startDate && reportDate <= endDate;
     });
+
+    // Sort logs chronologically
+    employeeLogs.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
     let tasksStr = "";
     let totalHours = 0;
@@ -1333,48 +1376,70 @@ export default function ProjectManagement() {
 
   const handleAutoGenerateAllWeeklyReports = async () => {
     showConfirm(
-      "Auto-Generate Weekly Reports",
-      "This will automatically scan all team members' daily activity logs for the current week and generate weekly reports for them. Proceed?",
+      "Auto-Generate All Weekly Reports",
+      "This will scan all team members' daily activity logs across ALL past and current weeks, automatically creating missing weekly reports. Proceed?",
       async () => {
         try {
-          const range = getWeekRange(new Date());
           let createdCount = 0;
 
           for (const member of teamMembers) {
-            // Check if report already exists for this week & employee
-            const alreadyExists = weeklyReports.some(
-              r => r.employeeId === member.uid && r.weekStartDate === range.start && r.weekEndDate === range.end
-            );
-            if (alreadyExists) continue;
+            const memberLogs = dailyReports.filter(r => r.userId === member.uid);
+            if (memberLogs.length === 0) continue;
 
-            const reportData = generateWeeklyReportDataForEmployee(member.uid, range.start, range.end);
-            if (reportData && reportData.logCount > 0) {
-              await addWeeklyReport({
-                companyId: currentUser.companyId,
-                managerId: currentUser.uid,
-                employeeId: member.uid,
-                employeeName: member.name,
-                weekStartDate: range.start,
-                weekEndDate: range.end,
-                rating: reportData.rating,
-                tasksCompleted: reportData.tasksCompleted,
-                supervisorRemarks: reportData.supervisorRemarks
-              });
-              createdCount++;
+            // Collect all unique week ranges for this team member from their daily logs
+            const uniqueWeeks = new Map();
+            memberLogs.forEach(log => {
+              if (!log.date) return;
+              const range = getWeekRange(log.date);
+              const key = `${range.start}_${range.end}`;
+              if (!uniqueWeeks.has(key)) {
+                uniqueWeeks.set(key, range);
+              }
+            });
+
+            // Also check current week
+            const currentWeek = getWeekRange(new Date());
+            const currentKey = `${currentWeek.start}_${currentWeek.end}`;
+            if (!uniqueWeeks.has(currentKey)) {
+              uniqueWeeks.set(currentKey, currentWeek);
+            }
+
+            for (const range of uniqueWeeks.values()) {
+              // Check if report already exists for this week & employee
+              const alreadyExists = weeklyReports.some(
+                r => r.employeeId === member.uid && r.weekStartDate === range.start && r.weekEndDate === range.end
+              );
+              if (alreadyExists) continue;
+
+              const reportData = generateWeeklyReportDataForEmployee(member.uid, range.start, range.end);
+              if (reportData && reportData.logCount > 0) {
+                await addWeeklyReport({
+                  companyId: currentUser.companyId,
+                  managerId: currentUser.uid,
+                  employeeId: member.uid,
+                  employeeName: member.name,
+                  weekStartDate: range.start,
+                  weekEndDate: range.end,
+                  rating: reportData.rating,
+                  tasksCompleted: reportData.tasksCompleted,
+                  supervisorRemarks: reportData.supervisorRemarks
+                });
+                createdCount++;
+              }
             }
           }
 
           if (createdCount > 0) {
-            showToast(`Successfully auto-generated ${createdCount} weekly report(s)!`, "success");
+            showToast(`Successfully auto-generated ${createdCount} weekly report(s) across all weeks!`, "success");
           } else {
-            showToast("No new reports to generate (already up to date or no logs found).", "info");
+            showToast("All weekly reports are already generated and up to date.", "info");
           }
         } catch (err) {
           console.error(err);
           showToast("Failed to auto-generate weekly reports.", "error");
         }
       },
-      { confirmText: "Generate All", cancelText: "Cancel" }
+      { confirmText: "Generate All Weeks", cancelText: "Cancel" }
     );
   };
 
@@ -3079,11 +3144,10 @@ export default function ProjectManagement() {
                     const empId = e.target.value;
                     setWeeklyReportEmployee(empId);
                     if (empId) {
-                      const empLogs = dailyReports.filter(r => r.userId === empId);
+                      const weeks = getAvailableWeeksForEmployee(empId);
                       let range;
-                      if (empLogs.length > 0) {
-                        const sorted = [...empLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
-                        range = getWeekRange(new Date(sorted[0].date));
+                      if (weeks.length > 0) {
+                        range = { start: weeks[0].start, end: weeks[0].end };
                       } else {
                         range = getWeekRange(new Date());
                       }
@@ -3109,6 +3173,46 @@ export default function ProjectManagement() {
                   ))}
                 </select>
               </div>
+
+              {/* Quick Week Selector if Employee has logs in multiple weeks */}
+              {weeklyReportEmployee && (
+                <div className="flex flex-col gap-1.5 p-3.5 rounded-[14px] bg-purple-500/5 border border-purple-500/20">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                      <Sparkles size={13} /> Select Week to Auto-Populate ({getAvailableWeeksForEmployee(weeklyReportEmployee).length} weeks found)
+                    </label>
+                    <span className="text-[10px] text-text-mut">Pick any week</span>
+                  </div>
+                  <select
+                    className="w-full px-3 py-2 border border-purple-500/30 rounded-[10px] bg-bg-card text-xs font-semibold text-text-main outline-none focus:border-purple-500 cursor-pointer shadow-sm"
+                    value={`${weeklyReportStartDate}_${weeklyReportEndDate}`}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        const [s, end] = val.split("_");
+                        setWeeklyReportStartDate(s);
+                        setWeeklyReportEndDate(end);
+                        const genData = generateWeeklyReportDataForEmployee(weeklyReportEmployee, s, end);
+                        if (genData) {
+                          setWeeklyReportTasks(genData.tasksCompleted);
+                          setWeeklyReportRemarks(genData.supervisorRemarks);
+                          setWeeklyReportRating(genData.rating);
+                        }
+                      }
+                    }}
+                  >
+                    {getAvailableWeeksForEmployee(weeklyReportEmployee).length === 0 ? (
+                      <option value="">No daily logs found for this employee</option>
+                    ) : (
+                      getAvailableWeeksForEmployee(weeklyReportEmployee).map((w) => (
+                        <option key={`${w.start}_${w.end}`} value={`${w.start}_${w.end}`}>
+                          📅 Week: {w.start} to {w.end} ({w.logCount} daily activities logged)
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
 
               {/* Date Range Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -20,7 +20,7 @@ import {
   deleteWeeklyReport
 } from "../firebase";
 import { useModal } from "../context/ModalContext";
-import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase } from "lucide-react";
+import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase, Sparkles, Zap } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logoImg from '../assets/zuna-logo.png';
@@ -220,33 +220,73 @@ export default function ProjectManagement() {
     return unsubscribe;
   }, [currentUser]);
 
+  // Helper to calculate Monday to Friday of a given date (default current week)
+  const getWeekRange = (targetDate = new Date()) => {
+    const d = new Date(targetDate);
+    const day = d.getDay(); // 0 is Sun, 1 is Mon...
+    const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d);
+    monday.setDate(diffToMonday);
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+    return {
+      start: monday.toISOString().split("T")[0],
+      end: friday.toISOString().split("T")[0]
+    };
+  };
+
+  // Helper to aggregate Daily Reports into Weekly Report structure
+  const generateWeeklyReportDataForEmployee = (empId, startDate, endDate) => {
+    const employee = allUsers.find(u => u.uid === empId);
+    if (!employee) return null;
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const employeeLogs = dailyReports.filter(report => {
+      if (report.userId !== empId) return false;
+      const reportDate = new Date(report.date);
+      return reportDate >= start && reportDate <= end;
+    });
+
+    let tasksStr = "";
+    let totalHours = 0;
+    let completedCount = 0;
+
+    employeeLogs.forEach(log => {
+      const hours = parseFloat(log.hours || 0);
+      totalHours += hours;
+      if (log.status === "Completed") completedCount++;
+      tasksStr += `• [${log.date}] ${log.tasksCompleted || "Worked on tasks"} (${hours}h)${log.issuesFaced && log.issuesFaced !== "None" ? ` [Issue: ${log.issuesFaced}]` : ""}\n`;
+    });
+
+    const rating = totalHours >= 35 ? "Excellent" : totalHours >= 20 ? "Good" : totalHours > 0 ? "Average" : "Needs Improvement";
+    const remarks = employeeLogs.length > 0
+      ? `Total Hours Logged: ${totalHours}h across ${employeeLogs.length} active day(s). Completed ${completedCount}/${employeeLogs.length} logged tasks.`
+      : "No daily logs found for this period.";
+
+    return {
+      employeeId: empId,
+      employeeName: employee.name || "Unknown",
+      weekStartDate: startDate,
+      weekEndDate: endDate,
+      tasksCompleted: tasksStr.trim() || "No daily tasks logged for this week.",
+      supervisorRemarks: remarks,
+      rating,
+      totalHours,
+      logCount: employeeLogs.length
+    };
+  };
+
   // Auto-generate weekly report fields based on selected employee and date range
   useEffect(() => {
     if (showAddWeeklyReportModal && weeklyReportEmployee && weeklyReportStartDate && weeklyReportEndDate) {
-      const start = new Date(weeklyReportStartDate);
-      const end = new Date(weeklyReportEndDate);
-      end.setHours(23, 59, 59, 999);
-
-      const employeeLogs = dailyReports.filter(report => {
-        if (report.userId !== weeklyReportEmployee) return false;
-        const reportDate = new Date(report.date);
-        return reportDate >= start && reportDate <= end;
-      });
-
-      if (employeeLogs.length > 0) {
-        let tasksStr = "";
-        let totalHours = 0;
-        
-        employeeLogs.forEach(log => {
-          tasksStr += `[${log.date}] ${log.tasksCompleted || "No tasks recorded"}\n`;
-          totalHours += parseFloat(log.hours || 0);
-        });
-        
-        setWeeklyReportTasks(tasksStr.trim());
-        setWeeklyReportRemarks(`Total Hours Worked: ${totalHours}h\n`);
-      } else {
-        setWeeklyReportTasks("");
-        setWeeklyReportRemarks("No daily logs found for this period.");
+      const genData = generateWeeklyReportDataForEmployee(weeklyReportEmployee, weeklyReportStartDate, weeklyReportEndDate);
+      if (genData) {
+        setWeeklyReportTasks(genData.tasksCompleted);
+        setWeeklyReportRemarks(genData.supervisorRemarks);
+        setWeeklyReportRating(genData.rating);
       }
     }
   }, [weeklyReportEmployee, weeklyReportStartDate, weeklyReportEndDate, dailyReports, showAddWeeklyReportModal]);
@@ -1159,10 +1199,59 @@ export default function ProjectManagement() {
         tasksCompleted: weeklyReportTasks,
         supervisorRemarks: weeklyReportRemarks,
       });
+      showToast("Weekly report created successfully!", "success");
       setShowAddWeeklyReportModal(false);
     } catch (err) {
       console.error(err);
+      showToast("Failed to create weekly report", "error");
     }
+  };
+
+  const handleAutoGenerateAllWeeklyReports = async () => {
+    showConfirm(
+      "Auto-Generate Weekly Reports",
+      "This will automatically scan all team members' daily activity logs for the current week and generate weekly reports for them. Proceed?",
+      async () => {
+        try {
+          const range = getWeekRange(new Date());
+          let createdCount = 0;
+
+          for (const member of teamMembers) {
+            // Check if report already exists for this week & employee
+            const alreadyExists = weeklyReports.some(
+              r => r.employeeId === member.uid && r.weekStartDate === range.start && r.weekEndDate === range.end
+            );
+            if (alreadyExists) continue;
+
+            const reportData = generateWeeklyReportDataForEmployee(member.uid, range.start, range.end);
+            if (reportData && reportData.logCount > 0) {
+              await addWeeklyReport({
+                companyId: currentUser.companyId,
+                managerId: currentUser.uid,
+                employeeId: member.uid,
+                employeeName: member.name,
+                weekStartDate: range.start,
+                weekEndDate: range.end,
+                rating: reportData.rating,
+                tasksCompleted: reportData.tasksCompleted,
+                supervisorRemarks: reportData.supervisorRemarks
+              });
+              createdCount++;
+            }
+          }
+
+          if (createdCount > 0) {
+            showToast(`Successfully auto-generated ${createdCount} weekly report(s)!`, "success");
+          } else {
+            showToast("No new reports to generate (already up to date or no logs found).", "info");
+          }
+        } catch (err) {
+          console.error(err);
+          showToast("Failed to auto-generate weekly reports.", "error");
+        }
+      },
+      { confirmText: "Generate All", cancelText: "Cancel" }
+    );
   };
 
   const filteredWeeklyReports = weeklyReports.filter(r => {
@@ -1548,22 +1637,32 @@ export default function ProjectManagement() {
       </div>
       ) : activeSubTab === "weekly-reports" ? (
         <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
-          <div className="p-4 border-b border-border-card bg-bg-base/30 flex items-center justify-between">
+          <div className="p-4 border-b border-border-card bg-bg-base/30 flex items-center justify-between flex-wrap gap-3">
             <h3 className="font-extrabold text-base text-text-main tracking-tight">Weekly Reports</h3>
-            <button
-              onClick={() => {
-                setWeeklyReportEmployee("");
-                setWeeklyReportStartDate("");
-                setWeeklyReportEndDate("");
-                setWeeklyReportRating("Good");
-                setWeeklyReportTasks("");
-                setWeeklyReportRemarks("");
-                setShowAddWeeklyReportModal(true);
-              }}
-              className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2 px-4 rounded-[10px] flex items-center gap-2 transition-all shadow-md cursor-pointer whitespace-nowrap"
-            >
-              <Plus size={14} /> Add Report
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAutoGenerateAllWeeklyReports}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 px-3.5 rounded-[10px] flex items-center gap-1.5 transition-all shadow-md cursor-pointer whitespace-nowrap"
+                title="Automatically generate weekly reports for all team members based on their daily logs"
+              >
+                <Sparkles size={14} /> Auto-Generate All
+              </button>
+              <button
+                onClick={() => {
+                  const range = getWeekRange(new Date());
+                  setWeeklyReportStartDate(range.start);
+                  setWeeklyReportEndDate(range.end);
+                  setWeeklyReportEmployee("");
+                  setWeeklyReportRating("Good");
+                  setWeeklyReportTasks("");
+                  setWeeklyReportRemarks("");
+                  setShowAddWeeklyReportModal(true);
+                }}
+                className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2 px-4 rounded-[10px] flex items-center gap-2 transition-all shadow-md cursor-pointer whitespace-nowrap"
+              >
+                <Plus size={14} /> Add Report
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto w-full custom-scrollbar">
             <table className="w-full text-left border-collapse">
@@ -2638,11 +2737,41 @@ export default function ProjectManagement() {
             
             <form onSubmit={handleAddWeeklyReport} className="space-y-4 text-left">
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Select Employee</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-text-sec">Select Employee</label>
+                  <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1">
+                    <Sparkles size={11} /> Auto-connects Daily Logs
+                  </span>
+                </div>
                 <select 
                   className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
                   value={weeklyReportEmployee}
-                  onChange={(e) => setWeeklyReportEmployee(e.target.value)}
+                  onChange={(e) => {
+                    const empId = e.target.value;
+                    setWeeklyReportEmployee(empId);
+                    if (empId) {
+                      const empLogs = dailyReports.filter(r => r.userId === empId);
+                      let range;
+                      if (empLogs.length > 0) {
+                        const sorted = [...empLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
+                        range = getWeekRange(new Date(sorted[0].date));
+                      } else {
+                        range = getWeekRange(new Date());
+                      }
+                      setWeeklyReportStartDate(range.start);
+                      setWeeklyReportEndDate(range.end);
+
+                      const genData = generateWeeklyReportDataForEmployee(empId, range.start, range.end);
+                      if (genData) {
+                        setWeeklyReportTasks(genData.tasksCompleted);
+                        setWeeklyReportRemarks(genData.supervisorRemarks);
+                        setWeeklyReportRating(genData.rating);
+                      }
+                    } else {
+                      setWeeklyReportTasks("");
+                      setWeeklyReportRemarks("");
+                    }
+                  }}
                   required
                 >
                   <option value="">-- Choose an employee --</option>

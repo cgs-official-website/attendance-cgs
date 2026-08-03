@@ -2725,26 +2725,48 @@ export default function ProjectManagement() {
 
       {/* Add Weekly Report Modal */}
       {showAddWeeklyReportModal && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
-          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
-              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
-                <FileText size={18} className="text-brand-primary" />
-                Add Weekly Report
-              </h3>
-              <button onClick={() => setShowAddWeeklyReportModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
+        <div className="fixed inset-0 bg-slate-950/50 dark:bg-black/75 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-2xl max-h-[90vh] bg-bg-card border border-border-card rounded-[24px] shadow-2xl animate-scale-up flex flex-col overflow-hidden relative">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-card bg-bg-base/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-500/20 shadow-sm">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-text-main tracking-tight flex items-center gap-2">
+                    Create Weekly Report
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                      Auto-Sync
+                    </span>
+                  </h3>
+                  <p className="text-xs text-text-mut">Connected directly with candidate daily activity logs</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAddWeeklyReportModal(false)} 
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-mut hover:text-text-main hover:bg-bg-base transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
             </div>
             
-            <form onSubmit={handleAddWeeklyReport} className="space-y-4 text-left">
-              <div className="flex flex-col gap-1">
+            {/* Modal Scrollable Body */}
+            <form onSubmit={handleAddWeeklyReport} id="weeklyReportForm" className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-5 text-left">
+              
+              {/* Employee Selection */}
+              <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-text-sec">Select Employee</label>
-                  <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1">
-                    <Sparkles size={11} /> Auto-connects Daily Logs
+                  <label className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                    <Users size={13} className="text-brand-primary" /> Select Employee
+                  </label>
+                  <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1">
+                    <Sparkles size={11} /> Auto-detects dates & daily logs
                   </span>
                 </div>
                 <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                  className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs font-medium text-text-main outline-none focus:bg-bg-card focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/10 transition-all cursor-pointer"
                   value={weeklyReportEmployee}
                   onChange={(e) => {
                     const empId = e.target.value;
@@ -2776,27 +2798,32 @@ export default function ProjectManagement() {
                 >
                   <option value="">-- Choose an employee --</option>
                   {teamMembers.map(u => (
-                    <option key={u.uid} value={u.uid}>{u.name}</option>
+                    <option key={u.uid} value={u.uid}>{u.name} ({u.designation || u.department || 'Employee'})</option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Week Start Date</label>
+              {/* Date Range Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                    <Calendar size={13} className="text-brand-primary" /> Week Start Date (Monday)
+                  </label>
                   <input 
                     type="date" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs font-medium text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
                     value={weeklyReportStartDate}
                     onChange={(e) => setWeeklyReportStartDate(e.target.value)}
                     required
                   />
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-text-sec">Week End Date</label>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                    <Calendar size={13} className="text-brand-primary" /> Week End Date (Friday)
+                  </label>
                   <input 
                     type="date" 
-                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs font-medium text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all cursor-pointer"
                     value={weeklyReportEndDate}
                     onChange={(e) => setWeeklyReportEndDate(e.target.value)}
                     required
@@ -2804,49 +2831,88 @@ export default function ProjectManagement() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1">
+              {/* Performance Rating Selection */}
+              <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-text-sec">Performance Rating</label>
-                <select 
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
-                  value={weeklyReportRating}
-                  onChange={(e) => setWeeklyReportRating(e.target.value)}
-                  required
-                >
-                  <option value="Excellent">Excellent</option>
-                  <option value="Good">Good</option>
-                  <option value="Average">Average</option>
-                  <option value="Needs Improvement">Needs Improvement</option>
-                </select>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { label: "Excellent", color: "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400" },
+                    { label: "Good", color: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+                    { label: "Average", color: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+                    { label: "Needs Improvement", color: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400" }
+                  ].map(r => (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() => setWeeklyReportRating(r.label)}
+                      className={`px-3 py-2 rounded-[12px] text-xs font-bold border transition-all cursor-pointer text-center ${
+                        weeklyReportRating === r.label 
+                          ? `${r.color} ring-2 ring-brand-primary/20 shadow-sm scale-[1.02]` 
+                          : "border-border-card bg-bg-base/30 text-text-sec hover:bg-bg-base"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Tasks Completed / Notes</label>
+              {/* Tasks Completed / Notes */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                    <FileText size={13} className="text-brand-primary" /> Tasks Completed / Daily Activities
+                  </label>
+                  <span className="text-[10px] text-text-mut">Editable formatted breakdown</span>
+                </div>
                 <textarea 
-                  placeholder="Summarize the employee's week..."
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[80px]"
+                  placeholder="Employee's weekly tasks will auto-fill when employee is selected..."
+                  className="w-full px-4 py-3 border border-border-card rounded-[14px] bg-bg-base/40 text-xs leading-relaxed text-text-main outline-none focus:bg-bg-card focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/10 transition-all min-h-[140px] custom-scrollbar resize-y font-sans"
                   value={weeklyReportTasks}
                   onChange={(e) => setWeeklyReportTasks(e.target.value)}
                   required
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-text-sec">Supervisor Remarks</label>
+              {/* Supervisor Remarks */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                  <MessageSquare size={13} className="text-brand-primary" /> Supervisor Remarks & Total Hours
+                </label>
                 <textarea 
-                  placeholder="Any extra remarks..."
-                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all min-h-[80px]"
+                  placeholder="Remarks, total logged hours, feedback..."
+                  className="w-full px-4 py-3 border border-border-card rounded-[14px] bg-bg-base/40 text-xs leading-relaxed text-text-main outline-none focus:bg-bg-card focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/10 transition-all min-h-[85px] custom-scrollbar resize-y"
                   value={weeklyReportRemarks}
                   onChange={(e) => setWeeklyReportRemarks(e.target.value)}
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-border-card mt-4">
-                <button type="button" onClick={() => setShowAddWeeklyReportModal(false)} className="py-2 px-4 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base cursor-pointer">Cancel</button>
-                <button type="submit" disabled={!weeklyReportEmployee || !weeklyReportStartDate || !weeklyReportEndDate} className="py-2 px-4 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
-                  Submit Report
+            </form>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-border-card bg-bg-base/40 flex items-center justify-between gap-3">
+              <span className="text-xs text-text-mut">
+                {weeklyReportEmployee ? "Ready to save report" : "Select an employee to continue"}
+              </span>
+              <div className="flex items-center gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddWeeklyReportModal(false)} 
+                  className="py-2.5 px-5 border border-border-card rounded-[12px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  form="weeklyReportForm"
+                  disabled={!weeklyReportEmployee || !weeklyReportStartDate || !weeklyReportEndDate} 
+                  className="py-2.5 px-6 bg-gradient-to-r from-brand-primary to-indigo-600 hover:from-brand-hover hover:to-indigo-700 text-white rounded-[12px] text-xs font-bold shadow-md shadow-brand-primary/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <CheckCircle size={14} /> Submit Report
                 </button>
               </div>
-            </form>
+            </div>
+
           </div>
         </div>,
         document.body
@@ -2854,66 +2920,92 @@ export default function ProjectManagement() {
 
       {/* View Weekly Report Modal */}
       {showViewWeeklyReportModal && selectedWeeklyReport && createPortal(
-        <div className="fixed inset-0 bg-slate-950/45 dark:bg-black/65 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-6 animate-fade-in">
-          <div className="w-full max-w-[500px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
-              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
-                <FileText size={18} className="text-brand-primary" />
-                Weekly Report Details
-              </h3>
-              <button onClick={() => setShowViewWeeklyReportModal(false)} className="text-text-mut hover:text-text-main font-bold cursor-pointer"><X size={18} /></button>
-            </div>
+        <div className="fixed inset-0 bg-slate-950/50 dark:bg-black/75 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-2xl max-h-[90vh] bg-bg-card border border-border-card rounded-[24px] shadow-2xl animate-scale-up flex flex-col overflow-hidden relative">
             
-            <div className="space-y-4 text-left text-sm text-text-main">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="block text-xs font-bold text-text-sec mb-1">Employee</span>
-                  <span className="font-semibold">{selectedWeeklyReport.employeeName}</span>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-card bg-bg-base/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center border border-brand-primary/20 shadow-sm">
+                  <FileText size={20} />
                 </div>
                 <div>
-                  <span className="block text-xs font-bold text-text-sec mb-1">Rating</span>
-                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                    selectedWeeklyReport.rating === "Excellent" ? "bg-green-500/10 text-green-500" :
-                    selectedWeeklyReport.rating === "Good" ? "bg-blue-500/10 text-blue-500" :
-                    selectedWeeklyReport.rating === "Average" ? "bg-yellow-500/10 text-yellow-500" :
-                    "bg-red-500/10 text-red-500"
+                  <h3 className="font-extrabold text-base text-text-main tracking-tight">
+                    Weekly Report Overview
+                  </h3>
+                  <p className="text-xs text-text-mut">
+                    Week of {selectedWeeklyReport.weekStartDate} to {selectedWeeklyReport.weekEndDate}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowViewWeeklyReportModal(false)} 
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-mut hover:text-text-main hover:bg-bg-base transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-5 text-left">
+              
+              {/* Summary Profile Banner */}
+              <div className="p-4 rounded-[16px] bg-gradient-to-r from-bg-base/60 to-bg-base/30 border border-border-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-brand-primary text-white font-bold flex items-center justify-center text-base shadow-sm">
+                    {selectedWeeklyReport.employeeName ? selectedWeeklyReport.employeeName.charAt(0) : "E"}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-text-main">{selectedWeeklyReport.employeeName}</h4>
+                    <span className="text-xs text-text-mut flex items-center gap-1 mt-0.5">
+                      <Calendar size={12} /> {selectedWeeklyReport.weekStartDate} — {selectedWeeklyReport.weekEndDate}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full border shadow-sm ${
+                    selectedWeeklyReport.rating === "Excellent" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" :
+                    selectedWeeklyReport.rating === "Good" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" :
+                    selectedWeeklyReport.rating === "Average" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                    "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
                   }`}>
-                    {selectedWeeklyReport.rating}
+                    Rating: {selectedWeeklyReport.rating}
                   </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="block text-xs font-bold text-text-sec mb-1">Start Date</span>
-                  <span>{selectedWeeklyReport.weekStartDate}</span>
-                </div>
-                <div>
-                  <span className="block text-xs font-bold text-text-sec mb-1">End Date</span>
-                  <span>{selectedWeeklyReport.weekEndDate}</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="block text-xs font-bold text-text-sec mb-1">Tasks Completed / Notes</span>
-                <div className="bg-bg-base/50 p-3 rounded-[10px] whitespace-pre-wrap text-sm border border-border-card">
-                  {selectedWeeklyReport.tasksCompleted || "None"}
+              {/* Tasks Section */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                  <FileText size={13} className="text-brand-primary" /> Tasks & Activities Completed
+                </h5>
+                <div className="bg-bg-base/40 p-4 rounded-[16px] text-xs leading-relaxed text-text-main border border-border-card whitespace-pre-wrap font-sans">
+                  {selectedWeeklyReport.tasksCompleted || "No tasks recorded for this week."}
                 </div>
               </div>
 
-              <div>
-                <span className="block text-xs font-bold text-text-sec mb-1">Supervisor Remarks</span>
-                <div className="bg-bg-base/50 p-3 rounded-[10px] whitespace-pre-wrap text-sm border border-border-card">
-                  {selectedWeeklyReport.supervisorRemarks || "None"}
+              {/* Remarks Section */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                  <MessageSquare size={13} className="text-brand-primary" /> Supervisor Remarks & Hours
+                </h5>
+                <div className="bg-bg-base/40 p-4 rounded-[16px] text-xs leading-relaxed text-text-main border border-border-card whitespace-pre-wrap">
+                  {selectedWeeklyReport.supervisorRemarks || "No supervisor remarks recorded."}
                 </div>
               </div>
+
             </div>
 
-            <div className="pt-4 mt-4 border-t border-border-card flex justify-end">
-              <button onClick={() => setShowViewWeeklyReportModal(false)} className="py-2 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold transition-all cursor-pointer">
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-border-card bg-bg-base/40 flex justify-end">
+              <button 
+                onClick={() => setShowViewWeeklyReportModal(false)} 
+                className="py-2.5 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold shadow-md transition-all cursor-pointer"
+              >
                 Close
               </button>
             </div>
+
           </div>
         </div>,
         document.body

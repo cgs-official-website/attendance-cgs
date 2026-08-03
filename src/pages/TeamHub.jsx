@@ -396,9 +396,15 @@ function CreateChannelModal({ onClose, onCreated }) {
 // ─── New DM Modal ─────────────────────────────────────────────
 function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
   const [search, setSearch] = useState("");
+  const cleanSearch = search.trim().toLowerCase();
   const filtered = allUsers.filter(
     u => u.uid !== currentUserId &&
-    (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
+    (!cleanSearch ||
+      u.name?.toLowerCase().includes(cleanSearch) ||
+      u.email?.toLowerCase().includes(cleanSearch) ||
+      (u.department || "").toLowerCase().includes(cleanSearch) ||
+      (u.designation || u.jobType || "").toLowerCase().includes(cleanSearch)
+    )
   );
 
   return createPortal(
@@ -415,19 +421,34 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
           <button onClick={onClose} className="text-text-mut hover:text-text-main cursor-pointer"><X size={18} /></button>
         </div>
         <div className="flex items-center gap-2 border border-border-card rounded-[10px] px-3 py-2 mb-3 bg-bg-base focus-within:border-brand-primary/50">
-          <Search size={14} className="text-text-mut" />
+          <Search size={14} className="text-text-mut flex-shrink-0" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search teammates..."
+            placeholder="Search teammates by name, email, role..."
             className="flex-1 bg-transparent text-sm text-text-main outline-none"
             autoFocus
           />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-text-mut hover:text-text-main p-0.5 cursor-pointer">
+              <X size={12} />
+            </button>
+          )}
         </div>
         <div className="max-h-60 overflow-y-auto space-y-1">
           {filtered.length === 0 ? (
-            <p className="text-xs text-text-mut text-center py-4">No users found</p>
+            <div className="text-center py-6">
+              <p className="text-xs text-text-mut font-semibold">No teammates found</p>
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="mt-1 text-[11px] text-brand-primary hover:underline font-bold"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
           ) : filtered.map(u => (
             <button
               key={u.uid}
@@ -435,9 +456,11 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] hover:bg-bg-base transition-colors cursor-pointer text-left"
             >
               <Avatar src={u.avatar} name={u.name} />
-              <div>
-                <div className="text-sm font-semibold text-text-main">{u.name}</div>
-                <div className="text-[10px] text-text-mut">{u.department} · {u.email}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-text-main truncate">{u.name}</div>
+                <div className="text-[10px] text-text-mut truncate">
+                  {u.department || u.designation || "Team member"} {u.email ? `· ${u.email}` : ""}
+                </div>
               </div>
             </button>
           ))}
@@ -449,12 +472,27 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
 }
 
 // ─── Messages Thread Panel ────────────────────────────────────
-function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
+function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch, setShowChatSearch }) {
   const [messages, setMessages] = useState([]);
   const [messageToDelete, setMessageToDelete] = useState(null);
+  const [inChatSearch, setInChatSearch] = useState("");
   const bottomRef = useRef(null);
+  const searchInputRef = useRef(null);
   const { showToast } = useToast();
   const prevThreadIdRef = useRef(null);
+
+  // Focus in-chat search input when opened
+  useEffect(() => {
+    if (showChatSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showChatSearch]);
+
+  // Clear in-chat search when switching thread
+  useEffect(() => {
+    setInChatSearch("");
+    if (setShowChatSearch) setShowChatSearch(false);
+  }, [thread?.id]);
 
   // Determine if user has access to view/message this channel
   const isMember = thread.type !== "channel" || thread.id === "general" || thread.memberIds?.includes(currentUser.uid) || isAdmin;
@@ -481,8 +519,10 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (!inChatSearch) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, inChatSearch]);
 
   const handleSend = async (text, fileData) => {
     // Build optimistic message so it appears instantly
@@ -562,17 +602,66 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
     );
   }
 
-  const grouped = messages
+  const cleanSearch = inChatSearch.trim().toLowerCase();
+  const visibleMessages = messages
     .filter(msg => !(msg.deletedFor && msg.deletedFor.includes(currentUser.uid)))
-    .reduce((acc, msg) => {
-      const date = new Date(msg.timestamp).toDateString();
-      if (!acc[date]) acc[date] = [];
+    .filter(msg => {
+      if (!cleanSearch) return true;
+      const textMatch = msg.text?.toLowerCase().includes(cleanSearch);
+      const fileMatch = msg.fileData?.name?.toLowerCase().includes(cleanSearch);
+      const senderMatch = msg.senderName?.toLowerCase().includes(cleanSearch);
+      return textMatch || fileMatch || senderMatch;
+    });
+
+  const grouped = visibleMessages.reduce((acc, msg) => {
+    const date = new Date(msg.timestamp).toDateString();
+    if (!acc[date]) acc[date] = [];
     acc[date].push(msg);
     return acc;
   }, {});
 
   return (
     <div className="flex flex-col h-full">
+      {/* In-Chat Search Bar */}
+      {showChatSearch && (
+        <div className="px-4 py-2.5 bg-bg-card border-b border-border-card flex items-center justify-between gap-3 animate-fade-in shadow-sm">
+          <div className="flex items-center gap-2 flex-1 bg-bg-base rounded-[10px] border border-border-card px-3 py-1.5 focus-within:border-brand-primary/50">
+            <Search size={13} className="text-text-mut flex-shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={inChatSearch}
+              onChange={(e) => setInChatSearch(e.target.value)}
+              placeholder={`Search messages in ${thread.type === "channel" ? "#" + (thread.displayName || thread.name) : thread.otherUserName}...`}
+              className="flex-1 bg-transparent text-xs text-text-main outline-none placeholder:text-text-mut"
+            />
+            {inChatSearch && (
+              <button
+                onClick={() => setInChatSearch("")}
+                className="text-text-mut hover:text-text-main p-0.5 cursor-pointer"
+                title="Clear filter"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {inChatSearch.trim() && (
+            <span className="text-[11px] font-bold text-brand-primary whitespace-nowrap px-2 py-0.5 rounded-full bg-brand-primary/10">
+              {visibleMessages.length} {visibleMessages.length === 1 ? "match" : "matches"}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              if (setShowChatSearch) setShowChatSearch(false);
+              setInChatSearch("");
+            }}
+            className="text-xs font-bold text-text-mut hover:text-text-main cursor-pointer px-2 py-1 rounded-md hover:bg-bg-base transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-4 space-y-1">
         {Object.entries(grouped).map(([date, msgs]) => (
@@ -593,7 +682,25 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey }) {
             ))}
           </div>
         ))}
-        {messages.length === 0 && (
+
+        {/* No messages match search */}
+        {cleanSearch && visibleMessages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-16 px-4">
+            <div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center mb-3 text-brand-primary">
+              <Search size={20} />
+            </div>
+            <p className="font-bold text-text-main text-sm">No matching messages</p>
+            <p className="text-xs text-text-mut mt-1">No messages match &ldquo;{inChatSearch}&rdquo; in this conversation.</p>
+            <button
+              onClick={() => setInChatSearch("")}
+              className="mt-3 text-xs font-bold text-brand-primary hover:underline cursor-pointer"
+            >
+              Clear search
+            </button>
+          </div>
+        )}
+
+        {!cleanSearch && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-16">
             <div className="w-14 h-14 rounded-full bg-brand-primary/10 flex items-center justify-center mb-4">
               {thread.type === "channel" ? <Hash size={24} className="text-brand-primary" /> : <MessageSquare size={24} className="text-brand-primary" />}
@@ -673,6 +780,7 @@ export default function TeamHub() {
   const [refreshKey, setRefreshKey]       = useState(0);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showViewMembers, setShowViewMembers] = useState(false);
+  const [showChatSearch, setShowChatSearch] = useState(false);
   const [allMessages, setAllMessages]     = useState([]);
 
   // Subscribe to channels
@@ -789,17 +897,81 @@ export default function TeamHub() {
       const otherName = thread.participantNames?.[otherId] || targetUser.name;
       setActiveThread({ ...thread, type: "dm", otherUserId: otherId, otherUserName: otherName });
       setSidebarTab("dms");
+      setSearchQuery(""); // reset search after selecting
     } catch (err) {
       showToast(err.message || "Failed to open DM", "error");
     }
   };
 
-  const filteredChannels = channels.filter(ch =>
-    (ch.displayName || ch.name)?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const query = searchQuery.trim().toLowerCase();
 
-  const myChannels   = filteredChannels.filter(ch => ch.id === "general" || ch.memberIds?.includes(currentUser.uid));
-  const otherChannels = filteredChannels.filter(ch => ch.id !== "general" && !ch.memberIds?.includes(currentUser.uid));
+  // Filtered Channels by name, display name, description
+  const filteredChannels = useMemo(() => {
+    if (!query) return channels;
+    return channels.filter(ch =>
+      (ch.displayName || ch.name)?.toLowerCase().includes(query) ||
+      (ch.description || "").toLowerCase().includes(query)
+    );
+  }, [channels, query]);
+
+  const myChannels = useMemo(() => {
+    return filteredChannels.filter(ch => ch.id === "general" || ch.memberIds?.includes(currentUser?.uid));
+  }, [filteredChannels, currentUser?.uid]);
+
+  const otherChannels = useMemo(() => {
+    return filteredChannels.filter(ch => ch.id !== "general" && !ch.memberIds?.includes(currentUser?.uid));
+  }, [filteredChannels, currentUser?.uid]);
+
+  // Filtered DM Threads by participant name, email, department, designation, or message content
+  const filteredDmThreads = useMemo(() => {
+    const sorted = [...dmThreads].sort((a, b) => {
+      const aMsgs = allMessages.filter(m => m.threadId === a.id);
+      const bMsgs = allMessages.filter(m => m.threadId === b.id);
+      const aTime = aMsgs.length > 0 ? new Date(aMsgs[aMsgs.length - 1].timestamp).getTime() : 0;
+      const bTime = bMsgs.length > 0 ? new Date(bMsgs[bMsgs.length - 1].timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    if (!query) return sorted;
+
+    return sorted.filter(thread => {
+      const otherId = thread.participantIds.find(id => id !== currentUser?.uid);
+      const otherName = thread.participantNames?.[otherId] || "";
+      const otherUser = allUsers.find(u => u.uid === otherId);
+      
+      const matchName = otherName.toLowerCase().includes(query);
+      const matchDept = (otherUser?.department || "").toLowerCase().includes(query);
+      const matchEmail = (otherUser?.email || "").toLowerCase().includes(query);
+      const matchDesig = (otherUser?.designation || otherUser?.jobType || "").toLowerCase().includes(query);
+      
+      // Also match messages inside this thread
+      const matchMessage = allMessages.some(
+        m => m.threadId === thread.id && m.text?.toLowerCase().includes(query)
+      );
+
+      return matchName || matchDept || matchEmail || matchDesig || matchMessage;
+    });
+  }, [dmThreads, allMessages, query, currentUser?.uid, allUsers]);
+
+  // Matching teammates from directory not yet in DM threads list
+  const matchingTeammates = useMemo(() => {
+    if (!query || sidebarTab !== "dms") return [];
+    
+    const existingDmUserIds = new Set(
+      dmThreads.flatMap(t => t.participantIds).filter(id => id !== currentUser?.uid)
+    );
+
+    return allUsers.filter(u => 
+      u.uid !== currentUser?.uid &&
+      !existingDmUserIds.has(u.uid) &&
+      (
+        u.name?.toLowerCase().includes(query) ||
+        u.email?.toLowerCase().includes(query) ||
+        (u.department || "").toLowerCase().includes(query) ||
+        (u.designation || u.jobType || "").toLowerCase().includes(query)
+      )
+    );
+  }, [allUsers, currentUser?.uid, dmThreads, query, sidebarTab]);
 
   const handleRemoveMemberFromChannel = async (userToRemove) => {
     try {
@@ -825,15 +997,24 @@ export default function TeamHub() {
 
         {/* Search */}
         <div className="px-3 py-2 border-b border-border-card">
-          <div className="flex items-center gap-2 bg-bg-base rounded-[8px] border border-border-card px-2.5 py-1.5 focus-within:border-brand-primary/50">
-            <Search size={12} className="text-text-mut" />
+          <div className="flex items-center gap-2 bg-bg-base rounded-[10px] border border-border-card px-2.5 py-1.5 focus-within:border-brand-primary/50 focus-within:ring-2 focus-within:ring-brand-primary/10 transition-all">
+            <Search size={13} className="text-text-mut flex-shrink-0" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search channels..."
-              className="flex-1 bg-transparent text-xs text-text-main outline-none"
+              placeholder={sidebarTab === "channels" ? "Search channels or topics..." : "Search messages or teammates..."}
+              className="flex-1 bg-transparent text-xs text-text-main placeholder:text-text-mut outline-none"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="p-0.5 text-text-mut hover:text-text-main cursor-pointer"
+                title="Clear search"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -866,23 +1047,27 @@ export default function TeamHub() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto py-2">
+        <div className="flex-1 overflow-y-auto py-2 custom-scrollbar">
           {sidebarTab === "channels" ? (
             <>
               {/* Create channel button for all employees */}
-              <div className="px-3 mb-1">
-                <button
-                  onClick={() => setShowCreateCh(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-xs font-bold text-brand-primary hover:bg-brand-primary/8 transition-colors cursor-pointer border border-dashed border-brand-primary/30"
-                >
-                  <Plus size={13} /> Create Channel
-                </button>
-              </div>
+              {!query && (
+                <div className="px-3 mb-1">
+                  <button
+                    onClick={() => setShowCreateCh(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-xs font-bold text-brand-primary hover:bg-brand-primary/8 transition-colors cursor-pointer border border-dashed border-brand-primary/30"
+                  >
+                    <Plus size={13} /> Create Channel
+                  </button>
+                </div>
+              )}
 
               {/* Joined channels */}
               {myChannels.length > 0 && (
                 <div className="px-3 mb-1">
-                  <p className="text-[9px] font-extrabold text-text-mut uppercase tracking-widest mb-1 px-1">Your Channels</p>
+                  <p className="text-[9px] font-extrabold text-text-mut uppercase tracking-widest mb-1 px-1">
+                    {query ? `Your Channels (${myChannels.length})` : "Your Channels"}
+                  </p>
                   {myChannels.map(ch => (
                     <ChannelItem
                       key={ch.id}
@@ -903,7 +1088,9 @@ export default function TeamHub() {
               {/* Available channels to join */}
               {isAdmin && otherChannels.length > 0 && (
                 <div className="px-3 mt-2">
-                  <p className="text-[9px] font-extrabold text-text-mut uppercase tracking-widest mb-1 px-1">Other Channels</p>
+                  <p className="text-[9px] font-extrabold text-text-mut uppercase tracking-widest mb-1 px-1">
+                    {query ? `Other Channels (${otherChannels.length})` : "Other Channels"}
+                  </p>
                   {otherChannels.map(ch => (
                     <ChannelItem
                       key={ch.id}
@@ -920,7 +1107,20 @@ export default function TeamHub() {
                 </div>
               )}
 
-              {channels.length === 0 && (
+              {query && filteredChannels.length === 0 && (
+                <div className="text-center py-8 px-4">
+                  <Search size={22} className="mx-auto text-text-mut mb-2 opacity-60" />
+                  <p className="text-xs text-text-main font-semibold">No channels match &ldquo;{searchQuery}&rdquo;</p>
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-2 text-[11px] text-brand-primary hover:underline font-bold cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                </div>
+              )}
+
+              {!query && channels.length === 0 && (
                 <div className="text-center py-8 px-4">
                   <Hash size={24} className="mx-auto text-text-mut mb-2" />
                   <p className="text-xs text-text-mut font-semibold">No channels yet.</p>
@@ -931,48 +1131,98 @@ export default function TeamHub() {
           ) : (
             // DMs Tab
             <>
-              <div className="px-3 mb-1">
-                <button
-                  onClick={() => setShowNewDm(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-xs font-bold text-brand-primary hover:bg-brand-primary/8 transition-colors cursor-pointer border border-dashed border-brand-primary/30"
-                >
-                  <Plus size={13} /> New Direct Message
-                </button>
-              </div>
-              {[...dmThreads].sort((a, b) => {
-                const aMsgs = allMessages.filter(m => m.threadId === a.id);
-                const bMsgs = allMessages.filter(m => m.threadId === b.id);
-                const aTime = aMsgs.length > 0 ? new Date(aMsgs[aMsgs.length - 1].timestamp).getTime() : 0;
-                const bTime = bMsgs.length > 0 ? new Date(bMsgs[bMsgs.length - 1].timestamp).getTime() : 0;
-                return bTime - aTime;
-              }).map(thread => {
-                const otherId = thread.participantIds.find(id => id !== currentUser.uid);
-                const otherName = thread.participantNames?.[otherId] || "Unknown";
-                const otherUser = allUsers.find(u => u.uid === otherId);
-                return (
+              {!query && (
+                <div className="px-3 mb-1">
                   <button
-                    key={thread.id}
-                    onClick={() => setActiveThread({ ...thread, type: "dm", otherUserId: otherId, otherUserName: otherName })}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors cursor-pointer text-left ${
-                      activeThread?.id === thread.id
-                        ? "bg-brand-primary/10 border-r-2 border-brand-primary"
-                        : "hover:bg-bg-base"
-                    }`}
+                    onClick={() => setShowNewDm(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-xs font-bold text-brand-primary hover:bg-brand-primary/8 transition-colors cursor-pointer border border-dashed border-brand-primary/30"
                   >
-                    <Avatar src={otherUser?.avatar} name={otherName} size="w-8 h-8" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-text-main truncate">{otherName}</div>
-                      <div className="text-[10px] text-text-mut truncate">{otherUser?.department || "Team member"}</div>
-                    </div>
-                    {getUnreadCount(thread.id) > 0 && (
-                      <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold">
-                        {getUnreadCount(thread.id)}
-                      </span>
-                    )}
+                    <Plus size={13} /> New Direct Message
                   </button>
-                );
-              })}
-              {dmThreads.length === 0 && (
+                </div>
+              )}
+
+              {/* Filtered Direct Messages List */}
+              {filteredDmThreads.length > 0 && (
+                <div className="space-y-0.5">
+                  {query && (
+                    <p className="text-[9px] font-extrabold text-text-mut uppercase tracking-widest mb-1 px-4">
+                      Conversations ({filteredDmThreads.length})
+                    </p>
+                  )}
+                  {filteredDmThreads.map(thread => {
+                    const otherId = thread.participantIds.find(id => id !== currentUser?.uid);
+                    const otherName = thread.participantNames?.[otherId] || "Unknown";
+                    const otherUser = allUsers.find(u => u.uid === otherId);
+                    return (
+                      <button
+                        key={thread.id}
+                        onClick={() => setActiveThread({ ...thread, type: "dm", otherUserId: otherId, otherUserName: otherName })}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors cursor-pointer text-left ${
+                          activeThread?.id === thread.id
+                            ? "bg-brand-primary/10 border-r-2 border-brand-primary"
+                            : "hover:bg-bg-base"
+                        }`}
+                      >
+                        <Avatar src={otherUser?.avatar} name={otherName} size="w-8 h-8" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-text-main truncate">{otherName}</div>
+                          <div className="text-[10px] text-text-mut truncate">
+                            {otherUser?.department || otherUser?.designation || "Team member"}
+                          </div>
+                        </div>
+                        {getUnreadCount(thread.id) > 0 && (
+                          <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold">
+                            {getUnreadCount(thread.id)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Matching Teammates from directory (not yet in DM list) */}
+              {matchingTeammates.length > 0 && (
+                <div className="px-3 mt-3 pt-3 border-t border-border-card/50">
+                  <p className="text-[9px] font-extrabold text-brand-primary uppercase tracking-widest mb-1.5 px-1 flex items-center gap-1">
+                    <UserPlus size={11} /> Teammates ({matchingTeammates.length})
+                  </p>
+                  <div className="space-y-1">
+                    {matchingTeammates.map(user => (
+                      <button
+                        key={user.uid}
+                        onClick={() => handleOpenDm(user)}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] hover:bg-bg-base transition-colors cursor-pointer text-left border border-transparent hover:border-border-card"
+                      >
+                        <Avatar src={user.avatar} name={user.name} size="w-7 h-7" textSize="text-[10px]" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-text-main truncate">{user.name}</div>
+                          <div className="text-[9px] text-text-mut truncate">{user.department || user.designation || user.email}</div>
+                        </div>
+                        <span className="text-[10px] font-bold text-brand-primary px-2 py-0.5 rounded-full bg-brand-primary/10 hover:bg-brand-primary hover:text-white transition-colors">
+                          Chat
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {query && filteredDmThreads.length === 0 && matchingTeammates.length === 0 && (
+                <div className="text-center py-8 px-4">
+                  <Search size={22} className="mx-auto text-text-mut mb-2 opacity-60" />
+                  <p className="text-xs text-text-main font-semibold">No conversations or teammates match &ldquo;{searchQuery}&rdquo;</p>
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-2 text-[11px] text-brand-primary hover:underline font-bold cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                </div>
+              )}
+
+              {!query && dmThreads.length === 0 && (
                 <div className="text-center py-8 px-4">
                   <MessageSquare size={24} className="mx-auto text-text-mut mb-2" />
                   <p className="text-xs text-text-mut font-semibold">No messages yet.</p>
@@ -989,7 +1239,7 @@ export default function TeamHub() {
             onClick={() => { setSidebarTab("dms"); setShowNewDm(true); }}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] bg-bg-base hover:bg-brand-primary/8 text-xs font-semibold text-text-sec hover:text-brand-primary border border-border-card hover:border-brand-primary/30 transition-all cursor-pointer"
           >
-            <Users size={13} /> Browse Team ({allUsers.filter(u => u.uid !== currentUser.uid).length})
+            <Users size={13} /> Browse Team ({allUsers.filter(u => u.uid !== currentUser?.uid).length})
           </button>
         </div>
       </aside>
@@ -1038,6 +1288,18 @@ export default function TeamHub() {
                 )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
+                {/* In-chat search button */}
+                <button
+                  onClick={() => setShowChatSearch(prev => !prev)}
+                  className={`p-1.5 rounded-full border transition-all cursor-pointer flex items-center justify-center ${
+                    showChatSearch
+                      ? "bg-brand-primary/10 border-brand-primary text-brand-primary"
+                      : "hover:bg-bg-base text-text-mut hover:text-brand-primary border-transparent hover:border-border-card"
+                  }`}
+                  title="Search messages in this conversation"
+                >
+                  <Search size={14} />
+                </button>
                 {activeThread.type === "channel" && (
                   <button
                     onClick={() => setShowViewMembers(true)}
@@ -1076,6 +1338,8 @@ export default function TeamHub() {
                 currentUser={currentUser}
                 isAdmin={isAdmin}
                 refreshKey={refreshKey}
+                showChatSearch={showChatSearch}
+                setShowChatSearch={setShowChatSearch}
               />
             </div>
           </>
@@ -1201,11 +1465,17 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
 // ─── Add Member Modal ──────────────────────────────────────────
 function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
   const [search, setSearch] = useState("");
+  const cleanSearch = search.trim().toLowerCase();
   
   // Filter out users who are already members of this channel
   const candidates = allUsers.filter(
     u => !channel.memberIds?.includes(u.uid) &&
-    (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
+    (!cleanSearch ||
+      u.name?.toLowerCase().includes(cleanSearch) ||
+      u.email?.toLowerCase().includes(cleanSearch) ||
+      (u.department || "").toLowerCase().includes(cleanSearch) ||
+      (u.designation || u.jobType || "").toLowerCase().includes(cleanSearch)
+    )
   );
 
   return createPortal(
@@ -1224,15 +1494,20 @@ function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
         <p className="text-[10px] text-text-mut mb-3">Add teammate to #{channel.displayName || channel.name}</p>
         
         <div className="flex items-center gap-2 border border-border-card rounded-[10px] px-3 py-2 mb-3 bg-bg-base focus-within:border-brand-primary/50">
-          <Search size={14} className="text-text-mut" />
+          <Search size={14} className="text-text-mut flex-shrink-0" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search teammates..."
+            placeholder="Search teammates by name, email, department..."
             className="flex-1 bg-transparent text-sm text-text-main outline-none"
             autoFocus
           />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-text-mut hover:text-text-main p-0.5 cursor-pointer">
+              <X size={12} />
+            </button>
+          )}
         </div>
         <div className="max-h-60 overflow-y-auto space-y-1">
           {candidates.length === 0 ? (
@@ -1246,7 +1521,7 @@ function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
                 <Avatar src={u.avatar} name={u.name} />
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-text-main truncate">{u.name}</div>
-                  <div className="text-[9px] text-text-mut truncate">{u.department} · {u.email}</div>
+                  <div className="text-[9px] text-text-mut truncate">{u.department || u.designation || "Member"} · {u.email}</div>
                 </div>
               </div>
               <button
@@ -1267,10 +1542,16 @@ function AddMemberModal({ channel, allUsers, onClose, onAdd }) {
 // ─── View Members Modal ──────────────────────────────────────────
 function ViewMembersModal({ channel, allUsers, onClose, isAdmin, currentUserId, onRemoveMember }) {
   const [search, setSearch] = useState("");
+  const cleanSearch = search.trim().toLowerCase();
   
   const members = allUsers.filter(
     u => channel.memberIds?.includes(u.uid) &&
-    (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
+    (!cleanSearch ||
+      u.name?.toLowerCase().includes(cleanSearch) ||
+      u.email?.toLowerCase().includes(cleanSearch) ||
+      (u.department || "").toLowerCase().includes(cleanSearch) ||
+      (u.designation || u.jobType || "").toLowerCase().includes(cleanSearch)
+    )
   );
 
   return createPortal(
@@ -1289,7 +1570,7 @@ function ViewMembersModal({ channel, allUsers, onClose, isAdmin, currentUserId, 
         <p className="text-[10px] text-text-mut mb-3">#{channel.displayName || channel.name} ({channel.memberIds?.length || 0} members)</p>
         
         <div className="flex items-center gap-2 border border-border-card rounded-[10px] px-3 py-2 mb-3 bg-bg-base focus-within:border-brand-primary/50">
-          <Search size={14} className="text-text-mut" />
+          <Search size={14} className="text-text-mut flex-shrink-0" />
           <input
             type="text"
             value={search}
@@ -1298,6 +1579,11 @@ function ViewMembersModal({ channel, allUsers, onClose, isAdmin, currentUserId, 
             className="flex-1 bg-transparent text-sm text-text-main outline-none"
             autoFocus
           />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-text-mut hover:text-text-main p-0.5 cursor-pointer">
+              <X size={12} />
+            </button>
+          )}
         </div>
         <div className="max-h-60 overflow-y-auto space-y-1">
           {members.length === 0 ? (
@@ -1310,7 +1596,7 @@ function ViewMembersModal({ channel, allUsers, onClose, isAdmin, currentUserId, 
               <Avatar src={u.avatar} name={u.name} />
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold text-text-main truncate">{u.name}</div>
-                <div className="text-[9px] text-text-mut truncate">{u.department} · {u.email}</div>
+                <div className="text-[9px] text-text-mut truncate">{u.department || u.designation || "Member"} · {u.email}</div>
               </div>
               {isAdmin && u.uid !== currentUserId && channel.id !== "general" && (
                 <button

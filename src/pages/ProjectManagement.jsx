@@ -112,6 +112,12 @@ export default function ProjectManagement() {
   const [weeklyReportTasks, setWeeklyReportTasks] = useState("");
   const [weeklyReportRemarks, setWeeklyReportRemarks] = useState("");
 
+  const [weeklyFilterEmployee, setWeeklyFilterEmployee] = useState("All");
+  const [weeklyFilterFromDate, setWeeklyFilterFromDate] = useState("");
+  const [weeklyFilterToDate, setWeeklyFilterToDate] = useState("");
+  const [weeklyFilterRating, setWeeklyFilterRating] = useState("All");
+  const [weeklyCurrentPage, setWeeklyCurrentPage] = useState(1);
+
   const pmProjects = currentUser?.projects?.length ? currentUser.projects : (currentUser?.project ? [currentUser.project] : []);
 
   useEffect(() => {
@@ -563,6 +569,124 @@ export default function ProjectManagement() {
     const fileName = `Daily_Report_Log_${new Date().toISOString().split("T")[0]}.xlsx`;
     XLSX.writeFile(wb, fileName);
     showToast("Excel spreadsheet generated successfully.", "success");
+  };
+
+  const handleDownloadWeeklyReportsPDF = async () => {
+    if (filteredWeeklyReports.length === 0) {
+      return showToast("No weekly reports to export.", "warning");
+    }
+
+    const doc = new jsPDF("l", "mm", "a4");
+    const selectedEmp = weeklyFilterEmployee !== "All" 
+      ? allUsers.find(u => u.uid === weeklyFilterEmployee)?.name 
+      : null;
+    const titleText = selectedEmp 
+      ? `WEEKLY REPORT - ${selectedEmp.toUpperCase()}` 
+      : "TEAM WEEKLY PERFORMANCE REPORTS";
+    const subtitleText = "Consolidated weekly task activities, performance ratings, and supervisor evaluations.";
+    const startY = await addStandardPDFHeader(doc, titleText, subtitleText, true);
+
+    const bodyData = filteredWeeklyReports.map((report, idx) => [
+      idx + 1,
+      report.employeeName || "—",
+      `${report.weekStartDate || "—"} to ${report.weekEndDate || "—"}`,
+      report.rating || "Good",
+      report.tasksCompleted || "—",
+      report.supervisorRemarks || "—"
+    ]);
+
+    autoTable(doc, {
+      startY: startY + 5,
+      head: [["#", "Employee Name", "Week Range", "Rating", "Tasks & Activities Completed", "Supervisor Remarks"]],
+      body: bodyData,
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3.5, font: "helvetica", overflow: "linebreak" },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+      columnStyles: {
+        0: { cellWidth: 10, halign: "center" },
+        1: { cellWidth: 35 },
+        2: { cellWidth: 40, halign: "center" },
+        3: { cellWidth: 25, halign: "center" },
+        4: { cellWidth: 95 },
+        5: { cellWidth: 70 }
+      },
+      didParseCell: (data) => {
+        if (data.row.index >= 0 && data.column.index === 3) {
+          const rating = data.cell.text[0];
+          if (rating === "Excellent") {
+            data.cell.styles.fillColor = [212, 237, 218];
+            data.cell.styles.textColor = [21, 87, 36];
+          } else if (rating === "Good") {
+            data.cell.styles.fillColor = [207, 226, 255];
+            data.cell.styles.textColor = [8, 66, 152];
+          } else if (rating === "Average") {
+            data.cell.styles.fillColor = [255, 243, 205];
+            data.cell.styles.textColor = [133, 100, 4];
+          } else if (rating === "Needs Improvement") {
+            data.cell.styles.fillColor = [248, 215, 218];
+            data.cell.styles.textColor = [114, 28, 36];
+          }
+        }
+      }
+    });
+
+    const fileName = `Weekly_Reports_${weeklyFilterEmployee !== 'All' ? selectedEmp?.replace(/\s+/g, '_') + '_' : ''}${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(fileName);
+    showToast("Weekly reports PDF exported successfully.", "success");
+  };
+
+  const handleDownloadWeeklyReportsExcel = () => {
+    if (filteredWeeklyReports.length === 0) {
+      return showToast("No weekly reports to export.", "warning");
+    }
+
+    const selectedEmp = weeklyFilterEmployee !== "All" 
+      ? allUsers.find(u => u.uid === weeklyFilterEmployee)?.name 
+      : null;
+
+    const tableData = filteredWeeklyReports.map((report, idx) => ({
+      "S.No": idx + 1,
+      "Employee Name": report.employeeName || "—",
+      "Week Start Date": report.weekStartDate || "—",
+      "Week End Date": report.weekEndDate || "—",
+      "Performance Rating": report.rating || "Good",
+      "Tasks Completed / Daily Activities": report.tasksCompleted || "—",
+      "Supervisor Remarks": report.supervisorRemarks || "—"
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(tableData);
+    ws['!cols'] = [
+      { wch: 6 },
+      { wch: 22 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 60 },
+      { wch: 45 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Weekly Reports");
+    const fileName = `Weekly_Reports_${weeklyFilterEmployee !== 'All' ? selectedEmp?.replace(/\s+/g, '_') + '_' : ''}${new Date().toISOString().split("T")[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    showToast("Weekly reports Excel exported successfully.", "success");
+  };
+
+  const handleDeleteWeeklyReport = (report) => {
+    showConfirm(
+      "Delete Weekly Report",
+      `Are you sure you want to delete the weekly report for ${report.employeeName} (${report.weekStartDate} to ${report.weekEndDate})?`,
+      async () => {
+        try {
+          await deleteWeeklyReport(report.id);
+          showToast("Weekly report deleted successfully.", "success");
+        } catch (err) {
+          console.error(err);
+          showToast("Failed to delete weekly report.", "error");
+        }
+      },
+      { confirmText: "Delete", cancelText: "Cancel", isDanger: true }
+    );
   };
 
   const handleSaveRemarks = async (e) => {
@@ -1255,9 +1379,27 @@ export default function ProjectManagement() {
   };
 
   const filteredWeeklyReports = weeklyReports.filter(r => {
-    if (!teamMembers.some(m => m.uid === r.employeeId)) return false;
-    return true;
+    const isManaged = currentUser?.role === "admin" || teamMembers.some(m => m.uid === r.employeeId);
+    if (!isManaged) return false;
+
+    const matchEmployee = weeklyFilterEmployee === "All" || r.employeeId === weeklyFilterEmployee;
+    const matchRating = weeklyFilterRating === "All" || r.rating === weeklyFilterRating;
+    
+    let matchDate = true;
+    if (weeklyFilterFromDate) {
+      matchDate = matchDate && r.weekStartDate >= weeklyFilterFromDate;
+    }
+    if (weeklyFilterToDate) {
+      matchDate = matchDate && r.weekEndDate <= weeklyFilterToDate;
+    }
+
+    return matchEmployee && matchRating && matchDate;
   });
+
+  const weeklyReportsPerPage = 10;
+  const weeklyTotalPages = Math.ceil(filteredWeeklyReports.length / weeklyReportsPerPage) || 1;
+  const weeklyStartIndex = (weeklyCurrentPage - 1) * weeklyReportsPerPage;
+  const paginatedWeeklyReports = filteredWeeklyReports.slice(weeklyStartIndex, weeklyStartIndex + weeklyReportsPerPage);
 
   return (
     <div className="animate-fade-in pb-10">
@@ -1637,74 +1779,193 @@ export default function ProjectManagement() {
       </div>
       ) : activeSubTab === "weekly-reports" ? (
         <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">
-          <div className="p-4 border-b border-border-card bg-bg-base/30 flex items-center justify-between flex-wrap gap-3">
-            <h3 className="font-extrabold text-base text-text-main tracking-tight">Weekly Reports</h3>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleAutoGenerateAllWeeklyReports}
-                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 px-3.5 rounded-[10px] flex items-center gap-1.5 transition-all shadow-md cursor-pointer whitespace-nowrap"
-                title="Automatically generate weekly reports for all team members based on their daily logs"
-              >
-                <Sparkles size={14} /> Auto-Generate All
-              </button>
-              <button
-                onClick={() => {
-                  const range = getWeekRange(new Date());
-                  setWeeklyReportStartDate(range.start);
-                  setWeeklyReportEndDate(range.end);
-                  setWeeklyReportEmployee("");
-                  setWeeklyReportRating("Good");
-                  setWeeklyReportTasks("");
-                  setWeeklyReportRemarks("");
-                  setShowAddWeeklyReportModal(true);
-                }}
-                className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2 px-4 rounded-[10px] flex items-center gap-2 transition-all shadow-md cursor-pointer whitespace-nowrap"
-              >
-                <Plus size={14} /> Add Report
-              </button>
+          {/* Header & Filter Controls */}
+          <div className="p-4 border-b border-border-card bg-bg-base/30 space-y-4">
+            
+            {/* Top Row: Title & Action Buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-base text-text-main tracking-tight flex items-center gap-2">
+                  <FileText size={18} className="text-brand-primary" /> Weekly Reports
+                  <span className="text-xs font-semibold text-text-mut bg-bg-base px-2 py-0.5 rounded-full border border-border-card">
+                    {filteredWeeklyReports.length} {filteredWeeklyReports.length === 1 ? "report" : "reports"}
+                  </span>
+                </h3>
+                <p className="text-xs text-text-mut mt-0.5">Filter by employee and download consolidated reports in Excel or PDF</p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleDownloadWeeklyReportsExcel}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-[10px] flex items-center gap-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                  title="Download Filtered Weekly Reports as Excel (.xlsx)"
+                >
+                  <Download size={13} /> Export Excel
+                </button>
+                <button
+                  onClick={handleDownloadWeeklyReportsPDF}
+                  className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2 px-3 rounded-[10px] flex items-center gap-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                  title="Download Filtered Weekly Reports as PDF (.pdf)"
+                >
+                  <Download size={13} /> Export PDF
+                </button>
+                <button
+                  onClick={handleAutoGenerateAllWeeklyReports}
+                  className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 px-3 rounded-[10px] flex items-center gap-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                  title="Automatically generate weekly reports for all team members based on daily logs"
+                >
+                  <Sparkles size={13} /> Auto-Generate All
+                </button>
+                <button
+                  onClick={() => {
+                    const range = getWeekRange(new Date());
+                    setWeeklyReportStartDate(range.start);
+                    setWeeklyReportEndDate(range.end);
+                    setWeeklyReportEmployee(weeklyFilterEmployee !== "All" ? weeklyFilterEmployee : "");
+                    setWeeklyReportRating("Good");
+                    setWeeklyReportTasks("");
+                    setWeeklyReportRemarks("");
+                    setShowAddWeeklyReportModal(true);
+                  }}
+                  className="bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold py-2 px-3.5 rounded-[10px] flex items-center gap-1.5 transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                >
+                  <Plus size={13} /> Add Report
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Controls Row */}
+            <div className="flex flex-col md:flex-row md:items-center gap-3 overflow-x-auto custom-scrollbar pt-2 border-t border-border-card/50">
+              
+              {/* Employee Filter */}
+              <div className="relative w-full md:w-auto md:min-w-[200px] flex-shrink-0">
+                <select
+                  value={weeklyFilterEmployee}
+                  onChange={(e) => {
+                    setWeeklyFilterEmployee(e.target.value);
+                    setWeeklyCurrentPage(1);
+                  }}
+                  className="w-full px-3.5 py-2 bg-bg-card border border-border-card rounded-[12px] text-xs font-medium text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                >
+                  <option value="All">👥 All Employees ({teamMembers.length})</option>
+                  {teamMembers.map(m => (
+                    <option key={m.uid} value={m.uid}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Filters */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <input
+                  type="date"
+                  value={weeklyFilterFromDate}
+                  onChange={(e) => {
+                    setWeeklyFilterFromDate(e.target.value);
+                    setWeeklyCurrentPage(1);
+                  }}
+                  className="px-3 py-2 bg-bg-card border border-border-card rounded-[12px] text-xs font-medium text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                  title="From Week Start Date"
+                />
+                <span className="text-xs text-text-mut font-medium">to</span>
+                <input
+                  type="date"
+                  value={weeklyFilterToDate}
+                  onChange={(e) => {
+                    setWeeklyFilterToDate(e.target.value);
+                    setWeeklyCurrentPage(1);
+                  }}
+                  className="px-3 py-2 bg-bg-card border border-border-card rounded-[12px] text-xs font-medium text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                  title="To Week End Date"
+                />
+              </div>
+
+              {/* Rating Filter */}
+              <div className="relative w-full md:w-auto md:min-w-[140px] flex-shrink-0">
+                <select
+                  value={weeklyFilterRating}
+                  onChange={(e) => {
+                    setWeeklyFilterRating(e.target.value);
+                    setWeeklyCurrentPage(1);
+                  }}
+                  className="w-full px-3.5 py-2 bg-bg-card border border-border-card rounded-[12px] text-xs font-medium text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                >
+                  <option value="All">All Ratings</option>
+                  <option value="Excellent">⭐ Excellent</option>
+                  <option value="Good">👍 Good</option>
+                  <option value="Average">⚖️ Average</option>
+                  <option value="Needs Improvement">⚠️ Needs Improvement</option>
+                </select>
+              </div>
+
+              {/* Clear Filters Button */}
+              {(weeklyFilterEmployee !== "All" || weeklyFilterFromDate || weeklyFilterToDate || weeklyFilterRating !== "All") && (
+                <button
+                  onClick={() => {
+                    setWeeklyFilterEmployee("All");
+                    setWeeklyFilterFromDate("");
+                    setWeeklyFilterToDate("");
+                    setWeeklyFilterRating("All");
+                    setWeeklyCurrentPage(1);
+                  }}
+                  className="text-xs text-brand-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                >
+                  <X size={12} /> Clear Filters
+                </button>
+              )}
+
             </div>
           </div>
+
+          {/* Table */}
           <div className="overflow-x-auto w-full custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-bg-base/50 text-[10px] uppercase tracking-wider text-text-mut border-b border-border-card">
-                  <th className="p-4 font-bold">Week</th>
+                  <th className="p-4 font-bold">Week Range</th>
                   <th className="p-4 font-bold">Employee</th>
                   <th className="p-4 font-bold text-center">Rating</th>
-                  <th className="p-4 font-bold">Tasks / Remarks</th>
+                  <th className="p-4 font-bold">Tasks / Activities</th>
+                  <th className="p-4 font-bold">Supervisor Remarks</th>
                   <th className="p-4 font-bold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="text-sm divide-y divide-border-card">
                 {filteredWeeklyReports.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="p-8 text-center text-text-mut text-xs">
-                      No weekly reports found matching selected filters.
+                    <td colSpan="6" className="p-8 text-center text-text-mut text-xs">
+                      No weekly reports found matching the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredWeeklyReports.map((report) => (
-                      <tr key={report.id} className="hover:bg-bg-base/30 transition-colors">
-                        <td className="p-4 text-text-main">
-                          <div className="font-bold text-xs">{report.weekStartDate} to {report.weekEndDate}</div>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-semibold text-text-main text-xs">{report.employeeName}</div>
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            report.rating === "Excellent" ? "bg-green-500/10 text-green-500" :
-                            report.rating === "Good" ? "bg-blue-500/10 text-blue-500" :
-                            report.rating === "Average" ? "bg-yellow-500/10 text-yellow-500" :
-                            "bg-red-500/10 text-red-500"
-                          }`}>
-                            {report.rating}
-                          </span>
-                        </td>
-                        <td className="p-4 text-text-sec text-xs max-w-[200px] truncate">
-                          {report.tasksCompleted}
-                        </td>
-                        <td className="p-4 text-right">
+                  paginatedWeeklyReports.map((report) => (
+                    <tr key={report.id} className="hover:bg-bg-base/30 transition-colors">
+                      <td className="p-4 text-text-main whitespace-nowrap">
+                        <div className="font-bold text-xs flex items-center gap-1.5">
+                          <Calendar size={12} className="text-brand-primary" />
+                          {report.weekStartDate} — {report.weekEndDate}
+                        </div>
+                      </td>
+                      <td className="p-4 whitespace-nowrap">
+                        <div className="font-semibold text-text-main text-xs">{report.employeeName}</div>
+                      </td>
+                      <td className="p-4 text-center whitespace-nowrap">
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          report.rating === "Excellent" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" :
+                          report.rating === "Good" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" :
+                          report.rating === "Average" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                          "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                        }`}>
+                          {report.rating}
+                        </span>
+                      </td>
+                      <td className="p-4 text-text-sec text-xs max-w-[240px] truncate">
+                        {report.tasksCompleted}
+                      </td>
+                      <td className="p-4 text-text-sec text-xs max-w-[180px] truncate">
+                        {report.supervisorRemarks || "—"}
+                      </td>
+                      <td className="p-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => {
                               setSelectedWeeklyReport(report);
@@ -1714,13 +1975,59 @@ export default function ProjectManagement() {
                           >
                             View
                           </button>
-                        </td>
-                      </tr>
-                    ))
+                          <button
+                            onClick={() => handleDeleteWeeklyReport(report)}
+                            className="p-1 text-text-mut hover:text-rose-500 hover:bg-rose-500/10 rounded-[6px] transition-all cursor-pointer"
+                            title="Delete Report"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {weeklyTotalPages > 1 && (
+            <div className="flex justify-between items-center pt-4 border-t border-border-card text-xs flex-wrap gap-4 px-4 pb-4">
+              <span className="text-text-mut font-semibold">
+                Showing {weeklyStartIndex + 1} to {Math.min(weeklyStartIndex + weeklyReportsPerPage, filteredWeeklyReports.length)} of {filteredWeeklyReports.length} entries
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setWeeklyCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={weeklyCurrentPage === 1}
+                  className="px-3 py-1.5 bg-bg-card border border-border-card rounded-[8px] hover:bg-bg-base hover:text-brand-primary font-bold disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  Prev
+                </button>
+                {Array.from({ length: weeklyTotalPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setWeeklyCurrentPage(i + 1)}
+                    className={`w-7 h-7 rounded-[8px] font-bold transition-colors cursor-pointer ${
+                      weeklyCurrentPage === i + 1 
+                        ? "bg-brand-primary text-white" 
+                        : "bg-bg-card border border-border-card text-text-sec hover:bg-bg-base hover:text-brand-primary"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setWeeklyCurrentPage(p => Math.min(weeklyTotalPages, p + 1))}
+                  disabled={weeklyCurrentPage === weeklyTotalPages}
+                  className="px-3 py-1.5 bg-bg-card border border-border-card rounded-[8px] hover:bg-bg-base hover:text-brand-primary font-bold disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-bg-card border border-border-card rounded-[20px] shadow-sm overflow-hidden mb-6">

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
   Users, ChevronRight, LogIn, LogOut, Trash2, ExternalLink,
-  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy
+  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy, Forward
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -54,7 +54,7 @@ function Avatar({ src, name, size = "w-8 h-8", textSize = "text-xs" }) {
 
 
 // ─── Single Message Bubble ────────────────────────────────────
-function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
+function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
   const isOwn = msg.senderId === currentUserId;
   const [showActions, setShowActions] = useState(false);
   const pressTimer = React.useRef(null);
@@ -137,7 +137,14 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete }) {
 
       {/* Message actions */}
       {showActions && (
-        <div className={`absolute top-1 ${isOwn ? "left-2" : "right-2"} flex items-center gap-1 bg-bg-card border border-border-card rounded-[8px] shadow-md p-1`}>
+        <div className={`absolute top-1 ${isOwn ? "left-2" : "right-2"} flex items-center gap-1 bg-bg-card border border-border-card rounded-[8px] shadow-md p-1 z-10 animate-fade-in`}>
+          <button
+            onClick={() => onForward && onForward(msg)}
+            className="p-1 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer"
+            title="Forward message to team"
+          >
+            <Forward size={12} />
+          </button>
           <button
             onClick={() => {
               if (msg.text) {
@@ -471,10 +478,408 @@ function NewDmModal({ allUsers, currentUserId, onClose, onSelect }) {
   );
 }
 
+// ─── Forward Message Modal ─────────────────────────────────────
+function ForwardMessageModal({ message, allUsers = [], channels = [], currentUserId, currentUser, onClose, onForwardSuccess }) {
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all"); // 'all' | 'users' | 'channels'
+  const [selectedTargets, setSelectedTargets] = useState([]); // [{ type: 'user'|'channel', id, name, data }]
+  const [forwarding, setForwarding] = useState(false);
+  const { showToast } = useToast();
+
+  const cleanSearch = search.trim().toLowerCase();
+
+  // Channels that current user can forward to
+  const forwardableChannels = useMemo(() => {
+    return channels.filter(ch => {
+      const isMember = ch.id === "general" || ch.memberIds?.includes(currentUserId) || currentUser?.role === "admin";
+      if (!isMember) return false;
+      if (!cleanSearch) return true;
+      const nameMatch = (ch.displayName || ch.name)?.toLowerCase().includes(cleanSearch);
+      const descMatch = (ch.description || "").toLowerCase().includes(cleanSearch);
+      return nameMatch || descMatch;
+    });
+  }, [channels, currentUserId, currentUser?.role, cleanSearch]);
+
+  // Teammates that current user can forward to
+  const forwardableUsers = useMemo(() => {
+    return allUsers.filter(u => {
+      if (u.uid === currentUserId) return false;
+      if (!cleanSearch) return true;
+      const nameMatch = u.name?.toLowerCase().includes(cleanSearch);
+      const emailMatch = u.email?.toLowerCase().includes(cleanSearch);
+      const deptMatch = (u.department || "").toLowerCase().includes(cleanSearch);
+      const desigMatch = (u.designation || u.jobType || "").toLowerCase().includes(cleanSearch);
+      return nameMatch || emailMatch || deptMatch || desigMatch;
+    });
+  }, [allUsers, currentUserId, cleanSearch]);
+
+  const toggleTarget = (target) => {
+    setSelectedTargets(prev => {
+      const exists = prev.some(t => t.id === target.id && t.type === target.type);
+      if (exists) {
+        return prev.filter(t => !(t.id === target.id && t.type === target.type));
+      } else {
+        return [...prev, target];
+      }
+    });
+  };
+
+  const isSelected = (id, type) => selectedTargets.some(t => t.id === id && t.type === type);
+
+  const forwardToSingleTarget = async (target) => {
+    if (forwarding) return;
+    setForwarding(true);
+    try {
+      if (target.type === "channel") {
+        await sendChatMessage(
+          target.id,
+          "channel",
+          currentUser.uid,
+          currentUser.name,
+          currentUser.avatar || "",
+          message.text || "",
+          message.fileData || null,
+          currentUser.companyId
+        );
+      } else {
+        const thread = await getOrCreateDmThread(
+          currentUser.uid,
+          target.id,
+          currentUser.name,
+          target.name,
+          currentUser.companyId
+        );
+        await sendChatMessage(
+          thread.id,
+          "dm",
+          currentUser.uid,
+          currentUser.name,
+          currentUser.avatar || "",
+          message.text || "",
+          message.fileData || null,
+          currentUser.companyId
+        );
+      }
+      showToast(`Forwarded to ${target.name}!`, "success");
+      if (onForwardSuccess) onForwardSuccess();
+      onClose();
+    } catch (err) {
+      showToast(err.message || "Failed to forward message", "error");
+    } finally {
+      setForwarding(false);
+    }
+  };
+
+  const forwardToSelected = async () => {
+    if (selectedTargets.length === 0 || forwarding) return;
+    setForwarding(true);
+    try {
+      for (const target of selectedTargets) {
+        if (target.type === "channel") {
+          await sendChatMessage(
+            target.id,
+            "channel",
+            currentUser.uid,
+            currentUser.name,
+            currentUser.avatar || "",
+            message.text || "",
+            message.fileData || null,
+            currentUser.companyId
+          );
+        } else {
+          const thread = await getOrCreateDmThread(
+            currentUser.uid,
+            target.id,
+            currentUser.name,
+            target.name,
+            currentUser.companyId
+          );
+          await sendChatMessage(
+            thread.id,
+            "dm",
+            currentUser.uid,
+            currentUser.name,
+            currentUser.avatar || "",
+            message.text || "",
+            message.fileData || null,
+            currentUser.companyId
+          );
+        }
+      }
+      showToast(
+        `Forwarded to ${selectedTargets.length} ${selectedTargets.length === 1 ? "recipient" : "recipients"}!`,
+        "success"
+      );
+      if (onForwardSuccess) onForwardSuccess();
+      onClose();
+    } catch (err) {
+      showToast(err.message || "Failed to forward message", "error");
+    } finally {
+      setForwarding(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[100] p-4 animate-fade-in">
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="w-full max-w-md bg-bg-card border border-border-card rounded-[22px] p-6 shadow-2xl flex flex-col max-h-[90vh]"
+      >
+        {/* Header */}
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-extrabold text-base text-text-main flex items-center gap-2">
+            <Forward size={18} className="text-brand-primary" /> Forward Message
+          </h3>
+          <button onClick={onClose} className="text-text-mut hover:text-text-main cursor-pointer p-1 rounded-md hover:bg-bg-base transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Message Preview */}
+        <div className="mb-4 p-3 bg-bg-base/70 border border-border-card rounded-[14px] text-xs">
+          <div className="flex items-center gap-1.5 text-text-mut font-semibold mb-1">
+            <span>From</span>
+            <span className="font-bold text-text-sec">{message.senderName || "User"}</span>
+            <span>·</span>
+            <span className="text-[10px]">{formatTime(message.timestamp)}</span>
+          </div>
+          {message.text && (
+            <p className="text-text-main font-medium line-clamp-2 leading-relaxed italic">
+              &ldquo;{message.text}&rdquo;
+            </p>
+          )}
+          {message.fileData && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-md text-[11px] font-bold text-brand-primary">
+              <span>{getFileIcon(message.fileData.mimeType, message.fileData.name)}</span>
+              <span className="truncate max-w-[200px]">{message.fileData.name}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-2 border border-border-card rounded-[12px] px-3 py-2 mb-3 bg-bg-base focus-within:border-brand-primary/50 transition-colors">
+          <Search size={14} className="text-text-mut flex-shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search team members or channels..."
+            className="flex-1 bg-transparent text-sm text-text-main outline-none placeholder:text-text-mut"
+            autoFocus
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-text-mut hover:text-text-main p-0.5 cursor-pointer">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-1 mb-3 p-1 bg-bg-base rounded-[10px] border border-border-card text-xs">
+          <button
+            onClick={() => setActiveFilter("all")}
+            className={`flex-1 py-1 px-2 rounded-[7px] font-bold transition-all cursor-pointer ${
+              activeFilter === "all" ? "bg-bg-card text-brand-primary shadow-sm" : "text-text-mut hover:text-text-main"
+            }`}
+          >
+            All ({forwardableUsers.length + forwardableChannels.length})
+          </button>
+          <button
+            onClick={() => setActiveFilter("users")}
+            className={`flex-1 py-1 px-2 rounded-[7px] font-bold transition-all cursor-pointer ${
+              activeFilter === "users" ? "bg-bg-card text-brand-primary shadow-sm" : "text-text-mut hover:text-text-main"
+            }`}
+          >
+            Teammates ({forwardableUsers.length})
+          </button>
+          <button
+            onClick={() => setActiveFilter("channels")}
+            className={`flex-1 py-1 px-2 rounded-[7px] font-bold transition-all cursor-pointer ${
+              activeFilter === "channels" ? "bg-bg-card text-brand-primary shadow-sm" : "text-text-mut hover:text-text-main"
+            }`}
+          >
+            Channels ({forwardableChannels.length})
+          </button>
+        </div>
+
+        {/* List of Recipients */}
+        <div className="flex-1 overflow-y-auto space-y-1.5 max-h-64 pr-1 min-h-[160px]">
+          {/* Channels Section */}
+          {(activeFilter === "all" || activeFilter === "channels") && forwardableChannels.length > 0 && (
+            <div className="mb-2">
+              {activeFilter === "all" && (
+                <div className="text-[10px] font-bold text-text-mut uppercase tracking-wider px-2 py-1">Channels</div>
+              )}
+              {forwardableChannels.map(ch => {
+                const checked = isSelected(ch.id, "channel");
+                const targetObj = { type: "channel", id: ch.id, name: ch.displayName || ch.name, data: ch };
+                return (
+                  <div
+                    key={`ch-${ch.id}`}
+                    onClick={() => toggleTarget(targetObj)}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-[12px] border transition-all cursor-pointer ${
+                      checked
+                        ? "bg-brand-primary/10 border-brand-primary/40"
+                        : "border-transparent hover:bg-bg-base"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                        checked ? "bg-brand-primary text-white" : "bg-brand-primary/15 text-brand-primary"
+                      }`}>
+                        <Hash size={13} />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="text-xs font-bold text-text-main truncate">#{ch.displayName || ch.name}</div>
+                        <div className="text-[10px] text-text-mut truncate">{ch.description || `${ch.memberIds?.length || 0} members`}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          forwardToSingleTarget(targetObj);
+                        }}
+                        disabled={forwarding}
+                        className="text-[10px] font-bold px-2.5 py-1 bg-brand-primary/15 hover:bg-brand-primary text-brand-primary hover:text-white rounded-full transition-all cursor-pointer flex items-center gap-1"
+                        title="Instant Forward"
+                      >
+                        <Forward size={10} />
+                        <span>Send</span>
+                      </button>
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                        checked ? "bg-brand-primary border-brand-primary text-white" : "border-border-card bg-bg-base"
+                      }`}>
+                        {checked && <Check size={10} />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Teammates Section */}
+          {(activeFilter === "all" || activeFilter === "users") && forwardableUsers.length > 0 && (
+            <div>
+              {activeFilter === "all" && (
+                <div className="text-[10px] font-bold text-text-mut uppercase tracking-wider px-2 py-1">Teammates</div>
+              )}
+              {forwardableUsers.map(u => {
+                const checked = isSelected(u.uid, "user");
+                const targetObj = { type: "user", id: u.uid, name: u.name, data: u };
+                return (
+                  <div
+                    key={`user-${u.uid}`}
+                    onClick={() => toggleTarget(targetObj)}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-[12px] border transition-all cursor-pointer ${
+                      checked
+                        ? "bg-brand-primary/10 border-brand-primary/40"
+                        : "border-transparent hover:bg-bg-base"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar src={u.avatar} name={u.name} size="w-7 h-7" textSize="text-[10px]" />
+                      <div className="min-w-0 text-left">
+                        <div className="text-xs font-bold text-text-main truncate">{u.name}</div>
+                        <div className="text-[10px] text-text-mut truncate">
+                          {u.department || u.designation || "Member"} {u.email ? `· ${u.email}` : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          forwardToSingleTarget(targetObj);
+                        }}
+                        disabled={forwarding}
+                        className="text-[10px] font-bold px-2.5 py-1 bg-brand-primary/15 hover:bg-brand-primary text-brand-primary hover:text-white rounded-full transition-all cursor-pointer flex items-center gap-1"
+                        title="Instant Forward"
+                      >
+                        <Forward size={10} />
+                        <span>Send</span>
+                      </button>
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                        checked ? "bg-brand-primary border-brand-primary text-white" : "border-border-card bg-bg-base"
+                      }`}>
+                        {checked && <Check size={10} />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty search state */}
+          {forwardableChannels.length === 0 && forwardableUsers.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-xs text-text-mut font-semibold">No recipients found</p>
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="mt-1.5 text-xs text-brand-primary hover:underline font-bold"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-border-card">
+          <div className="text-xs text-text-sec font-semibold">
+            {selectedTargets.length > 0 ? (
+              <span className="text-brand-primary font-bold">
+                {selectedTargets.length} selected
+              </span>
+            ) : (
+              <span className="text-text-mut">Select one or more recipients</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={forwarding}
+              className="py-2 px-3.5 border border-border-card rounded-[10px] text-xs font-semibold text-text-sec hover:bg-bg-base cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={forwardToSelected}
+              disabled={selectedTargets.length === 0 || forwarding}
+              className="py-2 px-4 bg-brand-primary text-white rounded-[10px] text-xs font-bold hover:bg-brand-hover transition-all cursor-pointer disabled:opacity-40 shadow-sm flex items-center gap-1.5"
+            >
+              {forwarding ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  <span>Forwarding...</span>
+                </>
+              ) : (
+                <>
+                  <Forward size={12} />
+                  <span>Forward {selectedTargets.length > 0 ? `(${selectedTargets.length})` : ""}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── Messages Thread Panel ────────────────────────────────────
-function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch, setShowChatSearch }) {
+function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [], refreshKey, showChatSearch, setShowChatSearch }) {
   const [messages, setMessages] = useState([]);
   const [messageToDelete, setMessageToDelete] = useState(null);
+  const [messageToForward, setMessageToForward] = useState(null);
   const [inChatSearch, setInChatSearch] = useState("");
   const bottomRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -537,9 +942,9 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
       fileData: fileData || null,
       isDeleted: false,
       timestamp: new Date().toISOString(),
-      _optimistic: true,
+      companyId: currentUser.companyId || ""
     };
-    // Show immediately — don't wait for Firebase/localStorage round-trip
+
     setMessages(prev => [...prev, optimisticMsg]);
 
     try {
@@ -553,14 +958,12 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
         fileData,
         currentUser.companyId
       );
-      // Replace the optimistic entry with the real one (has proper id)
-      setMessages(prev =>
-        prev.map(m => m.id === optimisticMsg.id ? { ...savedMsg, _optimistic: false } : m)
-      );
+      if (savedMsg?.id) {
+        setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? savedMsg : m));
+      }
     } catch (err) {
-      // Roll back optimistic message on error
+      showToast(err.message || "Failed to send message", "error");
       setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
-      throw err; // bubble up so MessageInput shows toast
     }
   };
 
@@ -570,101 +973,99 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
 
   const confirmDelete = async (type) => {
     if (!messageToDelete) return;
-    const msgId = messageToDelete;
-    setMessageToDelete(null);
-
     try {
-      // Optimistic removal
-      setMessages(prev => prev.filter(m => m.id !== msgId));
-      if (type === "everyone") {
-        await deleteChatMessage(msgId);
-        showToast("Message deleted for everyone", "success");
-      } else {
-        await deleteChatMessageForMe(msgId, currentUser.uid);
+      if (type === "me") {
+        await deleteChatMessageForMe(messageToDelete, currentUser.uid);
+        setMessages(prev => prev.filter(m => m.id !== messageToDelete));
         showToast("Message deleted for you", "success");
+      } else {
+        await deleteChatMessage(messageToDelete);
+        setMessages(prev => prev.map(m => m.id === messageToDelete ? { ...m, isDeleted: true } : m));
+        showToast("Message deleted for everyone", "success");
       }
     } catch (err) {
-      showToast("Failed to delete message", "error");
+      showToast(err.message || "Failed to delete message", "error");
+    } finally {
+      setMessageToDelete(null);
     }
   };
 
   if (!isMember) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center py-16 px-4">
-        <div className="w-14 h-14 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
-          <Lock size={24} />
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-bg-base/30 h-full">
+        <div className="w-16 h-16 rounded-full bg-brand-primary/10 flex items-center justify-center mb-4 text-brand-primary">
+          <Lock size={28} />
         </div>
-        <p className="font-bold text-text-main text-sm">Access Restricted</p>
-        <p className="text-xs text-text-mut mt-1 max-w-xs">
-          Only added members can view the messages and chat in #{thread.displayName || thread.name}.
+        <h3 className="font-extrabold text-base text-text-main mb-1">
+          #{thread.displayName || thread.name}
+        </h3>
+        <p className="text-xs text-text-mut max-w-xs mb-4">
+          You are not a member of this channel. Join to see messages and participate in the discussion.
         </p>
       </div>
     );
   }
 
+  // Filter messages if search is active
   const cleanSearch = inChatSearch.trim().toLowerCase();
-  const visibleMessages = messages
-    .filter(msg => !(msg.deletedFor && msg.deletedFor.includes(currentUser.uid)))
-    .filter(msg => {
-      if (!cleanSearch) return true;
-      const textMatch = msg.text?.toLowerCase().includes(cleanSearch);
-      const fileMatch = msg.fileData?.name?.toLowerCase().includes(cleanSearch);
-      const senderMatch = msg.senderName?.toLowerCase().includes(cleanSearch);
-      return textMatch || fileMatch || senderMatch;
-    });
+  const visibleMessages = cleanSearch
+    ? messages.filter(m => !m.isDeleted && (
+        m.text?.toLowerCase().includes(cleanSearch) ||
+        m.senderName?.toLowerCase().includes(cleanSearch) ||
+        m.fileData?.name?.toLowerCase().includes(cleanSearch)
+      ))
+    : messages;
 
-  const grouped = visibleMessages.reduce((acc, msg) => {
-    const date = new Date(msg.timestamp).toDateString();
+  // Group messages by date
+  const groupedMessages = visibleMessages.reduce((acc, msg) => {
+    const date = formatDateGroup(msg.timestamp);
     if (!acc[date]) acc[date] = [];
     acc[date].push(msg);
     return acc;
   }, {});
 
   return (
-    <div className="flex flex-col h-full">
-      {/* In-Chat Search Bar */}
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg-card">
+      {/* In-chat search bar */}
       {showChatSearch && (
-        <div className="px-4 py-2.5 bg-bg-card border-b border-border-card flex items-center justify-between gap-3 animate-fade-in shadow-sm">
-          <div className="flex items-center gap-2 flex-1 bg-bg-base rounded-[10px] border border-border-card px-3 py-1.5 focus-within:border-brand-primary/50">
-            <Search size={13} className="text-text-mut flex-shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={inChatSearch}
-              onChange={(e) => setInChatSearch(e.target.value)}
-              placeholder={`Search messages in ${thread.type === "channel" ? "#" + (thread.displayName || thread.name) : thread.otherUserName}...`}
-              className="flex-1 bg-transparent text-xs text-text-main outline-none placeholder:text-text-mut"
-            />
-            {inChatSearch && (
-              <button
-                onClick={() => setInChatSearch("")}
-                className="text-text-mut hover:text-text-main p-0.5 cursor-pointer"
-                title="Clear filter"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-          {inChatSearch.trim() && (
-            <span className="text-[11px] font-bold text-brand-primary whitespace-nowrap px-2 py-0.5 rounded-full bg-brand-primary/10">
-              {visibleMessages.length} {visibleMessages.length === 1 ? "match" : "matches"}
+        <div className="px-4 py-2.5 bg-bg-base border-b border-border-card flex items-center gap-2 flex-shrink-0 animate-fade-in">
+          <Search size={14} className="text-text-mut flex-shrink-0" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={inChatSearch}
+            onChange={(e) => setInChatSearch(e.target.value)}
+            placeholder="Search messages in this thread..."
+            className="flex-1 bg-transparent text-xs text-text-main outline-none placeholder:text-text-mut"
+          />
+          {inChatSearch && (
+            <span className="text-[10px] text-text-mut font-semibold flex-shrink-0">
+              {visibleMessages.length} match{visibleMessages.length === 1 ? "" : "es"}
             </span>
+          )}
+          {inChatSearch && (
+            <button
+              onClick={() => setInChatSearch("")}
+              className="p-1 text-text-mut hover:text-text-main cursor-pointer rounded"
+            >
+              <X size={12} />
+            </button>
           )}
           <button
             onClick={() => {
-              if (setShowChatSearch) setShowChatSearch(false);
               setInChatSearch("");
+              setShowChatSearch(false);
             }}
-            className="text-xs font-bold text-text-mut hover:text-text-main cursor-pointer px-2 py-1 rounded-md hover:bg-bg-base transition-colors"
+            className="text-[11px] font-bold text-text-mut hover:text-brand-primary cursor-pointer px-1.5 py-0.5 rounded transition-colors"
           >
             Close
           </button>
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto py-4 space-y-1">
-        {Object.entries(grouped).map(([date, msgs]) => (
+      {/* Messages Scroll Area */}
+      <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
+        {Object.entries(groupedMessages).map(([date, msgs]) => (
           <div key={date}>
             <div className="flex items-center gap-2 px-4 py-2">
               <div className="flex-1 h-px bg-border-card" />
@@ -678,11 +1079,11 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
                 currentUserId={currentUser.uid}
                 isAdmin={isAdmin}
                 onDelete={handleDeleteClick}
+                onForward={(m) => setMessageToForward(m)}
               />
             ))}
           </div>
         ))}
-
         {/* No messages match search */}
         {cleanSearch && visibleMessages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-16 px-4">
@@ -715,7 +1116,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
       </div>
 
       {/* Input */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 border-t border-border-card p-3 bg-bg-card">
         <MessageInput
           onSend={handleSend}
           placeholder={thread.type === "channel" ? `Message #${thread.displayName || thread.name}` : `Message ${thread.otherUserName}`}
@@ -724,7 +1125,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
       </div>
 
       {/* Delete Message Modal */}
-      {messageToDelete && createPortal(
+      {messageToDelete && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-bg-card border border-border-card rounded-[16px] w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
             <div className="p-4 border-b border-border-card bg-bg-base/50">
@@ -754,8 +1155,19 @@ function ThreadPanel({ thread, currentUser, isAdmin, refreshKey, showChatSearch,
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
+      )}
+
+      {/* Forward Message Modal */}
+      {messageToForward && (
+        <ForwardMessageModal
+          message={messageToForward}
+          allUsers={allUsers}
+          channels={channels}
+          currentUserId={currentUser.uid}
+          currentUser={currentUser}
+          onClose={() => setMessageToForward(null)}
+        />
       )}
     </div>
   );
@@ -1337,6 +1749,8 @@ export default function TeamHub() {
                 thread={activeThread}
                 currentUser={currentUser}
                 isAdmin={isAdmin}
+                allUsers={allUsers}
+                channels={channels}
                 refreshKey={refreshKey}
                 showChatSearch={showChatSearch}
                 setShowChatSearch={setShowChatSearch}

@@ -275,24 +275,25 @@ function MessageInput({ onSend, placeholder, disabled }) {
             }
           }}
           onKeyDown={handleKeyDown}
-          /* onPaste={(e) => {
+          onPaste={(e) => {
             const items = e.clipboardData?.items;
             if (!items) return;
             for (let i = 0; i < items.length; i++) {
-              if (items[i].type.indexOf("image") !== -1 || items[i].type.indexOf("video") !== -1 || items[i].kind === "file") {
+              if (items[i].kind === "file") {
                 const file = items[i].getAsFile();
                 if (file) {
                   if (file.size > 40 * 1024 * 1024) {
                     showToast("File must be under 40MB", "error");
+                    e.preventDefault();
                     return;
                   }
                   setPendingFile(file);
                   e.preventDefault();
-                  break;
+                  return;
                 }
               }
             }
-          }} */
+          }}
           placeholder={placeholder}
           rows={1}
           disabled={disabled || uploading}

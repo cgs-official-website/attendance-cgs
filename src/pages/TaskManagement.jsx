@@ -42,6 +42,8 @@ export default function TaskManagement() {
   const [activeSubTab, setActiveSubTab] = useState("tasks"); // "tasks" | "daily-logs"
   const [dailyReports, setDailyReports] = useState([]);
   const [showAddLogModal, setShowAddLogModal] = useState(false);
+  const [dailyLogPage, setDailyLogPage] = useState(1);
+  const logsPerPage = 10;
   
   const [logDate, setLogDate] = useState(new Date().toISOString().split("T")[0]);
   const [logHours, setLogHours] = useState(8);
@@ -859,7 +861,8 @@ export default function TaskManagement() {
                 <p className="text-xs text-text-mut mt-1">You haven't logged any daily activities yet. Click "Add Daily Log" above.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto w-full custom-scrollbar">
+              <>
+                <div className="overflow-x-auto w-full custom-scrollbar">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border-card bg-bg-base/30 text-[10px] uppercase font-bold tracking-wider text-text-mut">
@@ -876,14 +879,20 @@ export default function TaskManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dailyReports.map((report, idx) => {
-                      let statusBadge = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
+                    {(() => {
+                      const indexOfLastLog = dailyLogPage * logsPerPage;
+                      const indexOfFirstLog = indexOfLastLog - logsPerPage;
+                      const currentLogs = dailyReports.slice(indexOfFirstLog, indexOfLastLog);
+
+                      return currentLogs.map((report, idx) => {
+                        const actualIdx = indexOfFirstLog + idx;
+                        let statusBadge = "bg-brand-primary/10 text-brand-primary border border-brand-primary/20";
                       if (report.status === "Completed") statusBadge = "bg-green-500/10 text-green-500 border border-green-500/20";
                       if (report.status === "On Hold") statusBadge = "bg-red-500/10 text-red-500 border border-red-500/20";
 
                       return (
-                        <tr key={report.id || idx} className="border-b border-border-card hover:bg-bg-base/20 transition-colors">
-                          <td className="px-6 py-4 font-bold text-center text-text-sec">{idx + 1}</td>
+                        <tr key={report.id || actualIdx} className="border-b border-border-card hover:bg-bg-base/20 transition-colors">
+                          <td className="px-6 py-4 font-bold text-center text-text-sec">{actualIdx + 1}</td>
                           <td className="px-6 py-4 font-bold text-text-main whitespace-nowrap">{report.date}</td>
                           <td className="px-6 py-4 text-text-sec whitespace-nowrap">{report.day || getDayOfWeek(report.date)}</td>
                           <td className="px-6 py-4 font-extrabold text-center text-text-main">{report.hours} h</td>
@@ -929,10 +938,52 @@ export default function TaskManagement() {
                           </td>
                         </tr>
                       );
-                    })}
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
+              
+              {/* Pagination Controls */}
+              {Math.ceil(dailyReports.length / logsPerPage) > 1 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t border-border-card bg-bg-base/10">
+                  <span className="text-xs font-bold text-text-mut">
+                    Showing {(dailyLogPage - 1) * logsPerPage + 1} to {Math.min(dailyLogPage * logsPerPage, dailyReports.length)} of {dailyReports.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setDailyLogPage(p => Math.max(1, p - 1))}
+                      disabled={dailyLogPage === 1}
+                      className="px-3 py-1.5 rounded-lg border border-border-card text-xs font-bold text-text-sec hover:bg-bg-base disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <div className="flex gap-1">
+                      {Array.from({ length: Math.ceil(dailyReports.length / logsPerPage) }, (_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setDailyLogPage(i + 1)}
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
+                            dailyLogPage === i + 1
+                              ? "bg-brand-primary text-white"
+                              : "text-text-sec hover:bg-bg-base"
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setDailyLogPage(p => Math.min(Math.ceil(dailyReports.length / logsPerPage), p + 1))}
+                      disabled={dailyLogPage === Math.ceil(dailyReports.length / logsPerPage)}
+                      className="px-3 py-1.5 rounded-lg border border-border-card text-xs font-bold text-text-sec hover:bg-bg-base disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
         </div>

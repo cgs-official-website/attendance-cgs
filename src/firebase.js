@@ -34,12 +34,14 @@ import imageCompression from 'browser-image-compression';
 // Firebase Configuration
 // Replace these with your actual Firebase project settings
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: "AIzaSyCzOxb3n4riIANnECaSEiPpghHw3ZttEdY",
+  authDomain: "intern-attendance-web.firebaseapp.com",
+  databaseURL: "https://intern-attendance-web-default-rtdb.firebaseio.com",
+  projectId: "intern-attendance-web",
+  storageBucket: "intern-attendance-web.firebasestorage.app",
+  messagingSenderId: "490507892655",
+  appId: "1:490507892655:web:e0bf453d2a6fa3ceeb215a",
+  measurementId: "G-N91XTTC86C"
 };
 
 // Check if credentials are still placeholder
@@ -498,6 +500,24 @@ export const checkIn = async (user, location) => {
   const timeStr = checkInDate.toISOString();
   const recordId = `${user.uid}_${dateStr}`;
 
+  let defaultBreakDur = 1800; // 30 mins
+  let defaultBioDur = 900;    // 15 mins
+  try {
+    if (dbType === "firebase" && user.companyId) {
+      const envRef = doc(db, "companies", user.companyId, "environmentSettings", "general");
+      const envSnap = await getDoc(envRef);
+      if (envSnap.exists()) {
+        const envData = envSnap.data();
+        if (envData?.workSettings?.breakDurationMinutes) {
+           defaultBreakDur = envData.workSettings.breakDurationMinutes * 60;
+           defaultBioDur = envData.workSettings.breakDurationMinutes * 60; // Make bio equal to the configured duration
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load environment break settings during checkIn");
+  }
+
   if (dbType === "firebase") {
     // Check if document already exists
     const docRef = doc(db, "attendance", recordId);
@@ -567,9 +587,9 @@ export const checkIn = async (user, location) => {
       accumulatedWorkingMinutes: 0,
       currentSessionWorkingMinutes: 0,
       totalWorkingMinutes: 0,
-      shortBreakBalance: 1800, // 30 mins in seconds
-      longBreakBalance: 1800,   // 30 mins in seconds
-      bioBreakBalance: 900,      // 15 mins in seconds
+      shortBreakBalance: defaultBreakDur,
+      longBreakBalance: defaultBreakDur,
+      bioBreakBalance: defaultBioDur,
       companyId: user.companyId || ""
     };
 
@@ -3849,3 +3869,72 @@ export const updateLandingPageConfig = async (configData) => {
   }
   return true;
 };
+
+// ----------------------------------------------------
+// ENVIRONMENT SETUP CONFIG
+// ----------------------------------------------------
+
+export const addEnvironmentSetting = async (companyId, settingData) => {
+  if (getDbType() === 'firebase') {
+    const docRef = doc(collection(db, 'companies', companyId, 'environment_settings'));
+    await setDoc(docRef, { ...settingData, id: docRef.id, createdAt: new Date().toISOString() });
+    return docRef.id;
+  } else {
+    const current = JSON.parse(localStorage.getItem(`env_settings_${companyId}`) || '[]');
+    const id = Date.now().toString();
+    current.push({ ...settingData, id, createdAt: new Date().toISOString() });
+    localStorage.setItem(`env_settings_${companyId}`, JSON.stringify(current));
+    return id;
+  }
+};
+
+export const updateEnvironmentSetting = async (companyId, id, settingData) => {
+  if (getDbType() === 'firebase') {
+    const docRef = doc(db, 'companies', companyId, 'environment_settings', id);
+    await setDoc(docRef, { ...settingData, updatedAt: new Date().toISOString() }, { merge: true });
+    return true;
+  } else {
+    const current = JSON.parse(localStorage.getItem(`env_settings_${companyId}`) || '[]');
+    const index = current.findIndex(s => s.id === id);
+    if (index !== -1) {
+      current[index] = { ...current[index], ...settingData, updatedAt: new Date().toISOString() };
+      localStorage.setItem(`env_settings_${companyId}`, JSON.stringify(current));
+    }
+    return true;
+  }
+};
+
+export const deleteEnvironmentSetting = async (companyId, id) => {
+  if (getDbType() === 'firebase') {
+    const docRef = doc(db, 'companies', companyId, 'environment_settings', id);
+    await deleteDoc(docRef);
+    return true;
+  } else {
+    let current = JSON.parse(localStorage.getItem(`env_settings_${companyId}`) || '[]');
+    current = current.filter(s => s.id !== id);
+    localStorage.setItem(`env_settings_${companyId}`, JSON.stringify(current));
+    return true;
+  }
+};
+
+export const subscribeToEnvironmentSettings = (companyId, callback) => {
+  if (getDbType() === 'firebase') {
+    const q = query(collection(db, 'companies', companyId, 'environment_settings'));
+    return onSnapshot(q, (snapshot) => {
+      const settings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(settings);
+    }, (error) => {
+      console.warn("Error subscribing to environment settings:", error);
+      callback([]);
+    });
+  } else {
+    const current = JSON.parse(localStorage.getItem(`env_settings_${companyId}`) || '[]');
+    callback(current);
+    const interval = setInterval(() => {
+      const updated = JSON.parse(localStorage.getItem(`env_settings_${companyId}`) || '[]');
+      callback(updated);
+    }, 2000);
+    return () => clearInterval(interval);
+  }
+};
+

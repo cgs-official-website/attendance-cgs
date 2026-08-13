@@ -21,8 +21,11 @@ import {
   getLocalDateString,
   subscribeToAssets,
   subscribeToCompanyPayroll,
-  listenToCompany
+  listenToCompany,
+  db,
+  getDbType
 } from "../firebase";
+import { getDoc, doc } from "firebase/firestore";
 import { resolveLocationName } from "../utils/locationHelper";
 import {
   Play,
@@ -84,6 +87,40 @@ export default function UserDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "dashboard";
+
+  // Dynamic Environment Settings
+  const [envConfig, setEnvConfig] = useState({ breaksPerDay: 3, breakDurationMinutes: 30 });
+
+  useEffect(() => {
+    const fetchEnv = async () => {
+      if (currentUser?.companyId) {
+        try {
+          if (getDbType() === "firebase") {
+            const docRef = doc(db, "companies", currentUser.companyId, "environmentSettings", "general");
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists() && docSnap.data().workSettings) {
+              setEnvConfig({
+                breaksPerDay: docSnap.data().workSettings.breaksPerDay || 3,
+                breakDurationMinutes: docSnap.data().workSettings.breakDurationMinutes || 30
+              });
+            }
+          } else {
+            const localEnv = localStorage.getItem(`env_settings_general_${currentUser.companyId}`);
+            if (localEnv) {
+              const parsed = JSON.parse(localEnv);
+              if (parsed.workSettings) {
+                setEnvConfig({
+                  breaksPerDay: parsed.workSettings.breaksPerDay || 3,
+                  breakDurationMinutes: parsed.workSettings.breakDurationMinutes || 30
+                });
+              }
+            }
+          }
+        } catch(e) { console.warn("Failed to load env config", e); }
+      }
+    };
+    fetchEnv();
+  }, [currentUser]);
 
   const getLocalDateString = (d = new Date()) => {
     const year = d.getFullYear();
@@ -2113,30 +2150,36 @@ export default function UserDashboard() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-[600px] mx-auto mb-6">
-                    <button
-                      onClick={() => handleStartBreak("short")}
-                      disabled={actionLoading || shortBreakBalance <= 0}
-                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-                    >
-                      <Coffee size={15} />
-                      <span>Break 1 ({shortBalMin}m left)</span>
-                    </button>
-                    <button
-                      onClick={() => handleStartBreak("long")}
-                      disabled={actionLoading || longBreakBalance <= 0}
-                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-                    >
-                      <Coffee size={15} />
-                      <span>Break 2 ({longBalMin}m left)</span>
-                    </button>
-                    <button
-                      onClick={() => handleStartBreak("bio")}
-                      disabled={actionLoading || bioBreakBalance <= 0}
-                      className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-                    >
-                      <Coffee size={15} />
-                      <span>Aux / Bio ({bioBalMin}m left)</span>
-                    </button>
+                    {envConfig.breaksPerDay >= 1 && (
+                      <button
+                        onClick={() => handleStartBreak("short")}
+                        disabled={actionLoading || shortBreakBalance <= 0}
+                        className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                      >
+                        <Coffee size={15} />
+                        <span>Break 1 ({shortBalMin}m left)</span>
+                      </button>
+                    )}
+                    {envConfig.breaksPerDay >= 2 && (
+                      <button
+                        onClick={() => handleStartBreak("long")}
+                        disabled={actionLoading || longBreakBalance <= 0}
+                        className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                      >
+                        <Coffee size={15} />
+                        <span>Break 2 ({longBalMin}m left)</span>
+                      </button>
+                    )}
+                    {envConfig.breaksPerDay >= 3 && (
+                      <button
+                        onClick={() => handleStartBreak("bio")}
+                        disabled={actionLoading || bioBreakBalance <= 0}
+                        className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                      >
+                        <Coffee size={15} />
+                        <span>Break 3 ({bioBalMin}m left)</span>
+                      </button>
+                    )}
                   </div>
 
                   <button

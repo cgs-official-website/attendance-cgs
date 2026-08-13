@@ -17,6 +17,7 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import PurchaseOrganization from "./pages/PurchaseOrganization";
 import ClientChat from "./pages/ClientChat";
 import ProjectCalendar from "./pages/ProjectCalendar";
+import EnvironmentalSetup from "./modules/environmentalSetup/pages/EnvironmentalSetup";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -221,6 +222,16 @@ export default function App() {
             <AdminRoute>
               <DashboardLayout>
                 <AdminDashboard />
+              </DashboardLayout>
+            </AdminRoute>
+          } 
+        />
+        <Route 
+          path="/admin/environmental-setup" 
+          element={
+            <AdminRoute>
+              <DashboardLayout>
+                <EnvironmentalSetup />
               </DashboardLayout>
             </AdminRoute>
           } 

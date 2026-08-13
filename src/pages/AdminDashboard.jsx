@@ -37,7 +37,11 @@ import {
   deleteEmployeePayroll,
   updateEmployeeGrossSalary,
   listenToCompany,
-  updateCompanyDetails
+  updateCompanyDetails,
+  addEnvironmentSetting,
+  updateEnvironmentSetting,
+  deleteEnvironmentSetting,
+  subscribeToEnvironmentSettings
 } from "../firebase";
 import { 
   Shield, 
@@ -79,7 +83,8 @@ import {
   Banknote,
   ExternalLink,
   Navigation,
-  Compass
+  Compass,
+  Settings
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
@@ -224,6 +229,12 @@ export default function AdminDashboard() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Environment Setup States
+  const [envSettings, setEnvSettings] = useState([]);
+  const [showEnvModal, setShowEnvModal] = useState(false);
+  const [envForm, setEnvForm] = useState({ id: "", key: "", value: "", description: "", status: "active" });
+  const [envLoading, setEnvLoading] = useState(false);
 
   // Modals & Form States
   const [showEditModal, setShowEditModal] = useState(false);
@@ -565,6 +576,11 @@ export default function AdminDashboard() {
       setAssets(data || []);
     });
 
+    // Subscribe to environment settings
+    const unsubscribeEnv = subscribeToEnvironmentSettings(currentUser.companyId, (data) => {
+      setEnvSettings(data || []);
+    });
+
     return () => {
       unsubscribe();
       unsubscribeLeaves();
@@ -572,6 +588,7 @@ export default function AdminDashboard() {
       unsubscribeRules();
       unsubscribePaidLeaves();
       unsubscribeAssets();
+      unsubscribeEnv();
     };
   }, [currentUser.role]);
 

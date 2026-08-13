@@ -35,7 +35,8 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   IndianRupee,
   Link2,
   Globe,
-  LifeBuoy
+  LifeBuoy,
+  Settings
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -619,6 +620,12 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/admin" && activeTabParam === "live",
       module: "attendance",
       onClick: () => { navigate("/admin?tab=live"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Environment Setup",
+      icon: Settings,
+      active: location.pathname === "/admin/environmental-setup",
+      onClick: () => { navigate("/admin/environmental-setup"); setIsMobileOpen(false); }
     },
     {
       label: "Staff Directory",

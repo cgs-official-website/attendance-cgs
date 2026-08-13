@@ -26,7 +26,7 @@ import {
   getDbType
 } from "../firebase";
 import { getDoc, doc } from "firebase/firestore";
-import { resolveLocationName } from "../utils/locationHelper";
+import { resolveLocationName, getDistanceFromLatLonInMeters, isPointInPolygon } from "../utils/locationHelper";
 import {
   Play,
   Square,
@@ -90,6 +90,7 @@ export default function UserDashboard() {
 
   // Dynamic Environment Settings
   const [envConfig, setEnvConfig] = useState({ breaksPerDay: 3, breakDurationMinutes: 30 });
+  const [geoConfig, setGeoConfig] = useState({ enabled: false });
 
   useEffect(() => {
     const fetchEnv = async () => {
@@ -98,11 +99,17 @@ export default function UserDashboard() {
           if (getDbType() === "firebase") {
             const docRef = doc(db, "companies", currentUser.companyId, "environmentSettings", "general");
             const docSnap = await getDoc(docRef);
-            if (docSnap.exists() && docSnap.data().workSettings) {
-              setEnvConfig({
-                breaksPerDay: docSnap.data().workSettings.breaksPerDay || 3,
-                breakDurationMinutes: docSnap.data().workSettings.breakDurationMinutes || 30
-              });
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (data.workSettings) {
+                setEnvConfig({
+                  breaksPerDay: data.workSettings.breaksPerDay || 3,
+                  breakDurationMinutes: data.workSettings.breakDurationMinutes || 30
+                });
+              }
+              if (data.geolocationSettings) {
+                setGeoConfig(data.geolocationSettings);
+              }
             }
           } else {
             const localEnv = localStorage.getItem(`env_settings_general_${currentUser.companyId}`);
@@ -113,6 +120,9 @@ export default function UserDashboard() {
                   breaksPerDay: parsed.workSettings.breaksPerDay || 3,
                   breakDurationMinutes: parsed.workSettings.breakDurationMinutes || 30
                 });
+              }
+              if (parsed.geolocationSettings) {
+                setGeoConfig(parsed.geolocationSettings);
               }
             }
           }
@@ -605,6 +615,24 @@ export default function UserDashboard() {
     try {
       showToast("Fetching precise GPS location...", "info", 1500);
       const location = await getFreshLocation();
+
+      if (geoConfig?.enabled && !currentUser?.allowManualCheckIn) {
+        if (geoConfig.type === "polygon" && Array.isArray(geoConfig.polygonCoords) && geoConfig.polygonCoords.length > 2) {
+          const inside = isPointInPolygon(location, geoConfig.polygonCoords);
+          if (!inside) {
+            throw new Error(`Check-in denied: You are outside the permitted polygon area.`);
+          }
+        } else {
+          const { latitude: targetLat, longitude: targetLon, radiusMeters } = geoConfig;
+          if (targetLat && targetLon && radiusMeters) {
+            const distance = getDistanceFromLatLonInMeters(location.latitude, location.longitude, targetLat, targetLon);
+            if (distance > radiusMeters) {
+              throw new Error(`Check-in denied: You are outside the permitted area. Distance: ${Math.round(distance)}m (Allowed: ${radiusMeters}m).`);
+            }
+          }
+        }
+      }
+
       await checkIn(currentUser, location);
       showToast("Checked in successfully! Have a great workday.", "success");
     } catch (err) {

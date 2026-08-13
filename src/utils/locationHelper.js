@@ -33,6 +33,33 @@ export function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
 }
 
 /**
+ * Checks if a point (lat/lon) is inside a polygon using ray-casting algorithm.
+ * @param {Object} point - { latitude, longitude }
+ * @param {Array} polygon - Array of objects { lat, lng }
+ * @returns {boolean} true if point is inside polygon
+ */
+export function isPointInPolygon(point, polygon) {
+  if (!polygon || polygon.length < 3) return false;
+  
+  const x = point.longitude;
+  const y = point.latitude;
+  
+  let isInside = false;
+  
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lng;
+    const yj = polygon[j].lat;
+    
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) isInside = !isInside;
+  }
+  
+  return isInside;
+}
+
+/**
  * Check if coordinate matches a known office
  */
 export function matchKnownLocation(lat, lon) {

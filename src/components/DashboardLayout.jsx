@@ -36,7 +36,8 @@ import { Mailbox, AlertTriangle, Check, ShieldAlert,
   Link2,
   Globe,
   LifeBuoy,
-  Settings
+  Settings,
+  ShieldCheck
 } from "lucide-react";
 import Logo from "./Logo";
 import logoImg from "../assets/zuna-logo.png";
@@ -622,12 +623,6 @@ export default function DashboardLayout({ children }) {
       onClick: () => { navigate("/admin?tab=live"); setIsMobileOpen(false); }
     },
     {
-      label: "Environment Setup",
-      icon: Settings,
-      active: location.pathname === "/admin/environmental-setup",
-      onClick: () => { navigate("/admin/environmental-setup"); setIsMobileOpen(false); }
-    },
-    {
       label: "Staff Directory",
       icon: Users,
       active: location.pathname === "/admin" && activeTabParam === "users",
@@ -714,6 +709,18 @@ export default function DashboardLayout({ children }) {
       active: location.pathname === "/project-calendar",
       module: "projects",
       onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Roles & Permissions",
+      icon: ShieldCheck,
+      active: location.pathname === "/admin" && activeTabParam === "roles",
+      onClick: () => { navigate("/admin?tab=roles"); setIsMobileOpen(false); }
+    },
+    {
+      label: "Environment Setup",
+      icon: Settings,
+      active: location.pathname === "/admin/environmental-setup",
+      onClick: () => { navigate("/admin/environmental-setup"); setIsMobileOpen(false); }
     },
     {
       label: "My Profile",

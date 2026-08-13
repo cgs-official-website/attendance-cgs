@@ -6,7 +6,8 @@ import {
   FileText, 
   Share2, 
   Save, 
-  AlertTriangle 
+  AlertTriangle,
+  MapPin
 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { useToast } from "../../../context/ToastContext";
@@ -14,6 +15,7 @@ import {
   getEnvironmentSettings, 
   saveEnvironmentSettings 
 } from "../services/environmentalSetupService";
+import LocationMapPicker from "../components/LocationMapPicker";
 
 export default function EnvironmentalSetup() {
   const { currentUser } = useAuth();
@@ -59,6 +61,14 @@ export default function EnvironmentalSetup() {
       twitter: "",
       youtube: "",
       other: ""
+    },
+    geolocationSettings: {
+      enabled: false,
+      type: "circle",
+      polygonCoords: [],
+      latitude: "",
+      longitude: "",
+      radiusMeters: 50
     }
   });
 
@@ -78,7 +88,8 @@ export default function EnvironmentalSetup() {
             workSettings: { ...prev.workSettings, ...(data.workSettings || {}) },
             leaveSettings: { ...prev.leaveSettings, ...(data.leaveSettings || {}) },
             policies: { ...prev.policies, ...(data.policies || {}) },
-            socialLinks: { ...prev.socialLinks, ...(data.socialLinks || {}) }
+            socialLinks: { ...prev.socialLinks, ...(data.socialLinks || {}) },
+            geolocationSettings: { ...prev.geolocationSettings, ...(data.geolocationSettings || {}) }
           }));
         }
       } catch (err) {
@@ -124,7 +135,8 @@ export default function EnvironmentalSetup() {
     { id: "work", label: "Work / Break", icon: Clock },
     { id: "leaves", label: "Leave Settings", icon: CalendarDays },
     { id: "policies", label: "Terms & Policies", icon: FileText },
-    { id: "social", label: "Social Links", icon: Share2 }
+    { id: "social", label: "Social Links", icon: Share2 },
+    { id: "location", label: "Location Setup", icon: MapPin }
   ];
 
   if (loading) {
@@ -428,6 +440,118 @@ export default function EnvironmentalSetup() {
                     placeholder="Data collection and privacy practices..."
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* LOCATION SETUP */}
+          {activeTab === "location" && (
+            <div className="space-y-6 animate-fade-in">
+              <h2 className="text-lg font-bold text-text-main border-b border-border-card pb-4">Geolocation Settings</h2>
+              
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 bg-bg-base p-4 rounded-[12px] border border-border-card">
+                  <input
+                    type="checkbox"
+                    id="geoEnabled"
+                    checked={formData.geolocationSettings.enabled}
+                    onChange={(e) => handleInputChange("geolocationSettings", "enabled", e.target.checked)}
+                    className="w-4 h-4 text-brand-primary cursor-pointer"
+                  />
+                  <label htmlFor="geoEnabled" className="text-sm font-bold text-text-main cursor-pointer">
+                    Enable Location-based Check-in Restriction
+                  </label>
+                </div>
+
+                {formData.geolocationSettings.enabled && (
+                  <>
+                  <div className="flex gap-4 mb-6">
+                    <label className="flex items-center gap-2 text-sm font-bold text-text-main cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="geofenceType" 
+                        value="circle" 
+                        checked={formData.geolocationSettings.type !== "polygon"} 
+                        onChange={() => handleInputChange("geolocationSettings", "type", "circle")}
+                        className="w-4 h-4 text-brand-primary"
+                      />
+                      Circle (Radius)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-bold text-text-main cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="geofenceType" 
+                        value="polygon" 
+                        checked={formData.geolocationSettings.type === "polygon"} 
+                        onChange={() => handleInputChange("geolocationSettings", "type", "polygon")}
+                        className="w-4 h-4 text-brand-primary"
+                      />
+                      Polygon (Custom Shape)
+                    </label>
+                  </div>
+
+                  {formData.geolocationSettings.type !== "polygon" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.geolocationSettings.latitude}
+                        onChange={(e) => handleInputChange("geolocationSettings", "latitude", parseFloat(e.target.value))}
+                        className="w-full px-4 py-2.5 bg-bg-base border border-border-card rounded-[12px] text-sm text-text-main focus:outline-none focus:border-brand-primary"
+                        placeholder="e.g. 13.0827"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.geolocationSettings.longitude}
+                        onChange={(e) => handleInputChange("geolocationSettings", "longitude", parseFloat(e.target.value))}
+                        className="w-full px-4 py-2.5 bg-bg-base border border-border-card rounded-[12px] text-sm text-text-main focus:outline-none focus:border-brand-primary"
+                        placeholder="e.g. 80.2707"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Allowed Radius (Meters)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formData.geolocationSettings.radiusMeters}
+                        onChange={(e) => handleInputChange("geolocationSettings", "radiusMeters", parseInt(e.target.value) || 0)}
+                        className="w-full px-4 py-2.5 bg-bg-base border border-border-card rounded-[12px] text-sm text-text-main focus:outline-none focus:border-brand-primary"
+                        placeholder="e.g. 50"
+                      />
+                    </div>
+                    </div>
+                  )}
+
+                  <div className="mt-6">
+                    <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">
+                      Interactive Map (Click to set location)
+                    </label>
+                    <LocationMapPicker 
+                      type={formData.geolocationSettings.type || "circle"}
+                      latitude={formData.geolocationSettings.latitude}
+                      longitude={formData.geolocationSettings.longitude}
+                      radius={formData.geolocationSettings.radiusMeters}
+                      polygonCoords={formData.geolocationSettings.polygonCoords || []}
+                      onChangeLocation={(lat, lng) => {
+                        handleInputChange("geolocationSettings", "latitude", lat);
+                        handleInputChange("geolocationSettings", "longitude", lng);
+                      }}
+                      onChangeRadius={(radius) => {
+                        handleInputChange("geolocationSettings", "radiusMeters", radius);
+                      }}
+                      onChangePolygon={(coords) => {
+                        handleInputChange("geolocationSettings", "polygonCoords", coords);
+                      }}
+                    />
+                  </div>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -92,6 +92,9 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from 'recharts';
 import DomainManager from "../components/DomainManager";
 import ExternalLinksTab from "../components/ExternalLinksTab";
+import RolesTab from "../components/RolesTab";
+import { usePermissions } from "../hooks/usePermissions";
+import { subscribeToRoles } from "../firebase";
 import { 
   getLocationDisplayName, 
   formatGpsCoords, 
@@ -215,6 +218,7 @@ export default function AdminDashboard() {
   }, []);
 
   const { currentUser } = useAuth();
+  const { can } = usePermissions();
   const { showToast } = useToast();
   const { showConfirm } = useModal();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -305,6 +309,7 @@ export default function AdminDashboard() {
   const [editJobType, setEditJobType] = useState("Full-time");
   const [editDesignation, setEditDesignation] = useState("");
   const [editRole, setEditRole] = useState("Employee");
+  const [editAllowManualCheckIn, setEditAllowManualCheckIn] = useState(false);
   const [editProgram, setEditProgram] = useState("Internship");
   const [editTasks, setEditTasks] = useState([]);
   const [editEmployeeId, setEditEmployeeId] = useState("");
@@ -375,6 +380,14 @@ export default function AdminDashboard() {
   const [regsPendingPage, setRegsPendingPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const [customRoles, setCustomRoles] = useState([]);
+  useEffect(() => {
+    if (currentUser?.companyId) {
+      return subscribeToRoles(currentUser.companyId, setCustomRoles);
+    }
+  }, [currentUser?.companyId]);
+
 
   // Notice Board / Rules & Leaves tab states
   const [rulesInput, setRulesInput] = useState("");
@@ -1868,6 +1881,7 @@ export default function AdminDashboard() {
     setEditGrade(user.grade || "");
     setEditCostCenter(user.costCenter || "");
     setEditPfNo(user.pfNo || "");
+    setEditAllowManualCheckIn(user.allowManualCheckIn || false);
     setEditTab("Personal");
     
     let currentRole = "Employee";
@@ -1900,7 +1914,8 @@ export default function AdminDashboard() {
         specialization: editSpecialization, instituteName: editInstituteName, yearOfCompletion: editYearOfCompletion,
         dateOfExit: editDateOfExit, photo: editPhoto, age: editAge,
         location: editLocation, unit: editUnit, grade: editGrade, costCenter: editCostCenter, pfNo: editPfNo,
-        role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee")
+        role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee"),
+        allowManualCheckIn: editAllowManualCheckIn
       };
 
       await updateUserRecord(
@@ -2615,13 +2630,17 @@ export default function AdminDashboard() {
               <p className="text-sm text-text-sec mt-1">Manage employee profiles, roles, and real-time attendance metrics across all departments.</p>
             </div>
             
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="py-3 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-md shadow-brand-primary/10 cursor-pointer"
-            >
-              <UserPlus size={16} />
-              <span>Add Employee</span>
-            </button>
+            <div className="flex gap-4 items-end flex-wrap w-full md:w-auto">
+              {can("create", "EmployeeManagement") && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="py-3 px-5 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-md shadow-brand-primary/10 cursor-pointer"
+                >
+                  <UserPlus size={16} />
+                  <span>Add Employee</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Directory Stats cards */}
@@ -2813,13 +2832,15 @@ export default function AdminDashboard() {
                               >
                                 <Eye size={13} />
                               </button>
-                              <button 
-                                onClick={() => openEditModal(user)} 
-                                className="w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec hover:text-brand-primary transition-colors cursor-pointer" 
-                                title="Edit User"
-                              >
-                                <Edit size={13} />
-                              </button>
+                              {can("update", "EmployeeManagement") && (
+                                <button 
+                                  onClick={() => openEditModal(user)} 
+                                  className="w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec hover:text-brand-primary transition-colors cursor-pointer" 
+                                  title="Edit User"
+                                >
+                                  <Edit size={13} />
+                                </button>
+                              )}
                               <button 
                                 onClick={() => exportSingleUserExcel(user)} 
                                 className="w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec hover:text-emerald-500 hover:border-emerald-500/30 transition-colors cursor-pointer" 
@@ -2834,7 +2855,7 @@ export default function AdminDashboard() {
                               >
                                 <FileText size={13} />
                               </button>
-                              {user.role !== "admin" && (
+                              {user.role !== "admin" && can("delete", "EmployeeManagement") && (
                                 <button 
                                   onClick={() => openDeleteConfirm(user)} 
                                   className="w-7 h-7 flex items-center justify-center border border-red-500/20 rounded-[8px] bg-red-500/5 hover:bg-red-500 text-red-500 hover:text-white transition-colors cursor-pointer" 
@@ -4791,7 +4812,21 @@ export default function AdminDashboard() {
                         <label className="text-[10px] font-bold text-text-sec uppercase">Role</label>
                         <select className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editRole} onChange={(e) => setEditRole(e.target.value)}>
                           <option value="Employee">Employee</option><option value="Project Manager">Project Manager</option><option value="Admin">Admin</option><option value="System Admin">System Admin</option>
+                          {customRoles.map(r => (
+                            <option key={r.id} value={r.name}>{r.name}</option>
+                          ))}
                         </select>
+                      </div>
+                      <div className="flex flex-col gap-1 md:col-span-3 mt-2 mb-2">
+                        <label className="flex items-center gap-2 text-sm font-bold text-text-main cursor-pointer p-3 border border-border-card rounded-[8px] bg-bg-base/30">
+                          <input 
+                            type="checkbox" 
+                            checked={editAllowManualCheckIn} 
+                            onChange={(e) => setEditAllowManualCheckIn(e.target.checked)}
+                            className="w-4 h-4 text-brand-primary"
+                          />
+                          Allow Manual Check-In (Bypass Geofence / WFH)
+                        </label>
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Job Type</label>
@@ -6967,6 +7002,10 @@ export default function AdminDashboard() {
 
       {activeTab === "domains" && (
         <DomainManager companyId={currentUser.companyId} />
+      )}
+      
+      {activeTab === "roles" && (
+        <RolesTab />
       )}
 
     </div>

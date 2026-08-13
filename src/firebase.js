@@ -138,6 +138,15 @@ const localDb = {
     } else {
       localStorage.removeItem("att_current_user");
     }
+  },
+
+  getRoles: () => {
+    const roles = localStorage.getItem("att_roles");
+    return roles ? JSON.parse(roles) : [];
+  },
+
+  saveRoles: (roles) => {
+    localStorage.setItem("att_roles", JSON.stringify(roles));
   }
 };
 
@@ -3934,6 +3943,71 @@ export const subscribeToEnvironmentSettings = (companyId, callback) => {
       const updated = JSON.parse(localStorage.getItem(`env_settings_${companyId}`) || '[]');
       callback(updated);
     }, 2000);
+    return () => clearInterval(interval);
+  }
+};
+
+// ----------------------------------------------------
+// ROLES & PERMISSIONS FUNCTIONS
+// ----------------------------------------------------
+export const createRole = async (companyId, roleData) => {
+  const newRole = {
+    ...roleData,
+    companyId,
+    createdAt: new Date().toISOString()
+  };
+  
+  if (getDbType() === 'firebase') {
+    const docRef = await addDoc(collection(db, 'companies', companyId, 'roles'), newRole);
+    return docRef.id;
+  } else {
+    const roles = localDb.getRoles();
+    const id = "role_" + Date.now();
+    roles.push({ ...newRole, id });
+    localDb.saveRoles(roles);
+    return id;
+  }
+};
+
+export const updateRole = async (companyId, roleId, roleData) => {
+  if (getDbType() === 'firebase') {
+    const roleRef = doc(db, 'companies', companyId, 'roles', roleId);
+    await updateDoc(roleRef, { ...roleData, updatedAt: new Date().toISOString() });
+  } else {
+    const roles = localDb.getRoles();
+    const idx = roles.findIndex(r => r.id === roleId && r.companyId === companyId);
+    if (idx !== -1) {
+      roles[idx] = { ...roles[idx], ...roleData, updatedAt: new Date().toISOString() };
+      localDb.saveRoles(roles);
+    }
+  }
+};
+
+export const deleteRole = async (companyId, roleId) => {
+  if (getDbType() === 'firebase') {
+    const roleRef = doc(db, 'companies', companyId, 'roles', roleId);
+    await deleteDoc(roleRef);
+  } else {
+    let roles = localDb.getRoles();
+    roles = roles.filter(r => !(r.id === roleId && r.companyId === companyId));
+    localDb.saveRoles(roles);
+  }
+};
+
+export const subscribeToRoles = (companyId, callback) => {
+  if (getDbType() === 'firebase') {
+    const q = query(collection(db, 'companies', companyId, 'roles'));
+    return onSnapshot(q, (snapshot) => {
+      const roles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(roles);
+    }, (error) => {
+      console.warn("Error subscribing to roles:", error);
+      callback([]);
+    });
+  } else {
+    const fetchLocal = () => localDb.getRoles().filter(r => r.companyId === companyId);
+    callback(fetchLocal());
+    const interval = setInterval(() => callback(fetchLocal()), 2000);
     return () => clearInterval(interval);
   }
 };

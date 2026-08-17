@@ -453,9 +453,29 @@ export default function DashboardLayout({ children }) {
   };
 
   const handleMarkAllAsRead = async () => {
+    // 1. Mark system notifications
     const unreadSystem = systemNotifications.filter(n => !n.read);
     for (const notif of unreadSystem) {
       await markNotificationRead(notif.id);
+    }
+    
+    // 2. Dismiss active leave/system request notifications
+    if (activeNotifications.length > 0) {
+      const currentDismissed = localStorage.getItem(`dismissed_leaves_${currentUser.uid}`);
+      const dismissedArr = currentDismissed ? JSON.parse(currentDismissed) : [];
+      const updated = [...new Set([...dismissedArr, ...activeNotifications.map(req => req.id)])];
+      localStorage.setItem(`dismissed_leaves_${currentUser.uid}`, JSON.stringify(updated));
+      setDismissedNotifs(updated);
+    }
+
+    // 3. Clear leave request update count for regular users
+    if (currentUser && currentUser.role !== "admin") {
+      const seen = {};
+      activeNotifications.forEach(req => {
+        seen[req.id] = req.status;
+      });
+      localStorage.setItem(`seen_leaves_${currentUser.uid}`, JSON.stringify(seen));
+      setNewUpdatesCount(0);
     }
   };
 

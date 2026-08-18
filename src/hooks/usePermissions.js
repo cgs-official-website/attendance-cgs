@@ -61,7 +61,7 @@ export function usePermissions() {
       "ExternalLinks", "CustomDomains"
     ];
 
-    return adminModules.some(module => activeRole.permissions[module]?.read);
+    return adminModules.some(module => activeRole.permissions?.[module]?.read);
   };
 
   return { can, hasAnyAdminPermission, roles, loading };

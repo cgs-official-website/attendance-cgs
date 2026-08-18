@@ -83,6 +83,61 @@ function getCacheKey(lat, lon) {
 /**
  * Resolves location name using OpenStreetMap Nominatim with caching
  */
+
+// Rate limiting queue for OSM Nominatim
+const requestQueue = [];
+let isProcessingQueue = false;
+let lastRequestTime = 0;
+const MIN_DELAY_MS = 1200; // 1.2 seconds between requests to OSM
+const MAX_QUEUE_SIZE = 15; // Max pending requests before falling back
+
+async function processQueue() {
+  if (isProcessingQueue || requestQueue.length === 0) return;
+  isProcessingQueue = true;
+
+  while (requestQueue.length > 0) {
+    const timeSinceLast = Date.now() - lastRequestTime;
+    if (timeSinceLast < MIN_DELAY_MS) {
+      await new Promise(resolve => setTimeout(resolve, MIN_DELAY_MS - timeSinceLast));
+    }
+
+    const item = requestQueue.shift();
+    if (!item) continue;
+    
+    const { url, resolveTask } = item;
+    lastRequestTime = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "Accept-Language": "en"
+        }
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        resolveTask(data);
+      } else if (res.status === 429) {
+        // Rate limited. Add a penalty.
+        lastRequestTime = Date.now() + 5000;
+        resolveTask(null);
+      } else {
+        resolveTask(null);
+      }
+    } catch (err) {
+      resolveTask(null);
+    }
+  }
+
+  isProcessingQueue = false;
+}
+
+
 export async function resolveLocationName(lat, lon) {
   if (!lat || !lon) return "—";
   
@@ -95,6 +150,7 @@ export async function resolveLocationName(lat, lon) {
   if (known) return known;
 
   const key = getCacheKey(numLat, numLon);
+  const fallback = `${numLat.toFixed(4)}, ${numLon.toFixed(4)}`;
 
   // 2. Check memory cache
   if (memoryCache.has(key)) {
@@ -108,65 +164,56 @@ export async function resolveLocationName(lat, lon) {
       memoryCache.set(key, localVal);
       return localVal;
     }
-  } catch (e) {
-    // localStorage may be disabled
+  } catch (e) {}
+
+  // 4. Queue the OSM Request
+  if (requestQueue.length >= MAX_QUEUE_SIZE) {
+    // If queue is full, return fallback WITHOUT caching, so it can be retried later
+    return fallback;
   }
 
-  // 4. Fetch from OpenStreetMap Reverse Geocoding API with timeout
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${numLat}&lon=${numLon}&format=json&zoom=14&addressdetails=1`;
+  
+  return new Promise((resolve) => {
+    requestQueue.push({
+      url,
+      resolveTask: (data) => {
+        if (!data) {
+          memoryCache.set(key, fallback); // Temporary fail cache
+          return resolve(fallback);
+        }
 
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${numLat}&lon=${numLon}&format=json&zoom=14&addressdetails=1`;
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Accept-Language": "en"
+        const addr = data.address || {};
+        const locality = addr.suburb || addr.neighbourhood || addr.city_district || addr.residential || addr.road || "";
+        const city = addr.city || addr.town || addr.municipality || addr.village || addr.county || "";
+        const state = addr.state || "";
+
+        let formattedName = "";
+        if (locality && city && locality.toLowerCase() !== city.toLowerCase()) {
+          formattedName = `${locality}, ${city}`;
+        } else if (city && state) {
+          formattedName = `${city}, ${state}`;
+        } else if (data.display_name) {
+          const parts = data.display_name.split(",");
+          formattedName = parts.slice(0, 2).join(",").trim();
+        } else {
+          formattedName = fallback;
+        }
+
+        memoryCache.set(key, formattedName);
+        try {
+          localStorage.setItem(key, formattedName);
+        } catch (e) {}
+
+        resolve(formattedName);
       }
     });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const data = await res.json();
-      const addr = data.address || {};
-      
-      const locality = addr.suburb || addr.neighbourhood || addr.city_district || addr.residential || addr.road || "";
-      const city = addr.city || addr.town || addr.municipality || addr.village || addr.county || "";
-      const state = addr.state || "";
-
-      let formattedName = "";
-      if (locality && city && locality.toLowerCase() !== city.toLowerCase()) {
-        formattedName = `${locality}, ${city}`;
-      } else if (city && state) {
-        formattedName = `${city}, ${state}`;
-      } else if (data.display_name) {
-        const parts = data.display_name.split(",");
-        formattedName = parts.slice(0, 2).join(",").trim();
-      } else {
-        formattedName = `${numLat.toFixed(4)}, ${numLon.toFixed(4)}`;
-      }
-
-      // Save to caches
-      memoryCache.set(key, formattedName);
-      try {
-        localStorage.setItem(key, formattedName);
-      } catch (e) {}
-
-      return formattedName;
-    }
-  } catch (err) {
-    // Fail silently to coordinate fallback
-  }
-
-  // Fallback to coordinates
-  const fallback = `${numLat.toFixed(4)}, ${numLon.toFixed(4)}`;
-  memoryCache.set(key, fallback);
-  return fallback;
+    
+    // Trigger queue processing
+    processQueue();
+  });
 }
 
-/**
- * Returns instantaneous display name if available in cache or location object
- */
 export function getLocationDisplayName(location) {
   if (!location) return "—";
   

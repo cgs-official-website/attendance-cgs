@@ -2612,7 +2612,7 @@ export default function AdminDashboard() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <button
                           onClick={() => handleApproveLeave(req.id, req.userName || req.name)}
                           className="py-1.5 px-3 bg-brand-primary hover:bg-brand-hover text-white text-[10px] font-bold rounded-[8px] cursor-pointer"
@@ -3070,7 +3070,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Sub-tab segmented control */}
-            <div className="flex border-b border-border-card mb-6">
+            <div className="flex border-b border-border-card mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
               <button
                 onClick={() => setApprovalsSubTab("leaves")}
                 className={`py-3 px-6 text-sm font-bold border-b-2 transition-all cursor-pointer ${
@@ -3295,7 +3295,7 @@ export default function AdminDashboard() {
                         {/* Leave Balances Grid */}
                         <div className="bg-bg-base/30 rounded-[16px] border border-border-card p-4 space-y-3">
                           <span className="text-[10px] font-bold text-text-mut uppercase block text-left">Leave Balances</span>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-2 bg-bg-card rounded-[10px] border border-border-card text-center">
                               <span className="text-[8px] font-bold text-text-mut uppercase block">Annual</span>
                               <span className="text-sm font-extrabold text-text-main mt-0.5 block">
@@ -3336,7 +3336,7 @@ export default function AdminDashboard() {
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                           <button
                             type="button"
                             onClick={() => handleRejectLeave(selectedRequest.id, selectedRequest.userName, managerCommentInput)}
@@ -3621,7 +3621,7 @@ export default function AdminDashboard() {
                       </div>
 
                       {/* Times display */}
-                      <div className="grid grid-cols-2 gap-4 bg-bg-base/30 rounded-[16px] border border-border-card p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-bg-base/30 rounded-[16px] border border-border-card p-4">
                         <div>
                           <span className="text-[10px] font-bold text-text-mut uppercase block">Requested Check-In</span>
                           <span className="text-sm font-extrabold text-brand-primary mt-1 block">{formatShiftTime(selectedRegRequest.checkInTime)}</span>
@@ -3649,7 +3649,7 @@ export default function AdminDashboard() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                         <button
                           type="button"
                           onClick={() => handleRejectReg(selectedRegRequest.id, selectedRegRequest.userName, regManagerCommentInput)}
@@ -4050,7 +4050,7 @@ export default function AdminDashboard() {
                   const topPerformer = employeeStats[0];
                   const aboveTargetCount = employeeStats.filter(e => e.avgHours >= 8).length;
                   return (
-                    <div className="mt-6 pt-5 border-t border-border-card grid grid-cols-3 gap-4">
+                    <div className="mt-6 pt-5 border-t border-border-card grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="text-center p-3 rounded-[12px] bg-bg-base/50 border border-border-card">
                         <span className="text-[9px] font-bold text-text-mut uppercase tracking-wide block mb-1">Team Avg</span>
                         <span className="text-lg font-extrabold text-brand-primary">{overallAvg}h</span>
@@ -4284,7 +4284,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
                   <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Department</span>
                   <span className="text-sm font-bold text-text-main">{selectedUser.department || "—"}</span>
@@ -4311,7 +4311,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {selectedUser.role !== "superadmin" && (
                   <div className="bg-bg-base/30 p-3 rounded-[12px] border border-border-card">
                     <span className="text-[10px] font-bold text-text-sec uppercase block mb-1">Shift Schedule</span>
@@ -4617,7 +4617,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-3 gap-4 col-span-3">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 col-span-3">
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-bold text-text-sec uppercase">Annual Leaves</label>
                           <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={newAnnual} onChange={(e) => setNewAnnual(Number(e.target.value))} required />
@@ -5154,7 +5154,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: "Total Messages", val: chatMessages.length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary" },
                 { label: "Deleted Messages", val: chatMessages.filter(m => m.isDeleted).length, icon: <Trash2 size={18} className='inline-block mr-1' />, color: "text-red-500" },
@@ -5661,7 +5661,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5 relative" ref={categoryDropdownRef}>
                     <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Category</label>
                     <div className="relative flex items-center">
@@ -5729,7 +5729,7 @@ export default function AdminDashboard() {
                   <span>Assignment Details</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Status</label>
                     <div className="relative flex items-center">
@@ -5778,7 +5778,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {(assetFormStatus === "Assigned" || assetFormAssignedUser) && (
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border-card/60 animate-fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border-card/60 animate-fade-in">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Date of Assigning</label>
                       <div className="relative flex items-center">
@@ -5898,7 +5898,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-extrabold text-text-sec uppercase tracking-wider">Date of Assigning</label>
                     <div className="relative flex items-center">
@@ -6254,7 +6254,7 @@ export default function AdminDashboard() {
                     <div className="border-t-[3px] border-black w-full mb-4"></div>
                     
                     {/* Employee Info Grid */}
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-[10px] font-normal text-black mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-[10px] font-normal text-black mb-4">
                       {/* Left Column */}
                       <div>
                         <div className="grid grid-cols-[120px_1fr]"><span>Emp Name</span><span>: {user.name || 'NaN'}</span></div>
@@ -6553,7 +6553,7 @@ export default function AdminDashboard() {
               <div className="border-t-[3px] border-black w-full mb-4"></div>
               
               {/* Employee Info Grid */}
-              <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-[10px] font-normal text-black mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-[10px] font-normal text-black mb-4">
                 {/* Left Column */}
                 <div>
                   <div className="grid grid-cols-[120px_1fr]"><span>Emp Name</span><span>: {selectedPayrollUser.name || 'NaN'}</span></div>
@@ -6917,7 +6917,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* GPS Coordinates Grid */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-3.5 rounded-[14px] bg-bg-base/50 border border-border-card">
                   <span className="text-[10px] font-bold text-text-mut uppercase tracking-wider block">Latitude</span>
                   <span className="text-xs font-mono font-bold text-text-main mt-0.5 block">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { Mailbox, AlertTriangle, Check, ShieldAlert,

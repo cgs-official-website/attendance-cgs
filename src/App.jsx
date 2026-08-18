@@ -1,6 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import { usePermissions } from "./hooks/usePermissions";
 import DashboardLayout from "./components/DashboardLayout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -33,17 +34,15 @@ function ProtectedRoute({ children }) {
 // Protected Route Component for Admin only
 function AdminRoute({ children }) {
   const { currentUser } = useAuth();
+  const { hasAnyAdminPermission, loading } = usePermissions();
   
   if (!currentUser) {
     return <Navigate to="/" replace />;
   }
   
-  const isAdminRole = 
-    currentUser.role === "admin" || 
-    currentUser.role === "system admin" || 
-    currentUser.role === "systemadmin";
+  if (loading) return null;
   
-  if (!isAdminRole) {
+  if (!hasAnyAdminPermission()) {
     return <Navigate to="/dashboard" replace />;
   }
   
@@ -68,23 +67,33 @@ function SuperAdminRoute({ children }) {
 // Public Route Component (Login, Register) - redirects logged-in users
 function PublicRoute({ children }) {
   const { currentUser } = useAuth();
+  const { hasAnyAdminPermission, loading } = usePermissions();
   
   if (currentUser) {
+    if (loading) return null;
+    
     if (currentUser.role === "superadmin") {
       return <Navigate to="/superadmin" replace />;
     }
-    const isAdminRole = 
-      currentUser.role === "admin" || 
-      currentUser.role === "system admin" || 
-      currentUser.role === "systemadmin";
-      
-    if (isAdminRole) {
+    if (hasAnyAdminPermission()) {
       return <Navigate to="/admin" replace />;
     }
     return <Navigate to="/dashboard" replace />;
   }
   
   return children;
+}
+
+function RootRouteRedirect() {
+  const { currentUser } = useAuth();
+  const { hasAnyAdminPermission, loading } = usePermissions();
+
+  if (!currentUser) return <Navigate to="/" replace />;
+  if (loading) return null;
+
+  if (currentUser.role === "superadmin") return <Navigate to="/superadmin" replace />;
+  if (hasAnyAdminPermission()) return <Navigate to="/admin" replace />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 export default function App() {
@@ -149,7 +158,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardLayout>
-                {(currentUser?.role === "admin" || currentUser?.role === "system admin" || currentUser?.role === "systemadmin") ? <Navigate to="/admin" replace /> : <UserDashboard />}
+                <UserDashboard />
               </DashboardLayout>
             </ProtectedRoute>
           } 
@@ -159,7 +168,7 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardLayout>
-                {(currentUser?.role === "admin" || currentUser?.role === "system admin" || currentUser?.role === "systemadmin") ? <Navigate to="/admin" replace /> : <History />}
+                <History />
               </DashboardLayout>
             </ProtectedRoute>
           } 
@@ -252,15 +261,7 @@ export default function App() {
         {/* Catch-all redirect */}
         <Route 
           path="*" 
-          element={
-            currentUser 
-              ? currentUser.role === "superadmin"
-                ? <Navigate to="/superadmin" replace />
-                : (currentUser.role === "admin" || currentUser.role === "system admin" || currentUser.role === "systemadmin")
-                  ? <Navigate to="/admin" replace /> 
-                  : <Navigate to="/dashboard" replace />
-              : <Navigate to="/" replace />
-          } 
+          element={<RootRouteRedirect />}
         />
       </Routes>
       {/* Zuna AI Chatbot — floating on all pages */}

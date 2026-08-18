@@ -614,216 +614,223 @@ export default function DashboardLayout({ children }) {
   const showProjectsBadge = activeProjects.length > 0 && clearedItems.projects !== activeProjects.sort().join(",");
 
   // Sidebar navigation items
-  const menuItems = isSuperAdmin ? [
-    {
-      label: "Super Admin Portal",
-      icon: ShieldAlert,
-      active: location.pathname === "/superadmin",
-      onClick: () => { navigate("/superadmin"); setIsMobileOpen(false); }
-    },
-    {
+    const { can } = usePermissions();
+
+  let menuItems = [];
+  
+  if (isSuperAdmin) {
+    menuItems = [
+      {
+        label: "Super Admin Portal",
+        icon: ShieldAlert,
+        active: location.pathname === "/superadmin",
+        onClick: () => { navigate("/superadmin"); setIsMobileOpen(false); }
+      },
+      {
+        label: "My Profile",
+        icon: User,
+        active: location.pathname === "/profile",
+        onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
+      }
+    ];
+  } else {
+    // 1. Core Employee Items (always visible)
+    menuItems.push(
+      {
+        label: "Dashboard",
+        icon: LayoutGrid,
+        active: location.pathname === "/dashboard" && !searchParams.get("tab"),
+        module: "attendance",
+        onClick: () => { navigate("/dashboard"); setIsMobileOpen(false); }
+      },
+      {
+        label: "Leave Requests",
+        icon: Calendar,
+        active: location.pathname === "/dashboard" && searchParams.get("tab") === "leaves",
+        module: "attendance",
+        onClick: () => { navigate("/dashboard?tab=leaves"); setIsMobileOpen(false); }
+      },
+      {
+        label: "Team Hub",
+        icon: MessageSquare,
+        active: location.pathname === "/team-hub",
+        badge: showTeamHubBadge ? realUnreadMessagesCount : null,
+        module: "team-hub",
+        onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
+      },
+      {
+        label: "Project Management",
+        icon: Briefcase,
+        active: location.pathname === "/project-management",
+        hidden: !(currentUser?.isProjectManager || currentUser?.role === "Project Manager" || currentUser?.role === "admin" || currentUser?.name === "Mohamed Asfaque A" || can('read', 'ProjectManagement')),
+        badge: location.pathname === "/project-management" ? null : (showProjectsBadge ? activeProjects.length : null),
+        module: "projects",
+        onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
+      },
+      {
+        label: "Project Calendar",
+        icon: Calendar,
+        active: location.pathname === "/project-calendar",
+        hidden: !(currentUser?.isProjectManager || currentUser?.role === "Project Manager" || currentUser?.role === "admin" || currentUser?.name === "Mohamed Asfaque A" || can('read', 'ProjectManagement')),
+        module: "projects",
+        onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
+      },
+      {
+        label: "Task Management",
+        icon: CheckSquare,
+        active: location.pathname === "/task-management",
+        badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
+        module: "tasks",
+        onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
+      },
+      {
+        label: "My Assets",
+        icon: HardDrive,
+        active: location.pathname === "/dashboard" && searchParams.get("tab") === "assets",
+        module: "assets",
+        onClick: () => { navigate("/dashboard?tab=assets"); setIsMobileOpen(false); }
+      },
+      {
+        label: "My Payslips",
+        icon: IndianRupee,
+        active: location.pathname === "/dashboard" && searchParams.get("tab") === "payslips",
+        module: "payroll",
+        onClick: () => { navigate("/dashboard?tab=payslips"); setIsMobileOpen(false); }
+      },
+      {
+        label: "My History",
+        icon: Calendar,
+        active: location.pathname === "/history",
+        module: "attendance",
+        onClick: () => { navigate("/history"); setIsMobileOpen(false); }
+      }
+    );
+
+    // 2. Admin Items (conditionally pushed)
+    if (isAdminUser || can("read", "Dashboard")) {
+      menuItems.push({
+        label: "Admin Analytics",
+        icon: LayoutGrid,
+        active: location.pathname === "/admin" && activeTabParam === "analytics",
+        module: "attendance",
+        onClick: () => { navigate("/admin?tab=analytics"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "LiveActivity")) {
+      menuItems.push({
+        label: "Admin Panel",
+        icon: Shield,
+        active: location.pathname === "/admin" && activeTabParam === "live",
+        module: "attendance",
+        onClick: () => { navigate("/admin?tab=live"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "EmployeeManagement")) {
+      menuItems.push({
+        label: "Staff Directory",
+        icon: Users,
+        active: location.pathname === "/admin" && activeTabParam === "users",
+        onClick: () => { navigate("/admin?tab=users"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "LeaveApprovals")) {
+      menuItems.push({
+        label: "Leave Approvals",
+        icon: Calendar,
+        active: location.pathname === "/admin" && activeTabParam === "logs" && (searchParams.get("sub") || "leaves") === "leaves",
+        badge: leaveRequestsList.length > 0 ? leaveRequestsList.length : null,
+        module: "attendance",
+        onClick: () => { navigate("/admin?tab=logs&sub=leaves"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "Regularization")) {
+      menuItems.push({
+        label: "Regularization Approvals",
+        icon: Clock,
+        active: location.pathname === "/admin" && activeTabParam === "logs" && searchParams.get("sub") === "regularization",
+        badge: regularizationRequestsList.length > 0 ? regularizationRequestsList.length : null,
+        module: "attendance",
+        onClick: () => { navigate("/admin?tab=logs&sub=regularization"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "NoticeBoard")) {
+      menuItems.push({
+        label: "Notice Board",
+        icon: ClipboardList,
+        active: location.pathname === "/admin" && activeTabParam === "rules",
+        module: "attendance",
+        onClick: () => { navigate("/admin?tab=rules"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "TeamHub")) {
+      menuItems.push({
+        label: "Chat Monitor",
+        icon: Monitor,
+        active: location.pathname === "/admin" && activeTabParam === "chat",
+        module: "team-hub",
+        onClick: () => { navigate("/admin?tab=chat"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "Assets")) {
+      menuItems.push({
+        label: "Asset Management",
+        icon: HardDrive,
+        active: location.pathname === "/admin" && activeTabParam === "assets",
+        module: "assets",
+        onClick: () => { navigate("/admin?tab=assets"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "ExternalLinks")) {
+      menuItems.push({
+        label: "External Links",
+        icon: Link2,
+        active: location.pathname === "/admin" && activeTabParam === "external-links",
+        module: "projects",
+        onClick: () => { navigate("/admin?tab=external-links"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "Payroll")) {
+      menuItems.push({
+        label: "Payroll (India)",
+        icon: IndianRupee,
+        active: location.pathname === "/admin" && activeTabParam === "payroll",
+        module: "payroll",
+        onClick: () => { navigate("/admin?tab=payroll"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "CustomDomains")) {
+      menuItems.push({
+        label: "Custom Domains",
+        icon: Globe,
+        active: location.pathname === "/admin" && activeTabParam === "domains",
+        onClick: () => { navigate("/admin?tab=domains"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "RolesPermissions")) {
+      menuItems.push({
+        label: "Roles & Permissions",
+        icon: ShieldCheck,
+        active: location.pathname === "/admin" && activeTabParam === "roles",
+        onClick: () => { navigate("/admin?tab=roles"); setIsMobileOpen(false); }
+      });
+    }
+    if (isAdminUser || can("read", "EnvironmentSetup")) {
+      menuItems.push({
+        label: "Environment Setup",
+        icon: Settings,
+        active: location.pathname === "/admin/environmental-setup",
+        onClick: () => { navigate("/admin/environmental-setup"); setIsMobileOpen(false); }
+      });
+    }
+
+    // Finally, push "My Profile" at the end for all non-super-admins
+    menuItems.push({
       label: "My Profile",
       icon: User,
       active: location.pathname === "/profile",
       onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
-    }
-  ] : isAdmin ? [
-    {
-      label: "Dashboard",
-      icon: LayoutGrid,
-      active: location.pathname === "/admin" && activeTabParam === "analytics",
-      module: "attendance",
-      onClick: () => { navigate("/admin?tab=analytics"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Admin Panel",
-      icon: Shield,
-      active: location.pathname === "/admin" && activeTabParam === "live",
-      module: "attendance",
-      onClick: () => { navigate("/admin?tab=live"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Staff Directory",
-      icon: Users,
-      active: location.pathname === "/admin" && activeTabParam === "users",
-      onClick: () => { navigate("/admin?tab=users"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Leave Approvals",
-      icon: Calendar,
-      active: location.pathname === "/admin" && activeTabParam === "logs" && (searchParams.get("sub") || "leaves") === "leaves",
-      hidden: !isAdmin,
-      badge: leaveRequestsList.length > 0 ? leaveRequestsList.length : null,
-      module: "attendance",
-      onClick: () => { navigate("/admin?tab=logs&sub=leaves"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Regularization Approvals",
-      icon: Clock,
-      active: location.pathname === "/admin" && activeTabParam === "logs" && searchParams.get("sub") === "regularization",
-      hidden: !isAdmin,
-      badge: regularizationRequestsList.length > 0 ? regularizationRequestsList.length : null,
-      module: "attendance",
-      onClick: () => { navigate("/admin?tab=logs&sub=regularization"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Notice Board",
-      icon: ClipboardList,
-      active: location.pathname === "/admin" && activeTabParam === "rules",
-      module: "attendance",
-      onClick: () => { navigate("/admin?tab=rules"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Team Hub",
-      icon: MessageSquare,
-      active: location.pathname === "/team-hub",
-      badge: showTeamHubBadge ? realUnreadMessagesCount : null,
-      module: "team-hub",
-      onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Chat Monitor",
-      icon: Monitor,
-      active: location.pathname === "/admin" && activeTabParam === "chat",
-      module: "team-hub",
-      onClick: () => { navigate("/admin?tab=chat"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Asset Management",
-      icon: HardDrive,
-      active: location.pathname === "/admin" && activeTabParam === "assets",
-      module: "assets",
-      onClick: () => { navigate("/admin?tab=assets"); setIsMobileOpen(false); }
-    },
-    {
-      label: "External Links",
-      icon: Link2,
-      active: location.pathname === "/admin" && activeTabParam === "external-links",
-      module: "projects",
-      onClick: () => { navigate("/admin?tab=external-links"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Payroll (India)",
-      icon: IndianRupee,
-      active: location.pathname === "/admin" && activeTabParam === "payroll",
-      module: "payroll",
-      onClick: () => { navigate("/admin?tab=payroll"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Custom Domains",
-      icon: Globe,
-      active: location.pathname === "/admin" && activeTabParam === "domains",
-      onClick: () => { navigate("/admin?tab=domains"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Project Management",
-      icon: Briefcase,
-      active: location.pathname === "/project-management",
-      badge: location.pathname === "/project-management" ? null : (isAdmin ? null : (showProjectsBadge ? activeProjects.length : null)),
-      module: "projects",
-      onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Project Calendar",
-      icon: Calendar,
-      active: location.pathname === "/project-calendar",
-      module: "projects",
-      onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Roles & Permissions",
-      icon: ShieldCheck,
-      active: location.pathname === "/admin" && activeTabParam === "roles",
-      onClick: () => { navigate("/admin?tab=roles"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Environment Setup",
-      icon: Settings,
-      active: location.pathname === "/admin/environmental-setup",
-      onClick: () => { navigate("/admin/environmental-setup"); setIsMobileOpen(false); }
-    },
-    {
-      label: "My Profile",
-      icon: User,
-      active: location.pathname === "/profile",
-      onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
-    }
-  ] : [
-    {
-      label: "Dashboard",
-      icon: LayoutGrid,
-      active: location.pathname === "/dashboard" && !searchParams.get("tab"),
-      module: "attendance",
-      onClick: () => { navigate("/dashboard"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Leave Requests",
-      icon: Calendar,
-      active: location.pathname === "/dashboard" && searchParams.get("tab") === "leaves",
-      module: "attendance",
-      onClick: () => { navigate("/dashboard?tab=leaves"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Team Hub",
-      icon: MessageSquare,
-      active: location.pathname === "/team-hub",
-      badge: showTeamHubBadge ? realUnreadMessagesCount : null,
-      module: "team-hub",
-      onClick: () => { navigate("/team-hub"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Project Management",
-      icon: Briefcase,
-      active: location.pathname === "/project-management",
-      hidden: !(currentUser?.isProjectManager || currentUser?.role === "Project Manager" || currentUser?.role === "admin" || currentUser?.name === "Mohamed Asfaque A"),
-      badge: location.pathname === "/project-management" ? null : (showProjectsBadge ? activeProjects.length : null),
-      module: "projects",
-      onClick: () => { navigate("/project-management"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Project Calendar",
-      icon: Calendar,
-      active: location.pathname === "/project-calendar",
-      hidden: !(currentUser?.isProjectManager || currentUser?.role === "Project Manager" || currentUser?.role === "admin" || currentUser?.name === "Mohamed Asfaque A"),
-      module: "projects",
-      onClick: () => { navigate("/project-calendar"); setIsMobileOpen(false); }
-    },
-    {
-      label: "Task Management",
-      icon: CheckSquare,
-      active: location.pathname === "/task-management",
-      badge: location.pathname === "/task-management" ? null : (showTasksBadge ? activeTasks.length : null),
-      module: "tasks",
-      onClick: () => { navigate("/task-management"); setIsMobileOpen(false); }
-    },
-    {
-      label: "My Assets",
-      icon: HardDrive,
-      active: location.pathname === "/dashboard" && searchParams.get("tab") === "assets",
-      module: "assets",
-      onClick: () => { navigate("/dashboard?tab=assets"); setIsMobileOpen(false); }
-    },
-    {
-      label: "My Payslips",
-      icon: IndianRupee,
-      active: location.pathname === "/dashboard" && searchParams.get("tab") === "payslips",
-      module: "payroll",
-      onClick: () => { navigate("/dashboard?tab=payslips"); setIsMobileOpen(false); }
-    },
-    {
-      label: "My History",
-      icon: Calendar,
-      active: location.pathname === "/history",
-      module: "attendance",
-      onClick: () => { navigate("/history"); setIsMobileOpen(false); }
-    },
-    {
-      label: "My Profile",
-      icon: User,
-      active: location.pathname === "/profile",
-      onClick: () => { navigate("/profile"); setIsMobileOpen(false); }
-    }
-  ];
+    });
+  }
 
   const filteredMenuItems = menuItems.filter(item => {
     if (isSuperAdmin) return true;

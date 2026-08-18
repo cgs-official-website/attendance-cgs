@@ -43,6 +43,26 @@ export function usePermissions() {
 
     return false;
   };
+  const hasAnyAdminPermission = () => {
+    if (!currentUser) return false;
+    const roleLower = (currentUser.role || "").toLowerCase();
+    if (["admin", "superadmin", "system admin", "systemadmin"].includes(roleLower)) {
+      return true;
+    }
+    
+    const activeRole = roles.find(r => r.id === currentUser.role || r.name === currentUser.role);
+    if (!activeRole || !activeRole.permissions) return false;
 
-  return { can, roles, loading };
+    // List of modules that belong to the admin dashboard
+    const adminModules = [
+      "Dashboard", "LiveActivity", "EmployeeManagement", "LeaveApprovals", 
+      "Regularization", "AttendanceLogs", "Payroll", "NoticeBoard", 
+      "Assets", "ActivityHistory", "EnvironmentSetup", "RolesPermissions",
+      "ExternalLinks", "CustomDomains"
+    ];
+
+    return adminModules.some(module => activeRole.permissions[module]?.read);
+  };
+
+  return { can, hasAnyAdminPermission, roles, loading };
 }

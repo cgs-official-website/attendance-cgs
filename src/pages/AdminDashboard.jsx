@@ -223,8 +223,28 @@ export default function AdminDashboard() {
   const { showConfirm } = useModal();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "superadmin" || currentUser?.role === "system admin";
+
   // Sync activeTab with sidebar parameters: 'live' | 'logs' | 'users' | 'analytics'
-  const activeTab = searchParams.get("tab") || "live";
+  const activeTabParam = searchParams.get("tab");
+  let defaultTab = "live";
+  
+  if (!activeTabParam && !isAdminUser) {
+    if (can("read", "Dashboard")) defaultTab = "analytics";
+    else if (can("read", "LiveActivity")) defaultTab = "live";
+    else if (can("read", "EmployeeManagement")) defaultTab = "users";
+    else if (can("read", "LeaveApprovals") || can("read", "Regularization")) defaultTab = "logs";
+    else if (can("read", "NoticeBoard")) defaultTab = "rules";
+    else if (can("read", "TeamHub")) defaultTab = "chat";
+    else if (can("read", "Assets")) defaultTab = "assets";
+    else if (can("read", "ExternalLinks")) defaultTab = "external-links";
+    else if (can("read", "Payroll")) defaultTab = "payroll";
+    else if (can("read", "CustomDomains")) defaultTab = "domains";
+    else if (can("read", "RolesPermissions")) defaultTab = "roles";
+    else if (can("read", "EnvironmentSetup")) defaultTab = "environmental-setup";
+  }
+
+  const activeTab = activeTabParam || defaultTab;
   const setActiveTab = (tab) => setSearchParams({ tab });
 
   const [users, setUsers] = useState([]);
@@ -2018,7 +2038,7 @@ export default function AdminDashboard() {
     <div className="space-y-5 sm:space-y-8 w-full max-w-[1400px] mx-auto text-left">
       
       {/* ------------------ VIEW 1: ADMIN PANEL / LIVE MONITORING ------------------ */}
-      {activeTab === "live" && (() => {
+      {(activeTab === "live" && (isAdminUser || can("read", "LiveActivity"))) && (() => {
         const liveStartIndex = (livePage - 1) * rowsPerPage;
         const paginatedLiveStatus = liveStatusList.slice(liveStartIndex, liveStartIndex + rowsPerPage);
         const liveTotalPages = Math.ceil(liveStatusList.length / rowsPerPage) || 1;
@@ -2617,7 +2637,7 @@ export default function AdminDashboard() {
       })()}
 
       {/* ------------------ VIEW 2: STAFF DIRECTORY / USERS REGISTRY ------------------ */}
-      {activeTab === "users" && (() => {
+      {(activeTab === "users" && (isAdminUser || can("read", "EmployeeManagement"))) && (() => {
         const usersStartIndex = (usersPage - 1) * rowsPerPage;
         const paginatedProfiles = filteredProfiles.slice(usersStartIndex, usersStartIndex + rowsPerPage);
         const usersTotalPages = Math.ceil(filteredProfiles.length / rowsPerPage) || 1;
@@ -2939,7 +2959,7 @@ export default function AdminDashboard() {
       })()}
 
       {/* ------------------ VIEW 3: LEAVE APPROVAL CENTER ------------------ */}
-      {activeTab === "logs" && (() => {
+      {(activeTab === "logs" && (isAdminUser || can("read", "LeaveApprovals") || can("read", "Regularization"))) && (() => {
         const pendingCount = leaveRequests.length + regularizationRequests.length;
         const approvedThisMonth = allRequests.filter(r => r.status === "approved").length;
         
@@ -3813,7 +3833,7 @@ export default function AdminDashboard() {
       })()}
 
       {/* ------------------ VIEW 4: ANALYTICS & INSIGHTS ------------------ */}
-      {activeTab === "analytics" && (() => {
+      {(activeTab === "analytics" && (isAdminUser || can("read", "Dashboard"))) && (() => {
         const dailyStats = getDailyAttendanceStats();
         const deptStats = getDeptAttendanceRates();
         const employeeStats = getEmployeeWorkingStats();
@@ -4055,7 +4075,7 @@ export default function AdminDashboard() {
       })()}
 
       {/* ------------------ VIEW 5: NOTICE BOARD / RULES & LEAVES ------------------ */}
-      {activeTab === "rules" && (
+      {(activeTab === "rules" && (isAdminUser || can("read", "NoticeBoard"))) && (
         <>
           <div className="mb-6 text-left">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">Notice Board Management</h1>
@@ -4687,8 +4707,8 @@ export default function AdminDashboard() {
               <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
                 {editTab === 'Personal' && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="flex flex-col gap-1 md:col-span-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1 sm:col-span-2">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Profile Photo (URL)</label>
                         <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPhoto} onChange={(e) => setEditPhoto(e.target.value)} placeholder="e.g. https://..." />
                       </div>
@@ -4799,7 +4819,7 @@ export default function AdminDashboard() {
 
                 {editTab === 'Employment' && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Department *</label>
                         <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editDept} onChange={(e) => setEditDept(e.target.value)} placeholder="e.g. Engineering" required />
@@ -4817,7 +4837,7 @@ export default function AdminDashboard() {
                           ))}
                         </select>
                       </div>
-                      <div className="flex flex-col gap-1 md:col-span-3 mt-2 mb-2">
+                      <div className="flex flex-col gap-1 sm:col-span-2 mt-2 mb-2">
                         <label className="flex items-center gap-2 text-sm font-bold text-text-main cursor-pointer p-3 border border-border-card rounded-[8px] bg-bg-base/30">
                           <input 
                             type="checkbox" 
@@ -4877,7 +4897,7 @@ export default function AdminDashboard() {
                         <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={editPfNo} onChange={(e) => setEditPfNo(e.target.value)} placeholder="e.g. PF123456" />
                       </div>
                       
-                      <div className="flex flex-col gap-1 mt-2 col-span-3">
+                      <div className="flex flex-col gap-1 mt-2 sm:col-span-2">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Shift Type *</label>
                         <div className="flex gap-2">
                           <button type="button" className={`flex-1 py-1.5 px-2 border rounded-[8px] text-[11px] font-bold transition-all ${editShiftStart === '09:00' || editShiftType === 'Morning' ? 'bg-brand-primary text-white border-brand-primary' : 'bg-bg-card border-border-card text-text-main'}`} onClick={() => { setEditShiftType('Morning'); setEditShiftStart('09:00'); setEditShiftEnd('18:00'); }}>Morning Shift</button>
@@ -4885,7 +4905,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-3 gap-4 col-span-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:col-span-2">
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-bold text-text-sec uppercase">Annual Leaves</label>
                           <input type="number" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none" value={editAnnual} onChange={(e) => setEditAnnual(Number(e.target.value))} required />
@@ -5028,7 +5048,7 @@ export default function AdminDashboard() {
       )}
 
       {/* ─── CHAT MONITOR TAB ─── */}
-      {activeTab === "chat" && (() => {
+      {(activeTab === "chat" && (isAdminUser || can("read", "TeamHub"))) && (() => {
         const getThreadLabel = (msg) => {
           if (msg.threadType === "channel") {
             const ch = chatChannels.find(c => c.id === msg.threadId);
@@ -5324,7 +5344,7 @@ export default function AdminDashboard() {
       })()}
 
       {/* ------------------ VIEW 7: ASSET MANAGEMENT ------------------ */}
-      {activeTab === "assets" && (() => {
+      {(activeTab === "assets" && (isAdminUser || can("read", "Assets"))) && (() => {
         // Filter assets by search query, status, and category
         const filteredAssets = assets.filter((asset) => {
           const matchSearch =
@@ -5976,7 +5996,7 @@ export default function AdminDashboard() {
       )}
 
       {/* ------------------ VIEW: PAYROLL (INDIA) ------------------ */}
-      {activeTab === "payroll" && (() => {
+      {(activeTab === "payroll" && (isAdminUser || can("read", "Payroll"))) && (() => {
         // Calculations for Indian Payroll
         const calculatePayroll = (gross, paidDays, workingDays) => {
           const lopsDays = Math.max(0, workingDays - paidDays);
@@ -6365,7 +6385,7 @@ export default function AdminDashboard() {
         );
       })()}
       {/* ------------------ VIEW: EXTERNAL LINKS ------------------ */}
-      {activeTab === "external-links" && (
+      {(activeTab === "external-links" && (isAdminUser || can("read", "ExternalLinks"))) && (
         <div className="animate-fade-in">
           <ExternalLinksTab 
             currentUser={currentUser}
@@ -7000,11 +7020,11 @@ export default function AdminDashboard() {
         document.body
       )}
 
-      {activeTab === "domains" && (
+      {(activeTab === "domains" && (isAdminUser || can("read", "CustomDomains"))) && (
         <DomainManager companyId={currentUser.companyId} />
       )}
       
-      {activeTab === "roles" && (
+      {(activeTab === "roles" && (isAdminUser || can("read", "RolesPermissions"))) && (
         <RolesTab />
       )}
 

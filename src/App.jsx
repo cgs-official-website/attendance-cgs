@@ -19,6 +19,7 @@ import PurchaseOrganization from "./pages/PurchaseOrganization";
 import ClientChat from "./pages/ClientChat";
 import ProjectCalendar from "./pages/ProjectCalendar";
 import EnvironmentalSetup from "./modules/environmentalSetup/pages/EnvironmentalSetup";
+import NotFound from "./pages/NotFound";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -258,10 +259,10 @@ export default function App() {
           } 
         />
 
-        {/* Catch-all redirect */}
+        {/* Catch-all redirect / 404 */}
         <Route 
           path="*" 
-          element={<RootRouteRedirect />}
+          element={<NotFound />}
         />
       </Routes>
       {/* Zuna AI Chatbot — floating on all pages */}

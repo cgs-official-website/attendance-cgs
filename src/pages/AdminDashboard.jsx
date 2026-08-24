@@ -6003,11 +6003,12 @@ export default function AdminDashboard() {
           const actualGross = (gross / workingDays) * paidDays;
           const lopAmount = gross - actualGross;
 
-          const basic = actualGross * 0.5;
+          const basic = gross * 0.5;
           const hra = basic * 0.4;
-          const special = actualGross - basic - hra;
+          const special = gross - basic - hra;
           
-          const pf = companyPayrollSettings?.pf ? basic * 0.12 : 0;
+          const actualBasic = actualGross * 0.5;
+          const pf = companyPayrollSettings?.pf ? actualBasic * 0.12 : 0;
           const esi = (companyPayrollSettings?.esi && actualGross <= 21000) ? actualGross * 0.0075 : 0;
           
           const getPTDeduction = (g) => {

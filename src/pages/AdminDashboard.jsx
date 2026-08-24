@@ -1292,7 +1292,9 @@ export default function AdminDashboard() {
           tds: user.tds,
           lopAmount: user.lopAmount || 0,
           lopsDays: user.lopsDays || 0,
-          net: user.net
+          net: user.net,
+          paidDays: user.paidDays || 0,
+          workingDays: user.workingDays || 30
         })
       );
       await Promise.all(promises);
@@ -6037,6 +6039,8 @@ export default function AdminDashboard() {
           return {
             ...user,
             gross,
+            workingDays,
+            paidDays,
             ...calc
           };
         });
@@ -6701,7 +6705,9 @@ export default function AdminDashboard() {
                     tds: selectedPayrollUser.tds,
                     lopAmount: selectedPayrollUser.lopAmount || 0,
                     lopsDays: selectedPayrollUser.lopsDays || 0,
-                    net: selectedPayrollUser.net
+                    net: selectedPayrollUser.net,
+                    paidDays: selectedPayrollUser.paidDays || 0,
+                    workingDays: selectedPayrollUser.workingDays || 30
                   })
                   .then(() => showToast("Payslip published to employee portal", "success"))
                   .catch(() => showToast("Failed to publish payslip", "error"));

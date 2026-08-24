@@ -1209,8 +1209,8 @@ export default function UserDashboard() {
                   <div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Office Address</span><span className="line-clamp-2" title={companyAddress}>: {companyAddress || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Joining Date</span><span>: {currentUser.joiningDate || 'NaN'}</span></div>
-                    <div className="grid grid-cols-[120px_1fr]"><span>Paid Days</span><span>: {Number(currentUser.paidDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
-                    <div className="grid grid-cols-[120px_1fr]"><span>Working Days</span><span>: {Number(currentUser.workingDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Paid Days</span><span>: {Number(selectedPayslip.paidDays !== undefined ? selectedPayslip.paidDays : (currentUser.paidDays || companyPayrollSettings?.workingDays || 30)).toFixed(2)}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Working Days</span><span>: {Number(selectedPayslip.workingDays !== undefined ? selectedPayslip.workingDays : (currentUser.workingDays || companyPayrollSettings?.workingDays || 30)).toFixed(2)}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Cost Center</span><span>: {currentUser.costCenter || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>PAN</span><span>: {currentUser.pan || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Gender</span><span>: {currentUser.gender || 'NaN'}</span></div>

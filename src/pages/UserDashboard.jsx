@@ -104,7 +104,10 @@ export default function UserDashboard() {
               if (data.workSettings) {
                 setEnvConfig({
                   breaksPerDay: data.workSettings.breaksPerDay || 3,
-                  breakDurationMinutes: data.workSettings.breakDurationMinutes || 30
+                  breakDurationMinutes: data.workSettings.breakDurationMinutes || 30,
+                  shiftStartTime: data.workSettings.shiftStartTime || "09:00",
+                  shiftEndTime: data.workSettings.shiftEndTime || "18:00",
+                  enforceShiftTiming: data.workSettings.enforceShiftTiming || false
                 });
               }
               if (data.geolocationSettings) {
@@ -118,7 +121,10 @@ export default function UserDashboard() {
               if (parsed.workSettings) {
                 setEnvConfig({
                   breaksPerDay: parsed.workSettings.breaksPerDay || 3,
-                  breakDurationMinutes: parsed.workSettings.breakDurationMinutes || 30
+                  breakDurationMinutes: parsed.workSettings.breakDurationMinutes || 30,
+                  shiftStartTime: parsed.workSettings.shiftStartTime || "09:00",
+                  shiftEndTime: parsed.workSettings.shiftEndTime || "18:00",
+                  enforceShiftTiming: parsed.workSettings.enforceShiftTiming || false
                 });
               }
               if (parsed.geolocationSettings) {
@@ -613,6 +619,30 @@ export default function UserDashboard() {
   const handleCheckIn = async () => {
     setActionLoading(true);
     try {
+      if (envConfig?.enforceShiftTiming && envConfig?.shiftStartTime && envConfig?.shiftEndTime) {
+        const now = new Date();
+        const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const [startH, startM] = envConfig.shiftStartTime.split(':').map(Number);
+        const startTotalMinutes = startH * 60 + startM;
+
+        const [endH, endM] = envConfig.shiftEndTime.split(':').map(Number);
+        const endTotalMinutes = endH * 60 + endM;
+
+        // Note: this simple logic assumes shift does not cross midnight. 
+        // If it crosses midnight (start > end), the logic needs adjustment.
+        if (startTotalMinutes <= endTotalMinutes) {
+          if (currentTotalMinutes < startTotalMinutes || currentTotalMinutes > endTotalMinutes) {
+            throw new Error(`Check-in denied: You can only check in during your scheduled shift (${envConfig.shiftStartTime} - ${envConfig.shiftEndTime}).`);
+          }
+        } else {
+          // Night shift handling (e.g. 22:00 to 06:00)
+          if (currentTotalMinutes < startTotalMinutes && currentTotalMinutes > endTotalMinutes) {
+            throw new Error(`Check-in denied: You can only check in during your scheduled shift (${envConfig.shiftStartTime} - ${envConfig.shiftEndTime}).`);
+          }
+        }
+      }
+
       showToast("Fetching precise GPS location...", "info", 1500);
       const location = await getFreshLocation();
 
@@ -1177,15 +1207,14 @@ export default function UserDashboard() {
                   </div>
                   {/* Right Column */}
                   <div>
-                    <div className="grid grid-cols-[120px_1fr]"><span>Location</span><span>: {currentUser.location || 'NaN'}</span></div>
-                    <div className="grid grid-cols-[120px_1fr]"><span>Unit</span><span>: {currentUser.unit || 'NaN'}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Office Address</span><span className="line-clamp-2" title={companyAddress}>: {companyAddress || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Joining Date</span><span>: {currentUser.joiningDate || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Paid Days</span><span>: {Number(currentUser.paidDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Working Days</span><span>: {Number(currentUser.workingDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Cost Center</span><span>: {currentUser.costCenter || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>PAN</span><span>: {currentUser.pan || 'NaN'}</span></div>
                     <div className="grid grid-cols-[120px_1fr]"><span>Gender</span><span>: {currentUser.gender || 'NaN'}</span></div>
-                    <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay</span><span>: {Math.max(0, (selectedPayslip.lopAmount || 0)).toFixed(2)}</span></div>
+                    <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay Days</span><span>: {Math.max(0, (selectedPayslip.lopsDays || 0)).toFixed(2)}</span></div>
                   </div>
                 </div>
 

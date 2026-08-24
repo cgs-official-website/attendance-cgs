@@ -521,10 +521,36 @@ export const checkIn = async (user, location) => {
            defaultBreakDur = envData.workSettings.breakDurationMinutes * 60;
            defaultBioDur = envData.workSettings.breakDurationMinutes * 60; // Make bio equal to the configured duration
         }
+
+        if (envData?.workSettings?.enforceShiftTiming && envData?.workSettings?.shiftStartTime && envData?.workSettings?.shiftEndTime) {
+          const now = new Date();
+          const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
+          const [startH, startM] = envData.workSettings.shiftStartTime.split(':').map(Number);
+          const startTotalMinutes = startH * 60 + startM;
+
+          const [endH, endM] = envData.workSettings.shiftEndTime.split(':').map(Number);
+          const endTotalMinutes = endH * 60 + endM;
+
+          // Note: this simple logic assumes shift does not cross midnight. 
+          if (startTotalMinutes <= endTotalMinutes) {
+            if (currentTotalMinutes < startTotalMinutes || currentTotalMinutes > endTotalMinutes) {
+              throw new Error(`Check-in denied: You can only check in during your scheduled shift (${envData.workSettings.shiftStartTime} - ${envData.workSettings.shiftEndTime}).`);
+            }
+          } else {
+            // Night shift handling (e.g. 22:00 to 06:00)
+            if (currentTotalMinutes < startTotalMinutes && currentTotalMinutes > endTotalMinutes) {
+              throw new Error(`Check-in denied: You can only check in during your scheduled shift (${envData.workSettings.shiftStartTime} - ${envData.workSettings.shiftEndTime}).`);
+            }
+          }
+        }
       }
     }
   } catch (err) {
-    console.warn("Failed to load environment break settings during checkIn");
+    if (err.message.includes("Check-in denied")) {
+      throw err;
+    }
+    console.warn("Failed to load environment break settings during checkIn", err);
   }
 
   if (dbType === "firebase") {

@@ -38,7 +38,10 @@ export default function EnvironmentalSetup() {
     workSettings: {
       breakDurationMinutes: 60,
       breaksPerDay: 1,
-      workingHoursPerDay: 8
+      workingHoursPerDay: 8,
+      shiftStartTime: "09:00",
+      shiftEndTime: "18:00",
+      enforceShiftTiming: false
     },
     leaveSettings: {
       annualLeaves: 12,
@@ -323,6 +326,45 @@ export default function EnvironmentalSetup() {
                     className="w-full px-4 py-2.5 bg-bg-base border border-border-card rounded-[12px] text-sm text-text-main focus:outline-none focus:border-brand-primary"
                   />
                 </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-border-card">
+                <h3 className="text-md font-bold text-text-main mb-4">Shift Timings</h3>
+                <div className="flex items-center gap-3 bg-bg-base p-4 rounded-[12px] border border-border-card mb-6">
+                  <input
+                    type="checkbox"
+                    id="enforceShiftTiming"
+                    checked={formData.workSettings.enforceShiftTiming}
+                    onChange={(e) => handleInputChange("workSettings", "enforceShiftTiming", e.target.checked)}
+                    className="w-4 h-4 text-brand-primary cursor-pointer"
+                  />
+                  <label htmlFor="enforceShiftTiming" className="text-sm font-bold text-text-main cursor-pointer">
+                    Enforce Shift Timing (Employees can only check-in during the specified time window)
+                  </label>
+                </div>
+
+                {formData.workSettings.enforceShiftTiming && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Shift Start Time</label>
+                      <input
+                        type="time"
+                        value={formData.workSettings.shiftStartTime || "09:00"}
+                        onChange={(e) => handleInputChange("workSettings", "shiftStartTime", e.target.value)}
+                        className="w-full px-4 py-2.5 bg-bg-base border border-border-card rounded-[12px] text-sm text-text-main focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-text-sec uppercase tracking-wider mb-2">Shift End Time</label>
+                      <input
+                        type="time"
+                        value={formData.workSettings.shiftEndTime || "18:00"}
+                        onChange={(e) => handleInputChange("workSettings", "shiftEndTime", e.target.value)}
+                        className="w-full px-4 py-2.5 bg-bg-base border border-border-card rounded-[12px] text-sm text-text-main focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

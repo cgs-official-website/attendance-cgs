@@ -6269,15 +6269,14 @@ export default function AdminDashboard() {
                       </div>
                       {/* Right Column */}
                       <div>
-                        <div className="grid grid-cols-[120px_1fr]"><span>Location</span><span>: {user.location || 'NaN'}</span></div>
-                        <div className="grid grid-cols-[120px_1fr]"><span>Unit</span><span>: {user.unit || 'NaN'}</span></div>
+                        <div className="grid grid-cols-[120px_1fr]"><span>Office Address</span><span className="line-clamp-2" title={companyAddress}>: {companyAddress || 'NaN'}</span></div>
                         <div className="grid grid-cols-[120px_1fr]"><span>Joining Date</span><span>: {user.joiningDate || 'NaN'}</span></div>
                         <div className="grid grid-cols-[120px_1fr]"><span>Paid Days</span><span>: {Number(user.paidDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
                         <div className="grid grid-cols-[120px_1fr]"><span>Working Days</span><span>: {Number(user.workingDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
                         <div className="grid grid-cols-[120px_1fr]"><span>Cost Center</span><span>: {user.costCenter || 'NaN'}</span></div>
                         <div className="grid grid-cols-[120px_1fr]"><span>PAN</span><span>: {user.pan || 'NaN'}</span></div>
                         <div className="grid grid-cols-[120px_1fr]"><span>Gender</span><span>: {user.gender || 'NaN'}</span></div>
-                        <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay</span><span>: {Math.max(0, (user.lopAmount || 0)).toFixed(2)}</span></div>
+                        <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay Days</span><span>: {Math.max(0, (user.lopsDays || 0)).toFixed(2)}</span></div>
                       </div>
                     </div>
 
@@ -6568,15 +6567,14 @@ export default function AdminDashboard() {
                 </div>
                 {/* Right Column */}
                 <div>
-                  <div className="grid grid-cols-[120px_1fr]"><span>Location</span><span>: {selectedPayrollUser.location || 'NaN'}</span></div>
-                  <div className="grid grid-cols-[120px_1fr]"><span>Unit</span><span>: {selectedPayrollUser.unit || 'NaN'}</span></div>
+                  <div className="grid grid-cols-[120px_1fr]"><span>Office Address</span><span className="line-clamp-2" title={companyAddress}>: {companyAddress || 'NaN'}</span></div>
                   <div className="grid grid-cols-[120px_1fr]"><span>Joining Date</span><span>: {selectedPayrollUser.joiningDate || 'NaN'}</span></div>
                   <div className="grid grid-cols-[120px_1fr]"><span>Paid Days</span><span>: {Number(selectedPayrollUser.paidDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
                   <div className="grid grid-cols-[120px_1fr]"><span>Working Days</span><span>: {Number(selectedPayrollUser.workingDays || companyPayrollSettings?.workingDays || 30).toFixed(2)}</span></div>
                   <div className="grid grid-cols-[120px_1fr]"><span>Cost Center</span><span>: {selectedPayrollUser.costCenter || 'NaN'}</span></div>
                   <div className="grid grid-cols-[120px_1fr]"><span>PAN</span><span>: {selectedPayrollUser.pan || 'NaN'}</span></div>
                   <div className="grid grid-cols-[120px_1fr]"><span>Gender</span><span>: {selectedPayrollUser.gender || 'NaN'}</span></div>
-                  <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay</span><span>: {Math.max(0, (selectedPayrollUser.lopAmount || 0)).toFixed(2)}</span></div>
+                  <div className="grid grid-cols-[120px_1fr]"><span>Loss of Pay Days</span><span>: {Math.max(0, (selectedPayrollUser.lopsDays || 0)).toFixed(2)}</span></div>
                 </div>
               </div>
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import EmojiPicker from 'emoji-picker-react';
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
   Users, ChevronRight, LogIn, LogOut, Trash2, ExternalLink,
-  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy, Forward
+  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy, Forward, Smile
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -145,12 +146,12 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
           <span className="text-[10px] text-text-mut">{formatTime(msg.timestamp)}</span>
         </div>
         {msg.text && (
-          <div className={`px-3 py-2 rounded-[14px] text-sm leading-relaxed whitespace-pre-wrap ${
+          <div className={`px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap shadow-sm max-w-full overflow-hidden ${
             isOwn
-              ? "bg-brand-primary text-white rounded-br-sm"
-              : "bg-bg-card border border-border-card text-text-main rounded-bl-sm"
+              ? "bg-gradient-to-br from-brand-primary to-brand-hover text-white rounded-[18px] rounded-br-[4px]"
+              : "bg-bg-card border border-border-card text-text-main rounded-[18px] rounded-bl-[4px]"
           }`}>
-            {renderMessageText(msg.text)}
+            <span className="block break-words">{renderMessageText(msg.text)}</span>
           </div>
         )}
         {msg.fileData && <FileCard file={msg.fileData} />}
@@ -198,10 +199,22 @@ function MessageInput({ onSend, placeholder, disabled }) {
   const [text, setText] = useState("");
   const [uploading, setUploading] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileRef = useRef(null);
   const textRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const { showToast } = useToast();
   const { currentUser } = useAuth();
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -243,7 +256,7 @@ function MessageInput({ onSend, placeholder, disabled }) {
   };
 
   return (
-    <div className="px-4 pt-3 pb-20 md:pb-6 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
+    <div className="px-4 py-3 border-t border-border-card bg-bg-card/50 backdrop-blur-sm flex-shrink-0">
       {pendingFile && (
         <div className={`mb-2 flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-[8px] text-xs font-semibold text-brand-primary ${uploading ? "animate-pulse" : ""}`}>
           {uploading ? (
@@ -264,14 +277,48 @@ function MessageInput({ onSend, placeholder, disabled }) {
           )}
         </div>
       )}
-      <div className="flex items-end gap-2 bg-bg-base rounded-[12px] border border-border-card px-3 py-2 focus-within:border-brand-primary/50 transition-colors">
+      <div className="relative flex items-end gap-2 bg-bg-card rounded-[24px] border border-border-card px-3 py-1.5 focus-within:border-brand-primary/60 focus-within:ring-4 focus-within:ring-brand-primary/10 shadow-sm transition-all duration-300">
+        <div ref={emojiPickerRef} className="relative">
+          <button
+            onClick={() => setShowEmojiPicker((prev) => !prev)}
+            disabled={uploading}
+            className="flex-shrink-0 p-2 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-full transition-colors cursor-pointer"
+            title="Add emoji"
+          >
+            <Smile size={18} />
+          </button>
+          
+          <AnimatePresence>
+            {showEmojiPicker && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-full left-0 mb-4 z-50 shadow-2xl rounded-2xl overflow-hidden border border-border-card"
+              >
+                <EmojiPicker 
+                  onEmojiClick={(emojiData) => {
+                    setText((prev) => prev + emojiData.emoji);
+                  }}
+                  theme="auto"
+                  searchDisabled={false}
+                  skinTonesDisabled={true}
+                  width={320}
+                  height={400}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="flex-shrink-0 p-1 text-text-mut hover:text-brand-primary transition-colors cursor-pointer"
+          className="flex-shrink-0 p-2 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-full transition-colors cursor-pointer"
           title="Attach file (max 40MB)"
         >
-          <Paperclip size={16} />
+          <Paperclip size={18} />
         </button>
         <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} />
         <textarea
@@ -307,16 +354,16 @@ function MessageInput({ onSend, placeholder, disabled }) {
           placeholder={placeholder}
           rows={1}
           disabled={disabled || uploading}
-          className="flex-1 bg-transparent text-sm text-text-main placeholder-text-mut outline-none resize-none leading-relaxed max-h-40 overflow-y-auto min-h-[24px]"
+          className="flex-1 bg-transparent text-[15px] text-text-main placeholder-text-mut outline-none resize-none leading-[24px] max-h-40 overflow-y-auto py-1.5"
           style={{ scrollbarWidth: "none", height: "auto" }}
         />
         <button
           onClick={handleSend}
           disabled={(!text.trim() && !pendingFile) || disabled || uploading}
-          className={`flex-shrink-0 w-8 h-8 rounded-[10px] flex items-center justify-center transition-all duration-200 ${
+          className={`flex-shrink-0 w-[36px] h-[36px] rounded-full flex items-center justify-center transition-all duration-200 ${
             (text.trim() || pendingFile) && !disabled && !uploading
-              ? "bg-brand-primary text-white hover:bg-brand-hover shadow-md cursor-pointer"
-              : "bg-bg-card text-text-mut cursor-not-allowed"
+              ? "bg-brand-primary text-white hover:bg-brand-hover shadow-lg hover:shadow-brand-primary/25 hover:-translate-y-[1px] cursor-pointer"
+              : "bg-bg-base text-text-mut cursor-not-allowed"
           }`}
         >
           {uploading ? (
@@ -326,9 +373,6 @@ function MessageInput({ onSend, placeholder, disabled }) {
           )}
         </button>
       </div>
-      <p className="text-[10px] text-text-mut text-center mt-1.5">
-        Press Enter to send · Shift+Enter for new line · Files uploaded securely to the cloud
-      </p>
     </div>
   );
 }

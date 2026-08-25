@@ -34,14 +34,14 @@ import imageCompression from 'browser-image-compression';
 // Firebase Configuration
 // Replace these with your actual Firebase project settings
 const firebaseConfig = {
-  apiKey: "AIzaSyCzOxb3n4riIANnECaSEiPpghHw3ZttEdY",
-  authDomain: "intern-attendance-web.firebaseapp.com",
-  databaseURL: "https://intern-attendance-web-default-rtdb.firebaseio.com",
-  projectId: "intern-attendance-web",
-  storageBucket: "intern-attendance-web.firebasestorage.app",
-  messagingSenderId: "490507892655",
-  appId: "1:490507892655:web:e0bf453d2a6fa3ceeb215a",
-  measurementId: "G-N91XTTC86C"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Check if credentials are still placeholder
@@ -3528,12 +3528,32 @@ export const deleteEmployeePayroll = async (companyId, employeeId, month, year) 
 
 export const wipeAllEmployeePayrolls = async (companyId) => {
   if (dbType === "firebase") {
+    // 1. Wipe employeePayroll records
     const qRef = collection(db, "payroll", companyId, "employeePayroll");
     const snapshot = await getDocs(qRef);
     const promises = snapshot.docs.map(d => deleteDoc(doc(db, "payroll", companyId, "employeePayroll", d.id)));
-    await Promise.all(promises);
+    
+    // 2. Zero out grossSalary and paidDays for all users
+    const usersRef = collection(db, "users");
+    const usersQ = query(usersRef, where("companyId", "==", companyId));
+    const usersSnapshot = await getDocs(usersQ);
+    const userPromises = usersSnapshot.docs.map(d => updateDoc(doc(db, "users", d.id), { grossSalary: 0, paidDays: 0 }));
+    
+    await Promise.all([...promises, ...userPromises]);
   } else {
+    // Local storage wipe
     localStorage.removeItem(`att_payroll_${companyId}`);
+    
+    // Zero out local users
+    const users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
+    const updatedUsers = users.map(u => {
+      if (u.companyId === companyId) {
+        return { ...u, grossSalary: 0, paidDays: 0 };
+      }
+      return u;
+    });
+    localStorage.setItem("att_users", JSON.stringify(updatedUsers));
+    
     notifyPayrollListeners(companyId);
   }
 };

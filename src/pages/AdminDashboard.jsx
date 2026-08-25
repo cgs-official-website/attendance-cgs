@@ -41,8 +41,10 @@ import {
   addEnvironmentSetting,
   updateEnvironmentSetting,
   deleteEnvironmentSetting,
-  subscribeToEnvironmentSettings
+  subscribeToEnvironmentSettings,
+  wipeAllEmployeePayrolls
 } from "../firebase";
+
 import { 
   Shield, 
   ShieldAlert,
@@ -84,7 +86,9 @@ import {
   ExternalLink,
   Navigation,
   Compass,
-  Settings
+  Settings,
+  UserX,
+  UserCheck
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
@@ -2832,6 +2836,10 @@ export default function AdminDashboard() {
                               <span className="bg-brand-primary/10 text-brand-primary border border-brand-primary/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
                                 admin
                               </span>
+                            ) : user.status === "inactive" ? (
+                              <span className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
+                                inactive
+                              </span>
                             ) : isWorking ? (
                               <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
                                 active
@@ -2877,6 +2885,29 @@ export default function AdminDashboard() {
                               >
                                 <FileText size={13} />
                               </button>
+                              {can("update", "EmployeeManagement") && user.role !== "admin" && (
+                                <button
+                                  onClick={async () => {
+                                    if (window.confirm(`Are you sure you want to change the status of ${user.name} to ${user.status === 'inactive' ? 'Active' : 'Inactive'}?`)) {
+                                      try {
+                                        await updateUserRecord(
+                                          user.uid, user.name, user.department, user.programType,
+                                          user.shiftStart, user.shiftEnd, user.annualLeaves, user.sickLeaves, user.casualLeaves,
+                                          user.avatar, user.dob, user.joiningDate, user.projects, user.tasks, user.jobType, user.designation, user.isProjectManager, user.employeeId,
+                                          { status: user.status === 'inactive' ? 'active' : 'inactive' }
+                                        );
+                                        showToast(`${user.name} is now ${user.status === 'inactive' ? 'Active' : 'Inactive'}.`, "success");
+                                      } catch (err) {
+                                        showToast("Failed to update status", "error");
+                                      }
+                                    }
+                                  }}
+                                  className={`w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base transition-colors cursor-pointer ${user.status === 'inactive' ? 'text-red-500 hover:text-emerald-500' : 'text-text-sec hover:text-red-500'}`}
+                                  title={user.status === "inactive" ? "Mark as Active" : "Mark as Inactive"}
+                                >
+                                  {user.status === "inactive" ? <UserCheck size={13} /> : <UserX size={13} />}
+                                </button>
+                              )}
                               {user.role !== "admin" && can("delete", "EmployeeManagement") && (
                                 <button 
                                   onClick={() => openDeleteConfirm(user)} 
@@ -6031,6 +6062,19 @@ export default function AdminDashboard() {
         };
 
         const currentPayroll = staffUsers.map(user => {
+          const savedPayslip = payrollData.find(p => p.employeeId === user.uid);
+          
+          if (savedPayslip) {
+            return {
+              ...user,
+              ...savedPayslip,
+              gross: savedPayslip.grossSalary || savedPayslip.gross,
+              paidDays: savedPayslip.paidDays,
+              workingDays: savedPayslip.workingDays,
+              isSaved: true
+            };
+          }
+
           const gross = user.grossSalary || 0;
           const workingDays = companyPayrollSettings?.workingDays || 30;
           const paidDays = user.paidDays !== undefined ? user.paidDays : workingDays;
@@ -6041,7 +6085,8 @@ export default function AdminDashboard() {
             gross,
             workingDays,
             paidDays,
-            ...calc
+            ...calc,
+            isSaved: false
           };
         });
 
@@ -6147,6 +6192,19 @@ export default function AdminDashboard() {
                     {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5 min-w-[100px]">
+                  <label className="text-[10px] font-bold text-text-mut uppercase tracking-wider">Year</label>
+                  <select
+                    className="w-full px-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/40 text-xs text-text-main outline-none focus:bg-bg-card focus:border-brand-primary transition-all appearance-none"
+                    value={payrollYear}
+                    onChange={(e) => setPayrollYear(Number(e.target.value))}
+                  >
+                    {[...Array(5)].map((_, i) => {
+                      const year = new Date().getFullYear() - 2 + i;
+                      return <option key={year} value={year}>{year}</option>;
+                    })}
                   </select>
                 </div>
               </div>

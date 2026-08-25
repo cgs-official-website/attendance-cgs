@@ -3526,6 +3526,18 @@ export const deleteEmployeePayroll = async (companyId, employeeId, month, year) 
   }
 };
 
+export const wipeAllEmployeePayrolls = async (companyId) => {
+  if (dbType === "firebase") {
+    const qRef = collection(db, "payroll", companyId, "employeePayroll");
+    const snapshot = await getDocs(qRef);
+    const promises = snapshot.docs.map(d => deleteDoc(doc(db, "payroll", companyId, "employeePayroll", d.id)));
+    await Promise.all(promises);
+  } else {
+    localStorage.removeItem(`att_payroll_${companyId}`);
+    notifyPayrollListeners(companyId);
+  }
+};
+
 export const updateEmployeeGrossSalary = async (userId, grossSalary, paidDays) => {
   if (dbType === "firebase") {
     const docRef = doc(db, "users", userId);

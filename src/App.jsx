@@ -20,6 +20,7 @@ import ClientChat from "./pages/ClientChat";
 import ProjectCalendar from "./pages/ProjectCalendar";
 import EnvironmentalSetup from "./modules/environmentalSetup/pages/EnvironmentalSetup";
 import NotFound from "./pages/NotFound";
+import InactiveAccount from "./pages/InactiveAccount";
 
 // Protected Route Component for general logged-in users
 function ProtectedRoute({ children }) {
@@ -27,6 +28,10 @@ function ProtectedRoute({ children }) {
   
   if (!currentUser) {
     return <Navigate to="/" replace />;
+  }
+  
+  if (currentUser.status === "inactive") {
+    return <Navigate to="/inactive" replace />;
   }
   
   return children;
@@ -39,6 +44,10 @@ function AdminRoute({ children }) {
   
   if (!currentUser) {
     return <Navigate to="/" replace />;
+  }
+  
+  if (currentUser.status === "inactive") {
+    return <Navigate to="/inactive" replace />;
   }
   
   if (loading) return null;
@@ -58,6 +67,10 @@ function SuperAdminRoute({ children }) {
     return <Navigate to="/" replace />;
   }
   
+  if (currentUser.status === "inactive") {
+    return <Navigate to="/inactive" replace />;
+  }
+  
   if (currentUser.role !== "superadmin") {
     return <Navigate to="/dashboard" replace />;
   }
@@ -72,6 +85,10 @@ function PublicRoute({ children }) {
   
   if (currentUser) {
     if (loading) return null;
+    
+    if (currentUser.status === "inactive") {
+      return <Navigate to="/inactive" replace />;
+    }
     
     if (currentUser.role === "superadmin") {
       return <Navigate to="/superadmin" replace />;
@@ -92,6 +109,7 @@ function RootRouteRedirect() {
   if (!currentUser) return <Navigate to="/" replace />;
   if (loading) return null;
 
+  if (currentUser.status === "inactive") return <Navigate to="/inactive" replace />;
   if (currentUser.role === "superadmin") return <Navigate to="/superadmin" replace />;
   if (hasAnyAdminPermission()) return <Navigate to="/admin" replace />;
   return <Navigate to="/dashboard" replace />;
@@ -151,6 +169,11 @@ export default function App() {
         <Route 
           path="/client-chat/:linkToken" 
           element={<ClientChat />} 
+        />
+        
+        <Route 
+          path="/inactive" 
+          element={<InactiveAccount />} 
         />
 
         {/* User Protected Routes */}

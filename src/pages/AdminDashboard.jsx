@@ -88,7 +88,8 @@ import {
   Compass,
   Settings,
   UserX,
-  UserCheck
+  UserCheck,
+  Upload
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
@@ -1307,6 +1308,109 @@ export default function AdminDashboard() {
       showToast("Failed to process payroll.", "error");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const wsData = [
+      ["Email", "Gross Salary", "Paid Days"]
+    ];
+    // Add active users to template
+    staffUsers.forEach(u => {
+      wsData.push([u.email, u.grossSalary || 0, u.paidDays || 30]);
+    });
+    
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Payroll Template");
+    XLSX.writeFile(wb, `Payroll_Template_${payrollMonth}_${payrollYear}.xlsx`);
+  };
+
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setActionLoading(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(worksheet);
+
+      const workingDays = companyPayrollSettings?.workingDays || 30;
+
+      // Internal calculate function
+      const calculatePayroll = (gross, paidDays, wDays) => {
+        const lopsDays = Math.max(0, wDays - paidDays);
+        const actualGross = (gross / wDays) * paidDays;
+        const lopAmount = gross - actualGross;
+
+        const basic = gross * 0.5;
+        const hra = basic * 0.4;
+        const special = gross - basic - hra;
+        
+        const actualBasic = actualGross * 0.5;
+        const pf = companyPayrollSettings?.pf ? actualBasic * 0.12 : 0;
+        const esi = (companyPayrollSettings?.esi && actualGross <= 21000) ? actualGross * 0.0075 : 0;
+        
+        const getPTDeduction = (g) => {
+          if (companyPayrollSettings && !companyPayrollSettings.pt) return 0;
+          if (g <= 21000) return 0;
+          if (g <= 30000) return Math.round((180 / 6) * 100) / 100;
+          if (g <= 45000) return Math.round((425 / 6) * 100) / 100;
+          if (g <= 60000) return Math.round((930 / 6) * 100) / 100;
+          if (g <= 75000) return Math.round((1025 / 6) * 100) / 100;
+          return Math.round((1250 / 6) * 100) / 100;
+        };
+        const pt = getPTDeduction(actualGross);
+        const insurance = companyPayrollSettings?.insurance ? Number(companyPayrollSettings.insuranceAmount || 0) : 0;
+
+        const tds = actualGross > 50000 ? (actualGross - pf - pt - insurance) * 0.05 : 0;
+        const net = actualGross - (pf + esi + pt + tds + insurance);
+        return { basic, hra, special, pf, esi, pt, tds, insurance, net, actualGross, lopAmount, lopsDays };
+      };
+
+      const promises = [];
+      for (let row of rows) {
+        const email = row["Email"];
+        const grossStr = row["Gross Salary"];
+        const paidStr = row["Paid Days"];
+        
+        if (!email) continue;
+        const user = staffUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!user) continue;
+
+        const gross = Number(grossStr) || 0;
+        const paidDays = Number(paidStr) || workingDays;
+
+        // Calculate new payroll
+        const calc = calculatePayroll(gross, paidDays, workingDays);
+
+        // Save directly to payroll data for selected month/year
+        const payrollRecord = {
+          month: payrollMonth,
+          year: payrollYear,
+          workingDays,
+          paidDays,
+          grossSalary: gross,
+          ...calc
+        };
+
+        promises.push(updateEmployeeGrossSalary(user.uid, gross, paidDays));
+        promises.push(saveEmployeePayroll(currentUser.companyId, user.uid, payrollRecord));
+      }
+      
+      if(promises.length === 0) {
+        showToast("No valid rows found to import.", "warning");
+      } else {
+        await Promise.all(promises);
+        showToast("Payroll imported and saved successfully!", "success");
+      }
+    } catch (err) {
+      showToast("Error importing Excel: " + err.message, "error");
+    } finally {
+      setActionLoading(false);
+      if (e.target) e.target.value = "";
     }
   };
 
@@ -6112,14 +6216,34 @@ export default function AdminDashboard() {
                 <p className="text-sm text-text-sec mt-1">Manage employee salaries, EPF, ESI, and generate payslips complying with Indian Law.</p>
               </div>
               <div className="flex items-center gap-2">
+
+                <button 
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center justify-center gap-2 px-4 h-10 whitespace-nowrap bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold rounded-[14px] transition-colors shadow-sm"
+                >
+                  <Download size={16} /> Template
+                </button>
+                <div className="relative">
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls, .csv" 
+                    onChange={handleExcelUpload} 
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                    disabled={actionLoading}
+                    title="Upload Payroll Excel"
+                  />
+                  <button className="flex items-center justify-center gap-2 px-4 h-10 whitespace-nowrap bg-brand-primary hover:bg-brand-hover text-white text-sm font-bold rounded-[14px] transition-colors shadow-sm disabled:opacity-50 w-full">
+                    <Upload size={16} /> {actionLoading ? 'Importing...' : 'Import Excel'}
+                  </button>
+                </div>
                 <button 
                   onClick={() => handleBulkExportPDF(filteredPayroll)} 
                   disabled={actionLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-[14px] transition-colors shadow-sm disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 px-4 h-10 whitespace-nowrap bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-[14px] transition-colors shadow-sm disabled:opacity-50"
                 >
                   <Download size={16} /> {actionLoading ? 'Exporting...' : 'Bulk Export PDF'}
                 </button>
-                <button onClick={() => setShowPayrollSettingsModal(true)} className="flex items-center gap-2 px-4 py-2 bg-bg-card border border-border-card text-text-main text-sm font-bold rounded-[14px] hover:bg-bg-base transition-colors shadow-sm">
+                <button onClick={() => setShowPayrollSettingsModal(true)} className="flex items-center justify-center gap-2 px-4 h-10 whitespace-nowrap bg-bg-card border border-border-card text-text-main text-sm font-bold rounded-[14px] hover:bg-bg-base transition-colors shadow-sm">
                   <Edit size={16} /> Payroll Settings
                 </button>
               </div>

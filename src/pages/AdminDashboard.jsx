@@ -11,6 +11,7 @@ import {
   getAllRegisteredUsers, 
   subscribeToAdminDashboard,
   updateUserRecord,
+  updateUserAccountStatus,
   deleteUserRecord,
   registerUser,
   updateLeaveRequest,
@@ -1396,7 +1397,6 @@ export default function AdminDashboard() {
           ...calc
         };
 
-        promises.push(updateEmployeeGrossSalary(user.uid, gross, paidDays));
         promises.push(saveEmployeePayroll(currentUser.companyId, user.uid, payrollRecord));
       }
       
@@ -2027,6 +2027,34 @@ export default function AdminDashboard() {
     setShowDeleteConfirm(true);
   };
 
+  const handleToggleUserStatus = async (user, e) => {
+    e.stopPropagation(); // prevent row click
+    if (!can("update", "EmployeeManagement")) {
+      return showToast("You do not have permission to change user status.", "error");
+    }
+    const currentStatus = user.status;
+    const newStatus = (currentStatus === "inactive") ? "offline" : "inactive";
+    const newEmployeeStatus = (currentStatus === "inactive") ? "Active" : "Inactive";
+    
+    setActionLoading(true);
+    try {
+      await updateUserAccountStatus(user.uid, newStatus);
+      await updateUserRecord(user.uid, user.name, user.department, user.programType, user.shiftStart, user.shiftEnd, user.annualLeaves, user.sickLeaves, user.casualLeaves, undefined, user.dob, user.joiningDate, user.projects, user.tasks, user.jobType, user.designation, user.isProjectManager, user.employeeId, { employeeStatus: newEmployeeStatus });
+      
+      setUsers(prev => prev.map(u => u.uid === user.uid ? {
+        ...u,
+        status: newStatus,
+        employeeStatus: newEmployeeStatus
+      } : u));
+      
+      showToast(`${user.name} is now ${newEmployeeStatus}.`, "success");
+    } catch (err) {
+      showToast(err.message || "Failed to update status.", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleSaveUserEdit = async (e) => {
     e.preventDefault();
     if (!editName || !editDept || !editShiftStart || !editShiftEnd) {
@@ -2047,6 +2075,12 @@ export default function AdminDashboard() {
         role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee"),
         allowManualCheckIn: editAllowManualCheckIn
       };
+
+      if (editEmployeeStatus === "Inactive" || editEmployeeStatus === "Terminated") {
+        await updateUserAccountStatus(selectedUser.uid, "inactive");
+      } else if (selectedUser.status === "inactive") {
+        await updateUserAccountStatus(selectedUser.uid, "offline");
+      }
 
       await updateUserRecord(
         selectedUser.uid, 
@@ -2088,6 +2122,7 @@ export default function AdminDashboard() {
         designation: editDesignation,
         role: editRole === "Admin" ? "admin" : (editRole === "System Admin" ? "system admin" : "employee"),
         isProjectManager: editRole === "Project Manager" || editRole === "Admin" || editRole === "System Admin",
+        status: (editEmployeeStatus === "Inactive" || editEmployeeStatus === "Terminated") ? "inactive" : (u.status === "inactive" ? "offline" : u.status),
         ...additionalData
       } : u));
       
@@ -2941,17 +2976,17 @@ export default function AdminDashboard() {
                                 admin
                               </span>
                             ) : user.status === "inactive" ? (
-                              <span className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
+                              <button onClick={(e) => handleToggleUserStatus(user, e)} className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase transition-colors cursor-pointer" title="Click to activate user">
                                 inactive
-                              </span>
+                              </button>
                             ) : isWorking ? (
-                              <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
+                              <button onClick={(e) => handleToggleUserStatus(user, e)} className="bg-emerald-500/10 text-emerald-500 hover:bg-red-500 hover:text-white border border-emerald-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase transition-colors cursor-pointer" title="Click to deactivate user">
                                 active
-                              </span>
+                              </button>
                             ) : (
-                              <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">
+                              <button onClick={(e) => handleToggleUserStatus(user, e)} className="bg-amber-500/10 text-amber-500 hover:bg-red-500 hover:text-white border border-amber-500/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase transition-colors cursor-pointer" title="Click to deactivate user">
                                 offline
-                              </span>
+                              </button>
                             )}
                           </td>
                           <td className="py-3.5 pl-4 text-right">
@@ -6677,7 +6712,16 @@ export default function AdminDashboard() {
                     const leaves = Number(editLeaveDaysValue) || 0;
                     const wDays = companyPayrollSettings?.workingDays || 30;
                     const paidDays = Math.max(0, wDays - leaves);
-                    await updateEmployeeGrossSalary(selectedPayrollUser.uid, editSalaryValue, paidDays);
+                    const gross = Number(editSalaryValue) || 0;
+                    const calc = calculatePayroll(gross, paidDays, wDays);
+                    await saveEmployeePayroll(currentUser.companyId, selectedPayrollUser.uid, {
+                      month: payrollMonth,
+                      year: payrollYear,
+                      workingDays: wDays,
+                      paidDays,
+                      grossSalary: gross,
+                      ...calc
+                    });
                     showToast("Salary updated successfully", "success");
                     setShowEditSalaryModal(false);
                     loadDirectoryData();

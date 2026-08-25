@@ -271,6 +271,7 @@ export const registerUser = async (name, department, programType, email, passwor
       isProjectManager: !!isProjectManager,
       employeeId: cleanValue(employeeId),
       companyId: cleanValue(finalCompanyId),
+      status: (additionalData?.employeeStatus === "Inactive" || additionalData?.employeeStatus === "Terminated") ? "inactive" : "offline",
       ...additionalData
     };
 
@@ -317,6 +318,7 @@ export const registerUser = async (name, department, programType, email, passwor
       annualLeaves: Number(annualLeaves),
       sickLeaves: Number(sickLeaves),
       casualLeaves: Number(casualLeaves),
+      status: (additionalData?.employeeStatus === "Inactive" || additionalData?.employeeStatus === "Terminated") ? "inactive" : "offline",
       createdAt: new Date().toISOString(),
       dob,
       joiningDate,
@@ -1290,6 +1292,23 @@ export const updateUserRecord = async (uid, name, department, programType, shift
         localDb.setCurrentUser(updatedUser);
         notifyAuthListeners(updatedUser);
       }
+    }
+  }
+};
+
+/**
+ * Update user account status (e.g. active/inactive access)
+ */
+export const updateUserAccountStatus = async (uid, newStatus) => {
+  if (dbType === "firebase") {
+    const docRef = doc(db, "users", uid);
+    await updateDoc(docRef, { status: newStatus });
+  } else {
+    const users = localDb.getUsers();
+    const idx = users.findIndex(u => u.uid === uid);
+    if (idx !== -1) {
+      users[idx].status = newStatus;
+      localStorage.setItem("att_users", JSON.stringify(users));
     }
   }
 };

@@ -27,11 +27,19 @@ import {
   deleteDoc,
   limit,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  setLogLevel
 } from "firebase/firestore";
 import { getDownloadURL, uploadBytesResumable, ref as storageRef, deleteObject } from "firebase/storage";
 import { getStorage } from "firebase/storage";
 import imageCompression from 'browser-image-compression';
+
+// Silence Firestore background stream warnings
+try {
+  setLogLevel('silent');
+} catch (e) {
+  // ignore
+}
 
 // Firebase Configuration
 // Replace these with your actual Firebase project settings
@@ -63,14 +71,11 @@ if (!isDummy) {
     db = getFirestore(app);
     storage = getStorage(app);
     dbType = "firebase";
-    console.log("Firebase initialized successfully in production mode.");
   } catch (error) {
-    console.error("Firebase initialization failed, falling back to Local Simulation Mode:", error);
     dbType = "local";
   }
 } else {
   dbType = "local";
-  console.log("Running in Local Simulation Mode. Replace config in src/firebase.js to connect to Live Firebase.");
 }
 
 

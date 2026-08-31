@@ -6,7 +6,9 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
-  deleteUser
+  deleteUser,
+  sendPasswordResetEmail,
+  updatePassword
 } from "firebase/auth";
 import {
   getFirestore,
@@ -427,6 +429,46 @@ export const logoutUser = async () => {
   } else {
     localDb.setCurrentUser(null);
     notifyAuthListeners(null);
+  }
+};
+
+/**
+ * Send password reset email
+ */
+export const sendPasswordReset = async (email) => {
+  if (dbType === "firebase") {
+    await sendPasswordResetEmail(auth, email);
+  } else {
+    // Local simulation
+    console.log(`Password reset email simulated for ${email}`);
+    return true;
+  }
+};
+
+/**
+ * Update user password
+ */
+export const changeUserPassword = async (newPassword) => {
+  if (dbType === "firebase") {
+    if (auth.currentUser) {
+      await updatePassword(auth.currentUser, newPassword);
+    } else {
+      throw new Error("No user is currently signed in.");
+    }
+  } else {
+    // Local simulation
+    const cur = localDb.getCurrentUser();
+    if (cur) {
+      const users = localDb.getUsers();
+      const idx = users.findIndex(u => u.uid === cur.uid);
+      if (idx !== -1) {
+        users[idx].password = newPassword;
+        localStorage.setItem("att_users", JSON.stringify(users));
+      }
+    } else {
+      throw new Error("No user is currently signed in.");
+    }
+    return true;
   }
 };
 

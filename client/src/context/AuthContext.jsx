@@ -4,7 +4,9 @@ import {
   loginUser, 
   logoutUser, 
   onAuthUserChanged,
-  getDbType 
+  getDbType,
+  sendPasswordReset,
+  changeUserPassword
 } from "../firebase";
 
 const AuthContext = createContext();
@@ -75,7 +77,9 @@ export const AuthProvider = ({ children }) => {
     signup,
     login,
     logout,
-    updateCurrentUserState
+    updateCurrentUserState,
+    sendPasswordReset,
+    changeUserPassword
   };
 
   return (

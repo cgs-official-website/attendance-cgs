@@ -1,57 +1,34 @@
-# Logs
-logs
+# Dependencies
+node_modules
+*/node_modules
+
+# Production Build outputs
+dist
+dist-ssr
+build
+
+# Environment variables & secrets (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+serviceAccountKey.json
+*.json.key
+intern-attendance-web-*.json
+server/backup/*.json
+server/serviceAccountKey.json
+
+# Graphify artifacts
+graphify-out
+*/graphify-out
+
+# System and logs
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Dependencies
-node_modules
-
-# Build output
-dist
-dist-ssr
-
-# Environment variables — NEVER commit secrets
-.env
-.env.local
-.env.*.local
-.env.development
-.env.production
-
-# Vite local overrides
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Firebase
-.firebase/
-firebase-debug.log
-firestore-debug.log
-ui-debug.log
-
-# OS files
 Thumbs.db
-
-# Firebase Backup Files
-serviceAccountKey.json
-hrms/
-hrms.zip
-
+.vscode/
+.idea/
+.agents/
 .vercel
-.env*
-graphify-out
-
-.agents
-.env

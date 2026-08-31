@@ -2,12 +2,16 @@ import React, { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { updateUserRecord, uploadFileToFirebase, getCompanies, deleteCompany, updateCompanyDetails } from "../firebase";
-import { User, Mail, Shield, ShieldAlert, Award, Clock, Save, Building, Copy, Check, Eye, Crop, Camera, Trash2, Sliders } from "lucide-react";
+import { User, Mail, Shield, ShieldAlert, Award, Clock, Save, Building, Copy, Check, Eye, Crop, Camera, Trash2, Sliders, Lock } from "lucide-react";
 import ImageEditorModal from "../components/ImageEditorModal";
 
 export default function Profile() {
-  const { currentUser, updateCurrentUserState } = useAuth();
+  const { currentUser, updateCurrentUserState, changeUserPassword } = useAuth();
   const { showToast } = useToast();
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const [name, setName] = useState(currentUser?.name || "");
   const [dept, setDept] = useState(currentUser?.department || "");
@@ -190,6 +194,28 @@ export default function Profile() {
       showToast(err.message || "Failed to update profile", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      return showToast("Passwords do not match.", "warning");
+    }
+    if (newPassword.length < 6) {
+      return showToast("Password must be at least 6 characters.", "warning");
+    }
+
+    setPasswordLoading(true);
+    try {
+      await changeUserPassword(newPassword);
+      showToast("Password updated successfully!", "success");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      showToast(err.message || "Failed to update password", "error");
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -576,6 +602,63 @@ export default function Profile() {
               </button>
             </div>
           </form>
+
+          {/* Change Password Section */}
+          <div className="mt-8 pt-8 border-t border-border-card">
+            <div className="flex items-center gap-3 mb-6 pb-2 border-b border-border-card">
+              <div className="w-9 h-9 rounded-[10px] bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+                <Lock size={18} />
+              </div>
+              <h3 className="font-extrabold text-base text-text-main">Security Settings</h3>
+            </div>
+            
+            <form onSubmit={handleChangePassword} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec flex items-center gap-1.5" htmlFor="new-password">
+                    <Lock size={13} className="text-text-mut" />
+                    New Password
+                  </label>
+                  <input
+                    id="new-password"
+                    type="password"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    minLength={6}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-sec flex items-center gap-1.5" htmlFor="confirm-password">
+                    <Lock size={13} className="text-text-mut" />
+                    Confirm Password
+                  </label>
+                  <input
+                    id="confirm-password"
+                    type="password"
+                    className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/30 text-xs text-text-main font-semibold outline-none focus:bg-bg-card focus:border-brand-primary transition-all"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    minLength={6}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end pt-4 border-t border-border-card">
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  className="py-2.5 px-6 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] flex items-center gap-2 shadow-md shadow-brand-primary/10 hover:shadow-brand-primary/20 transition-all cursor-pointer"
+                >
+                  <Save size={14} />
+                  {passwordLoading ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            </form>
+          </div>
 
           {/* Organization Branding (Admin Only) */}
           {isAdmin && adminCompany && (

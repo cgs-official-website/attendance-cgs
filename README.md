@@ -1,16 +1,86 @@
-# React + Vite
+# 🏢 Enterprise HRMS Monorepo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, high-performance Human Resource Management System (HRMS) built with **React (Vite)** on the frontend, **Node.js (Express)** on the backend, and **PostgreSQL (Railway)** for relational data persistence.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 📁 Repository Structure
 
-## React Compiler
+```text
+c:\HRMS\
+├── client/                 # React 18 + Vite Frontend Application
+│   ├── src/                # Pages, Components, State Contexts & Utilities
+│   ├── public/             # Static Assets & Icons
+│   ├── .env.example        # Frontend Environment Template
+│   ├── vite.config.js      # Vite Bundler Configuration
+│   └── package.json        # Frontend Dependencies
+│
+├── server/                 # Node.js + Express Backend API
+│   ├── src/                # Express Controllers, Routes, & DB Pool
+│   ├── scripts/            # PostgreSQL Schemas, Importers & Verifiers
+│   ├── .env.example        # Backend Environment Template
+│   └── package.json        # Backend Dependencies
+│
+├── package.json            # Monorepo Workspace Configuration
+├── .gitignore              # Monorepo Git Ignore Rules
+└── README.md               # Monorepo Documentation
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🚀 Quick Start Guide
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 1. Installation
+Clone the repository and install all workspace dependencies:
+```bash
+npm run install:all
+```
+
+### 2. Configure Environment Variables
+
+- **Backend:** Copy `server/.env.example` to `server/.env` and provide your Railway PostgreSQL URL:
+  ```env
+  DATABASE_URL=postgresql://user:password@host:port/database
+  PORT=5000
+  ```
+
+- **Frontend:** Copy `client/.env.example` to `client/.env`:
+  ```env
+  VITE_API_URL=http://localhost:5000/api
+  VITE_SOCKET_URL=http://localhost:5000
+  ```
+
+### 3. Running Development Servers
+
+- **Start Backend API Server:**
+  ```bash
+  npm run dev:server
+  # Backend runs at http://localhost:5000
+  ```
+
+- **Start Frontend Web App:**
+  ```bash
+  npm run dev:client
+  # Frontend runs at http://localhost:5173
+  ```
+
+---
+
+## 🗄️ Database Architecture (PostgreSQL on Railway)
+
+The system manages 24 relational tables:
+- **Core Entities:** `companies`, `company_domains`, `users`, `roles`, `environment_settings`
+- **Attendance & Leave:** `attendance`, `leave_requests`, `paid_leaves`, `regularization_requests`
+- **Project & Task Management:** `projects`, `project_members`, `tasks`, `task_reports`
+- **Team Hub & Chat:** `channels`, `messages`, `dm_threads`, `direct_messages`
+- **Operations & Reports:** `daily_reports`, `weekly_reports`, `payroll`, `assets`, `notifications`, `external_links`, `settings`
+
+---
+
+## 📊 Codebase Knowledge Graph (Graphify)
+
+This repository includes architectural knowledge graphs powered by Graphify:
+```bash
+npm run graphify
+```
+Open `client/graphify-out/graph.html` or `server/graphify-out/graph.html` in your browser for interactive call-flow and dependency navigation.

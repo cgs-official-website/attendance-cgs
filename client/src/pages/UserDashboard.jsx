@@ -2452,7 +2452,9 @@ export default function UserDashboard() {
                       <div className="text-xs font-bold text-brand-primary flex items-center gap-1 animate-pulse">
                         <Clock size={12} />
                         {(() => {
-                           const elapsed = Math.floor((currentTime.getTime() - new Date(task.timerStartedAt).getTime()) / 1000);
+                           const startedTime = new Date(task.timerStartedAt).getTime();
+                           const rawElapsed = Math.max(0, Math.floor((currentTime.getTime() - startedTime) / 1000));
+                           const elapsed = Math.min(rawElapsed, 8 * 3600);
                            const h = Math.floor(elapsed / 3600);
                            const m = Math.floor((elapsed % 3600) / 60);
                            const s = elapsed % 60;

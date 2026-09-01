@@ -1498,7 +1498,9 @@ export const stopTaskTimer = async (userId, taskId, pmId) => {
         const taskIdx = userData.tasks.findIndex(t => t.id === taskId);
         if (taskIdx !== -1 && userData.tasks[taskIdx].timerStartedAt) {
           const startedAt = new Date(userData.tasks[taskIdx].timerStartedAt).getTime();
-          elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+          const rawMinutes = Math.round((Date.now() - startedAt) / 60000);
+          // Cap single session to max 8 hours (480 minutes)
+          elapsedMinutes = Math.min(480, Math.max(0, rawMinutes));
 
           userData.tasks[taskIdx].timerStartedAt = null;
           await updateDoc(userRef, { tasks: userData.tasks });
@@ -1520,7 +1522,9 @@ export const stopTaskTimer = async (userId, taskId, pmId) => {
       const tIdx = users[uIdx].tasks.findIndex(t => t.id === taskId);
       if (tIdx !== -1 && users[uIdx].tasks[tIdx].timerStartedAt) {
         const startedAt = new Date(users[uIdx].tasks[tIdx].timerStartedAt).getTime();
-        elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+        const rawMinutes = Math.round((Date.now() - startedAt) / 60000);
+        // Cap single session to max 8 hours (480 minutes)
+        elapsedMinutes = Math.min(480, Math.max(0, rawMinutes));
 
         users[uIdx].tasks[tIdx].timerStartedAt = null;
         localStorage.setItem("att_users", JSON.stringify(users));
@@ -1554,7 +1558,8 @@ export const stopAllTaskTimers = async (userId) => {
         for (let task of userData.tasks) {
           if (task.timerStartedAt) {
             const startedAt = new Date(task.timerStartedAt).getTime();
-            const elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+            const rawMinutes = Math.round((Date.now() - startedAt) / 60000);
+            const elapsedMinutes = Math.min(480, Math.max(0, rawMinutes));
             task.timerStartedAt = null;
             updated = true;
 
@@ -1580,7 +1585,8 @@ export const stopAllTaskTimers = async (userId) => {
       for (let task of users[uIdx].tasks) {
         if (task.timerStartedAt) {
           const startedAt = new Date(task.timerStartedAt).getTime();
-          const elapsedMinutes = Math.round((Date.now() - startedAt) / 60000);
+          const rawMinutes = Math.round((Date.now() - startedAt) / 60000);
+          const elapsedMinutes = Math.min(480, Math.max(0, rawMinutes));
           task.timerStartedAt = null;
           updated = true;
 

@@ -79,6 +79,15 @@ export default function TaskManagement() {
       const unsubscribe = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
         if (docSnap.exists()) {
           const rawTasks = docSnap.data().tasks || [];
+          // Auto-settle stale timers older than 12 hours
+          rawTasks.forEach(t => {
+            if (t.timerStartedAt) {
+              const start = new Date(t.timerStartedAt).getTime();
+              if (Date.now() - start > 12 * 3600 * 1000) {
+                stopTaskTimer(currentUser.uid, t.id, t.assignedBy).catch(() => {});
+              }
+            }
+          });
           const sorted = [...rawTasks].reverse().sort((a, b) => {
             const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
             const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
@@ -96,6 +105,15 @@ export default function TaskManagement() {
         const me = users.find(u => u.uid === currentUser.uid);
         if (me) {
           const rawTasks = me.tasks || [];
+          // Auto-settle stale timers older than 12 hours
+          rawTasks.forEach(t => {
+            if (t.timerStartedAt) {
+              const start = new Date(t.timerStartedAt).getTime();
+              if (Date.now() - start > 12 * 3600 * 1000) {
+                stopTaskTimer(currentUser.uid, t.id, t.assignedBy).catch(() => {});
+              }
+            }
+          });
           const sorted = [...rawTasks].reverse().sort((a, b) => {
             const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
             const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
@@ -601,7 +619,10 @@ export default function TaskManagement() {
                               <Activity size={12} />
                               <span>
                                 {(() => {
-                                  const elapsedThisSession = Math.floor((now - new Date(task.timerStartedAt).getTime()) / 1000);
+                                  const startedTime = new Date(task.timerStartedAt).getTime();
+                                  const rawElapsed = Math.max(0, Math.floor((now - startedTime) / 1000));
+                                  // Cap session to maximum 8 hours (28800s) to prevent multiday runaway counts
+                                  const elapsedThisSession = Math.min(rawElapsed, 8 * 3600);
                                   const previousSeconds = Math.floor(calculateTimeSpent(taskReports[task.id] || []) * 3600);
                                   const totalElapsed = elapsedThisSession + previousSeconds;
                                   const h = Math.floor(totalElapsed / 3600);

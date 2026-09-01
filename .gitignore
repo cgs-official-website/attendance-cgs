@@ -31,4 +31,7 @@ Thumbs.db
 .vscode/
 .idea/
 .agents/
+.qodo/
 .vercel
+*.tmp
+

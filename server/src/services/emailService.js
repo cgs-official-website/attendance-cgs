@@ -8,20 +8,19 @@ dotenv.config();
  * If credentials are missing, returns null so operations fail gracefully without crashing.
  */
 const getTransporter = () => {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const port = parseInt(process.env.SMTP_PORT || "587", 10);
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const user = process.env.SMTP_USER || "carrezzaglobalsolutions@gmail.com";
+  const pass = (process.env.SMTP_PASS || "cpho bpmz hplc fstb").replace(/\s+/g, "");
+  const port = parseInt(process.env.SMTP_PORT || "465", 10);
 
-  // Check if SMTP is configured with real credentials (not placeholder defaults)
-  if (!host || !user || !pass || user.includes("your-email") || pass.includes("your-gmail-app-password")) {
+  if (!host || !user || !pass) {
     return null;
   }
 
   return nodemailer.createTransport({
     host,
     port,
-    secure: port === 465, // true for 465, false for 587 / other ports
+    secure: port === 465, // true for 465 SSL, false for 587 TLS
     auth: {
       user,
       pass
@@ -30,7 +29,7 @@ const getTransporter = () => {
 };
 
 const getSender = () => {
-  return process.env.SMTP_FROM || `"Carrezza HRMS" <${process.env.SMTP_USER || "noreply@carrezza.com"}>`;
+  return process.env.SMTP_FROM || `"Carrezza HRMS" <${process.env.SMTP_USER || "carrezzaglobalsolutions@gmail.com"}>`;
 };
 
 /**

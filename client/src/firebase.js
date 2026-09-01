@@ -2507,6 +2507,142 @@ export const deleteChatMessage = async (messageId) => {
 };
 
 /**
+ * Pin a chat message with duration (1 day, 7 days, 30 days)
+ */
+export const pinChatMessage = async (messageId, durationDays, pinnedByName, threadId) => {
+  const now = new Date();
+  const days = Number(durationDays) || 1;
+  const pinExpiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  const updates = {
+    isPinned: true,
+    pinDurationDays: days,
+    pinnedAt: now.toISOString(),
+    pinExpiresAt,
+    pinnedBy: pinnedByName || "Team member"
+  };
+
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "messages", messageId), updates);
+  } else {
+    const messages = getLocalMessages();
+    const idx = messages.findIndex(m => m.id === messageId);
+    if (idx !== -1) {
+      messages[idx] = { ...messages[idx], ...updates };
+      saveLocalMessages(messages);
+      if (threadId && messageListeners[threadId]) {
+        messageListeners[threadId].forEach(cb => cb());
+      }
+      notifyAllMessagesListeners();
+    }
+  }
+};
+
+/**
+ * Unpin a chat message
+ */
+export const unpinChatMessage = async (messageId, threadId) => {
+  const updates = {
+    isPinned: false,
+    pinDurationDays: null,
+    pinnedAt: null,
+    pinExpiresAt: null,
+    pinnedBy: null
+  };
+
+  if (dbType === "firebase") {
+    await updateDoc(doc(db, "messages", messageId), updates);
+  } else {
+    const messages = getLocalMessages();
+    const idx = messages.findIndex(m => m.id === messageId);
+    if (idx !== -1) {
+      messages[idx] = { ...messages[idx], ...updates };
+      saveLocalMessages(messages);
+      if (threadId && messageListeners[threadId]) {
+        messageListeners[threadId].forEach(cb => cb());
+      }
+      notifyAllMessagesListeners();
+    }
+  }
+};
+
+/**
+ * Pin a channel or DM thread to top of sidebar with duration (1, 7, 30 days)
+ */
+export const pinChatThread = async (userId, threadId, threadType, durationDays) => {
+  const now = new Date();
+  const days = Number(durationDays) || 7;
+  const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  if (dbType === "firebase") {
+    try {
+      const docRef = doc(db, "users", userId);
+      const updates = {};
+      updates[`pinnedThreads.${threadId}`] = {
+        pinnedAt: now.toISOString(),
+        expiresAt,
+        durationDays: days,
+        threadType
+      };
+      await updateDoc(docRef, updates);
+    } catch (e) {
+      console.warn("Failed to pin thread in Firebase:", e);
+    }
+  } else {
+    const users = localDb.getUsers();
+    const idx = users.findIndex(u => u.uid === userId);
+    if (idx !== -1) {
+      if (!users[idx].pinnedThreads) users[idx].pinnedThreads = {};
+      users[idx].pinnedThreads[threadId] = {
+        pinnedAt: now.toISOString(),
+        expiresAt,
+        durationDays: days,
+        threadType
+      };
+      localStorage.setItem("att_users", JSON.stringify(users));
+      const cur = localDb.getCurrentUser();
+      if (cur && cur.uid === userId) {
+        cur.pinnedThreads = users[idx].pinnedThreads;
+        localDb.setCurrentUser(cur);
+        notifyAuthListeners(cur);
+      }
+    }
+  }
+};
+
+/**
+ * Unpin a channel or DM thread
+ */
+export const unpinChatThread = async (userId, threadId) => {
+  if (dbType === "firebase") {
+    try {
+      const docRef = doc(db, "users", userId);
+      const userSnap = await getDoc(docRef);
+      if (userSnap.exists()) {
+        const pinned = { ...(userSnap.data().pinnedThreads || {}) };
+        delete pinned[threadId];
+        await updateDoc(docRef, { pinnedThreads: pinned });
+      }
+    } catch (e) {
+      console.warn("Failed to unpin thread in Firebase:", e);
+    }
+  } else {
+    const users = localDb.getUsers();
+    const idx = users.findIndex(u => u.uid === userId);
+    if (idx !== -1 && users[idx].pinnedThreads) {
+      delete users[idx].pinnedThreads[threadId];
+      localStorage.setItem("att_users", JSON.stringify(users));
+      const cur = localDb.getCurrentUser();
+      if (cur && cur.uid === userId && cur.pinnedThreads) {
+        delete cur.pinnedThreads[threadId];
+        localDb.setCurrentUser(cur);
+        notifyAuthListeners(cur);
+      }
+    }
+  }
+};
+
+/**
  * Get all messages (admin only  for monitoring)
  */
 export const getAllMessagesAdmin = async (companyId = "") => {

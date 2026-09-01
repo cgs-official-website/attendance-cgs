@@ -5,7 +5,8 @@ import EmojiPicker from 'emoji-picker-react';
 import {
   Hash, MessageSquare, Plus, Send, Paperclip, X, Search,
   Users, ChevronRight, LogIn, LogOut, Trash2, ExternalLink,
-  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy, Forward, Smile
+  AlertCircle, Check, Lock, RefreshCw, ArrowLeft, UserPlus, Download, Copy, Forward, Smile,
+  Pin, PinOff, Clock, Calendar
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -22,6 +23,10 @@ import {
   subscribeToDmThreads,
   deleteChatMessage,
   deleteChatMessageForMe,
+  pinChatMessage,
+  unpinChatMessage,
+  pinChatThread,
+  unpinChatThread,
   getAllRegisteredUsers,
   subscribeToAllMessages,
   uploadFileToFirebase,
@@ -55,6 +60,16 @@ const formatDateGroup = (iso) => {
   return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 };
 
+const formatPinExpiry = (pinExpiresAt) => {
+  if (!pinExpiresAt) return "Pinned";
+  const diffMs = new Date(pinExpiresAt).getTime() - Date.now();
+  if (diffMs <= 0) return "Expired";
+  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+  if (diffHours < 24) return `Expires in ${diffHours}h`;
+  const diffDays = Math.ceil(diffHours / 24);
+  return `Expires in ${diffDays}d`;
+};
+
 // ─── Avatar Component ─────────────────────────────────────────
 function Avatar({ src, name, size = "w-8 h-8", textSize = "text-xs" }) {
   return (
@@ -64,13 +79,152 @@ function Avatar({ src, name, size = "w-8 h-8", textSize = "text-xs" }) {
   );
 }
 
+// ─── Pin Duration Modal (1 Day, 7 Days, 30 Days) ──────────────
+function PinDurationModal({ target, onPin, onUnpin, onClose }) {
+  const [selectedDuration, setSelectedDuration] = useState(7); // default 7 days
+  const isCurrentlyPinned = target?.isPinned || !!target?.isThreadPinned;
+
+  const durationOptions = [
+    {
+      days: 1,
+      label: "24 Hours (1 Day)",
+      desc: "Great for quick announcements & daily focus",
+      icon: Clock,
+      badge: "Quick"
+    },
+    {
+      days: 7,
+      label: "7 Days (1 Week)",
+      desc: "Ideal for weekly targets, sprint items & reminders",
+      icon: Calendar,
+      badge: "Popular"
+    },
+    {
+      days: 30,
+      label: "30 Days (1 Month)",
+      desc: "For important guidelines, policies & monthly goals",
+      icon: Pin,
+      badge: "Extended"
+    }
+  ];
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[4px] flex items-center justify-center z-[1000] p-4 animate-fade-in">
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0, y: 10 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        className="w-full max-w-sm bg-bg-card border border-border-card rounded-[22px] p-5 shadow-2xl flex flex-col"
+      >
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center">
+              <Pin size={16} />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm text-text-main">
+                {isCurrentlyPinned ? "Manage Pinned Item" : "Pin Duration"}
+              </h3>
+              <p className="text-[11px] text-text-mut">How long should this stay pinned?</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-text-mut hover:text-text-main p-1 rounded-md hover:bg-bg-base cursor-pointer">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Target Preview */}
+        {target?.text && (
+          <div className="mb-3 p-2.5 bg-bg-base/70 border border-border-card rounded-[12px] text-xs text-text-sec line-clamp-2 italic">
+            &ldquo;{target.text}&rdquo;
+          </div>
+        )}
+        {target?.name && !target?.text && (
+          <div className="mb-3 p-2.5 bg-bg-base/70 border border-border-card rounded-[12px] text-xs text-text-sec font-semibold">
+            {target.type === "channel" ? `#${target.displayName || target.name}` : target.name}
+          </div>
+        )}
+
+        {/* Options */}
+        <div className="space-y-2 mb-4">
+          {durationOptions.map((opt) => {
+            const Icon = opt.icon;
+            const isSelected = selectedDuration === opt.days;
+            return (
+              <button
+                key={opt.days}
+                type="button"
+                onClick={() => setSelectedDuration(opt.days)}
+                className={`w-full p-3 rounded-[14px] border text-left transition-all flex items-center justify-between cursor-pointer ${
+                  isSelected
+                    ? "border-amber-500/60 bg-amber-500/10 shadow-sm"
+                    : "border-border-card bg-bg-base/40 hover:bg-bg-base hover:border-border-card/80"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isSelected ? "bg-amber-500 text-white" : "bg-bg-card text-text-mut border border-border-card"}`}>
+                    <Icon size={14} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold ${isSelected ? "text-amber-500 dark:text-amber-400" : "text-text-main"}`}>
+                        {opt.label}
+                      </span>
+                      {opt.badge && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300">
+                          {opt.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-text-mut mt-0.5">{opt.desc}</p>
+                  </div>
+                </div>
+                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? "border-amber-500 bg-amber-500 text-white" : "border-text-mut/40"}`}>
+                  {isSelected && <Check size={10} strokeWidth={3} />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-2">
+          {isCurrentlyPinned && (
+            <button
+              type="button"
+              onClick={() => { onUnpin(target); onClose(); }}
+              className="py-2.5 px-3 border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded-[12px] text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <PinOff size={13} /> Unpin
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 border border-border-card rounded-[12px] text-xs font-semibold text-text-sec hover:bg-bg-base cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => { onPin(target, selectedDuration); onClose(); }}
+            className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-[12px] text-xs font-bold hover:opacity-95 shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Pin size={13} /> Pin for {selectedDuration} {selectedDuration === 1 ? "Day" : "Days"}
+          </button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body
+  );
+}
 
 // ─── Single Message Bubble ────────────────────────────────────
-function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
+function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward, onPin }) {
   const isOwn = msg.senderId === currentUserId;
   const [showActions, setShowActions] = useState(false);
   const pressTimer = React.useRef(null);
   const { showToast } = useToast();
+
+  const isPinnedActive = msg.isPinned && (!msg.pinExpiresAt || new Date(msg.pinExpiresAt) > new Date());
 
   if (msg.isDeleted) {
     return (
@@ -128,9 +282,10 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
 
   return (
     <motion.div
+      id={`msg-${msg.id}`}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`flex gap-3 px-4 py-1.5 hover:bg-bg-base/40 group relative rounded-[10px] transition-colors ${isOwn ? "flex-row-reverse" : ""}`}
+      className={`flex gap-3 px-4 py-1.5 hover:bg-bg-base/40 group relative rounded-[10px] transition-all ${isOwn ? "flex-row-reverse" : ""}`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => { setShowActions(false); handlePressEnd(); }}
       onTouchStart={handlePressStart}
@@ -141,6 +296,13 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
     >
       <Avatar src={msg.senderAvatar} name={msg.senderName} />
       <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
+        {/* Pinned Tag Indicator */}
+        {isPinnedActive && (
+          <div className={`flex items-center gap-1 text-[10px] font-bold text-amber-500 mb-0.5 ${isOwn ? "justify-end" : "justify-start"}`}>
+            <Pin size={10} className="fill-amber-500" />
+            <span>Pinned · {msg.pinDurationDays ? `${msg.pinDurationDays}d` : "Active"} ({formatPinExpiry(msg.pinExpiresAt)})</span>
+          </div>
+        )}
         <div className="flex items-center gap-2 mb-0.5">
           <span className="text-[11px] font-bold text-text-sec">{isOwn ? "You" : msg.senderName}</span>
           <span className="text-[10px] text-text-mut">{formatTime(msg.timestamp)}</span>
@@ -150,7 +312,7 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
             isOwn
               ? "bg-gradient-to-br from-brand-primary to-brand-hover text-white rounded-[18px] rounded-br-[4px]"
               : "bg-bg-card border border-border-card text-text-main rounded-[18px] rounded-bl-[4px]"
-          }`}>
+          } ${isPinnedActive ? "ring-2 ring-amber-500/40" : ""}`}>
             <span className="block break-words">{renderMessageText(msg.text)}</span>
           </div>
         )}
@@ -160,6 +322,13 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward }) {
       {/* Message actions */}
       {showActions && (
         <div className={`absolute top-1 ${isOwn ? "left-2" : "right-2"} flex items-center gap-1 bg-bg-card border border-border-card rounded-[8px] shadow-md p-1 z-10 animate-fade-in`}>
+          <button
+            onClick={() => onPin && onPin(msg)}
+            className={`p-1 ${isPinnedActive ? "text-amber-500 bg-amber-500/10" : "text-text-mut hover:text-amber-500 hover:bg-amber-500/10"} rounded transition-colors cursor-pointer`}
+            title={isPinnedActive ? "Manage pinned message" : "Pin message (1, 7, or 30 days)"}
+          >
+            <Pin size={12} className={isPinnedActive ? "fill-amber-500" : ""} />
+          </button>
           <button
             onClick={() => onForward && onForward(msg)}
             className="p-1 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded transition-colors cursor-pointer"
@@ -946,6 +1115,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
   const [messages, setMessages] = useState([]);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [messageToForward, setMessageToForward] = useState(null);
+  const [messageToPin, setMessageToPin] = useState(null);
   const [inChatSearch, setInChatSearch] = useState("");
   const bottomRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -994,6 +1164,13 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, inChatSearch]);
+
+  // Active pinned messages (sorted by pinnedAt desc)
+  const activePinnedMessages = useMemo(() => {
+    return messages
+      .filter(m => !m.isDeleted && m.isPinned && (!m.pinExpiresAt || new Date(m.pinExpiresAt) > new Date()))
+      .sort((a, b) => new Date(b.pinnedAt || b.timestamp) - new Date(a.pinnedAt || a.timestamp));
+  }, [messages]);
 
   const handleSend = async (text, fileData) => {
     // Build optimistic message so it appears instantly
@@ -1053,6 +1230,42 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
       showToast(err.message || "Failed to delete message", "error");
     } finally {
       setMessageToDelete(null);
+    }
+  };
+
+  const handlePinConfirm = async (msg, durationDays) => {
+    try {
+      await pinChatMessage(msg.id, durationDays, currentUser.name, thread.id);
+      showToast(`Message pinned for ${durationDays} ${durationDays === 1 ? "day" : "days"}!`, "success");
+      const pinExpiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned: true, pinDurationDays: durationDays, pinExpiresAt, pinnedAt: new Date().toISOString(), pinnedBy: currentUser.name } : m));
+    } catch (err) {
+      showToast(err.message || "Failed to pin message", "error");
+    } finally {
+      setMessageToPin(null);
+    }
+  };
+
+  const handleUnpinConfirm = async (msg) => {
+    try {
+      await unpinChatMessage(msg.id, thread.id);
+      showToast("Message unpinned", "info");
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isPinned: false, pinDurationDays: null, pinExpiresAt: null, pinnedAt: null, pinnedBy: null } : m));
+    } catch (err) {
+      showToast(err.message || "Failed to unpin message", "error");
+    } finally {
+      setMessageToPin(null);
+    }
+  };
+
+  const scrollToMessage = (msgId) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-amber-500");
+      setTimeout(() => {
+        el.classList.remove("ring-2", "ring-amber-500");
+      }, 2500);
     }
   };
 
@@ -1131,6 +1344,49 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
         </div>
       )}
 
+      {/* Pinned Messages Header Banner */}
+      {activePinnedMessages.length > 0 && (
+        <div className="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-amber-500/15 via-orange-500/8 to-transparent border-b border-amber-500/25 flex items-center justify-between text-xs backdrop-blur-sm animate-fade-in shadow-sm z-10">
+          <div
+            onClick={() => scrollToMessage(activePinnedMessages[0].id)}
+            className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer group"
+          >
+            <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+              <Pin size={12} className="fill-amber-500 animate-pulse" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                  Pinned Message {activePinnedMessages.length > 1 ? `(1 of ${activePinnedMessages.length})` : ""}
+                </span>
+                <span className="text-[10px] text-text-mut">
+                  · {formatPinExpiry(activePinnedMessages[0].pinExpiresAt)}
+                </span>
+              </div>
+              <p className="text-xs text-text-main font-medium truncate group-hover:text-brand-primary transition-colors">
+                {activePinnedMessages[0].text || (activePinnedMessages[0].fileData ? `📎 ${activePinnedMessages[0].fileData.name}` : "Pinned update")}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+            <button
+              onClick={() => setMessageToPin(activePinnedMessages[0])}
+              className="p-1.5 text-text-mut hover:text-amber-500 hover:bg-amber-500/10 rounded-full transition-colors cursor-pointer"
+              title="Change pin duration or unpin"
+            >
+              <Clock size={13} />
+            </button>
+            <button
+              onClick={() => handleUnpinConfirm(activePinnedMessages[0])}
+              className="p-1.5 text-text-mut hover:text-red-500 hover:bg-red-500/10 rounded-full transition-colors cursor-pointer"
+              title="Unpin message"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
         {Object.entries(groupedMessages).map(([date, msgs]) => (
@@ -1148,6 +1404,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
                 isAdmin={isAdmin}
                 onDelete={handleDeleteClick}
                 onForward={(m) => setMessageToForward(m)}
+                onPin={(m) => setMessageToPin(m)}
               />
             ))}
           </div>
@@ -1191,6 +1448,16 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
           disabled={false}
         />
       </div>
+
+      {/* Pin Duration Modal (1 Day, 7 Days, 30 Days) */}
+      {messageToPin && (
+        <PinDurationModal
+          target={messageToPin}
+          onPin={handlePinConfirm}
+          onUnpin={handleUnpinConfirm}
+          onClose={() => setMessageToPin(null)}
+        />
+      )}
 
       {/* Delete Message Modal */}
       {messageToDelete && (
@@ -1254,6 +1521,7 @@ export default function TeamHub() {
   const [activeThread, setActiveThread]   = useState(null);
   const [showCreateCh, setShowCreateCh]   = useState(false);
   const [showNewDm, setShowNewDm]         = useState(false);
+  const [threadToPin, setThreadToPin]     = useState(null);
   const [searchQuery, setSearchQuery]     = useState("");
   const [joiningId, setJoiningId]         = useState(null);
   const [sidebarTab, setSidebarTab]       = useState("channels"); // 'channels' | 'dms'
@@ -1262,6 +1530,34 @@ export default function TeamHub() {
   const [showViewMembers, setShowViewMembers] = useState(false);
   const [showChatSearch, setShowChatSearch] = useState(false);
   const [allMessages, setAllMessages]     = useState([]);
+
+  // Helper to check if a thread is pinned for the current user
+  const isThreadPinned = useCallback((threadId) => {
+    const p = currentUser?.pinnedThreads?.[threadId];
+    return !!(p && (!p.expiresAt || new Date(p.expiresAt) > new Date()));
+  }, [currentUser?.pinnedThreads]);
+
+  const handlePinThreadConfirm = async (target, durationDays) => {
+    try {
+      await pinChatThread(currentUser.uid, target.id, target.type || sidebarTab, durationDays);
+      showToast(`${target.type === "channel" ? "Channel" : "Conversation"} pinned for ${durationDays} ${durationDays === 1 ? "day" : "days"}!`, "success");
+    } catch (err) {
+      showToast(err.message || "Failed to pin", "error");
+    } finally {
+      setThreadToPin(null);
+    }
+  };
+
+  const handleUnpinThreadConfirm = async (target) => {
+    try {
+      await unpinChatThread(currentUser.uid, target.id);
+      showToast("Unpinned from top", "info");
+    } catch (err) {
+      showToast(err.message || "Failed to unpin", "error");
+    } finally {
+      setThreadToPin(null);
+    }
+  };
 
   // Subscribe to channels
   useEffect(() => {
@@ -1395,16 +1691,27 @@ export default function TeamHub() {
   }, [channels, query]);
 
   const myChannels = useMemo(() => {
-    return filteredChannels.filter(ch => ch.id === "general" || ch.memberIds?.includes(currentUser?.uid));
-  }, [filteredChannels, currentUser?.uid]);
+    const list = filteredChannels.filter(ch => ch.id === "general" || ch.memberIds?.includes(currentUser?.uid));
+    return [...list].sort((a, b) => {
+      const aPinned = isThreadPinned(a.id);
+      const bPinned = isThreadPinned(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+  }, [filteredChannels, currentUser?.uid, isThreadPinned]);
 
   const otherChannels = useMemo(() => {
     return filteredChannels.filter(ch => ch.id !== "general" && !ch.memberIds?.includes(currentUser?.uid));
   }, [filteredChannels, currentUser?.uid]);
 
-  // Filtered DM Threads by participant name, email, department, designation, or message content
+  // Filtered DM Threads by participant name, email, department, designation, or message content (sorted by pinned first, then recency)
   const filteredDmThreads = useMemo(() => {
     const sorted = [...dmThreads].sort((a, b) => {
+      const aPinned = isThreadPinned(a.id);
+      const bPinned = isThreadPinned(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
       const aMsgs = allMessages.filter(m => m.threadId === a.id);
       const bMsgs = allMessages.filter(m => m.threadId === b.id);
       const aTime = aMsgs.length > 0 ? new Date(aMsgs[aMsgs.length - 1].timestamp).getTime() : 0;
@@ -1431,7 +1738,7 @@ export default function TeamHub() {
 
       return matchName || matchDept || matchEmail || matchDesig || matchMessage;
     });
-  }, [dmThreads, allMessages, query, currentUser?.uid, allUsers]);
+  }, [dmThreads, allMessages, query, currentUser?.uid, allUsers, isThreadPinned]);
 
   // Matching teammates from directory not yet in DM threads list
   const matchingTeammates = useMemo(() => {
@@ -1556,6 +1863,8 @@ export default function TeamHub() {
                       isMember={true}
                       isAdmin={isAdmin}
                       joiningId={joiningId}
+                      isPinned={isThreadPinned(ch.id)}
+                      onPin={() => setThreadToPin({ id: ch.id, name: ch.displayName || ch.name, type: "channel", isThreadPinned: isThreadPinned(ch.id) })}
                       onClick={() => setActiveThread({ ...ch, type: "channel" })}
                       onLeave={() => handleLeaveChannel(ch)}
                       onDelete={() => handleDeleteChannel(ch)}
@@ -1579,6 +1888,8 @@ export default function TeamHub() {
                       isMember={false}
                       isAdmin={isAdmin}
                       joiningId={joiningId}
+                      isPinned={false}
+                      onPin={null}
                       onClick={() => handleJoinChannel(ch)}
                       onLeave={null}
                       onDelete={() => handleDeleteChannel(ch)}
@@ -1634,29 +1945,49 @@ export default function TeamHub() {
                     const otherId = thread.participantIds.find(id => id !== currentUser?.uid);
                     const otherName = thread.participantNames?.[otherId] || "Unknown";
                     const otherUser = allUsers.find(u => u.uid === otherId);
+                    const isPinned = isThreadPinned(thread.id);
                     return (
-                      <button
+                      <div
                         key={thread.id}
-                        onClick={() => setActiveThread({ ...thread, type: "dm", otherUserId: otherId, otherUserName: otherName })}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors cursor-pointer text-left ${
+                        className={`w-full flex items-center justify-between px-3 py-2 transition-colors group rounded-[10px] mx-1 ${
                           activeThread?.id === thread.id
-                            ? "bg-brand-primary/10 border-r-2 border-brand-primary"
-                            : "hover:bg-bg-base"
+                            ? "bg-brand-primary/12 text-brand-primary"
+                            : "hover:bg-bg-base text-text-sec hover:text-text-main"
                         }`}
                       >
-                        <Avatar src={otherUser?.avatar} name={otherName} size="w-8 h-8" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold text-text-main truncate">{otherName}</div>
-                          <div className="text-[10px] text-text-mut truncate">
-                            {otherUser?.department || otherUser?.designation || "Team member"}
+                        <button
+                          onClick={() => setActiveThread({ ...thread, type: "dm", otherUserId: otherId, otherUserName: otherName })}
+                          className="flex-1 flex items-center gap-2.5 min-w-0 text-left cursor-pointer"
+                        >
+                          <Avatar src={otherUser?.avatar} name={otherName} size="w-7 h-7" textSize="text-[10px]" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold truncate">{otherName}</span>
+                              {isPinned && <Pin size={10} className="text-amber-500 fill-amber-500 flex-shrink-0" />}
+                            </div>
+                            <div className="text-[10px] text-text-mut truncate">
+                              {otherUser?.department || otherUser?.designation || "Team member"}
+                            </div>
                           </div>
-                        </div>
-                        {getUnreadCount(thread.id) > 0 && (
-                          <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold">
-                            {getUnreadCount(thread.id)}
-                          </span>
-                        )}
-                      </button>
+                          {getUnreadCount(thread.id) > 0 && (
+                            <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold ml-1">
+                              {getUnreadCount(thread.id)}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setThreadToPin({ id: thread.id, name: otherName, type: "dm", isThreadPinned: isPinned });
+                          }}
+                          className={`p-1 rounded opacity-0 group-hover:opacity-100 ${
+                            isPinned ? "opacity-100 text-amber-500 bg-amber-500/10" : "text-text-mut hover:text-amber-500 hover:bg-amber-500/10"
+                          } transition-all cursor-pointer`}
+                          title={isPinned ? "Manage pinned conversation" : "Pin conversation (1, 7, 30 days)"}
+                        >
+                          <Pin size={11} className={isPinned ? "fill-amber-500" : ""} />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1889,13 +2220,21 @@ export default function TeamHub() {
             onRemoveMember={handleRemoveMemberFromChannel}
           />
         )}
+        {threadToPin && (
+          <PinDurationModal
+            target={threadToPin}
+            onPin={handlePinThreadConfirm}
+            onUnpin={handleUnpinThreadConfirm}
+            onClose={() => setThreadToPin(null)}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
 }
 
 // ─── Channel List Item ────────────────────────────────────────
-function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLeave, onDelete, unreadCount }) {
+function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLeave, onDelete, isPinned, onPin, unreadCount }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -1908,6 +2247,9 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
       <button onClick={onClick} className="flex-1 flex items-center gap-2 px-3 py-2 text-left cursor-pointer min-w-0">
         <Hash size={13} className={`flex-shrink-0 ${isActive ? "text-brand-primary" : "text-text-mut"}`} />
         <span className="text-xs font-semibold truncate flex-1">{ch.displayName || ch.name}</span>
+        {isPinned && (
+          <Pin size={11} className="text-amber-500 fill-amber-500 flex-shrink-0 ml-1" />
+        )}
         {unreadCount > 0 && !isActive && (
           <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold ml-1">
             {unreadCount}
@@ -1921,6 +2263,15 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
       </button>
       {hovered && isMember && (
         <div className="flex items-center gap-0.5 pr-1">
+          {onPin && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPin(); }}
+              className={`p-1 ${isPinned ? "text-amber-500 bg-amber-500/10" : "text-text-mut hover:text-amber-500 hover:bg-amber-500/10"} transition-colors cursor-pointer rounded`}
+              title={isPinned ? "Manage pinned channel" : "Pin channel (1, 7, 30 days)"}
+            >
+              <Pin size={11} className={isPinned ? "fill-amber-500" : ""} />
+            </button>
+          )}
           {isAdmin && ch.id !== "general" && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(); }}

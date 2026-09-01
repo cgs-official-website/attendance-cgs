@@ -86,8 +86,9 @@ const localDb = {
   getUsers: () => {
     const users = localStorage.getItem("att_users");
     const parsed = users ? JSON.parse(users) : [];
-    // Ensure admin user exists
     let updated = false;
+
+    // Ensure admin user exists
     const adminIdx = parsed.findIndex(u => u.email === "admin@teamcarrezza.com");
     if (adminIdx === -1) {
       parsed.push({
@@ -98,6 +99,7 @@ const localDb = {
         programType: "Internship",
         role: "admin",
         companyId: "carrezza-global-solutions",
+        employeeStatus: "Active",
         createdAt: new Date().toISOString()
       });
       updated = true;
@@ -117,6 +119,7 @@ const localDb = {
         programType: "Full-time",
         role: "admin",
         companyId: "carrezza-global-solutions",
+        employeeStatus: "Active",
         createdAt: new Date().toISOString()
       });
       updated = true;
@@ -124,6 +127,63 @@ const localDb = {
       parsed[sysIdx].companyId = "carrezza-global-solutions";
       updated = true;
     }
+
+    // Seed staff employees if empty
+    const seedStaff = [
+      {
+        uid: "user-deepak-001",
+        name: "Deepak K N",
+        email: "deepak.kn@teamcarrezza.com",
+        department: "Development & Designing",
+        designation: "Front-End Developer",
+        programType: "Internship",
+        role: "employee",
+        employeeId: "CGSD002",
+        companyId: "carrezza-global-solutions",
+        employeeStatus: "Active",
+        grossSalary: 17000,
+        shiftStart: "09:00",
+        shiftEnd: "18:00",
+        createdAt: new Date().toISOString()
+      },
+      {
+        uid: "user-naveeth-002",
+        name: "Mohammed Naveeth",
+        email: "mohammednaveeth2003@gmail.com",
+        department: "Engineering",
+        designation: "Software Engineer",
+        programType: "Internship",
+        role: "employee",
+        employeeId: "CGSE003",
+        companyId: "carrezza-global-solutions",
+        employeeStatus: "Active",
+        grossSalary: 20000,
+        shiftStart: "09:00",
+        shiftEnd: "18:00",
+        createdAt: new Date().toISOString()
+      },
+      {
+        uid: "user-achu-003",
+        name: "Achu",
+        email: "achu@teamcarrezza.com",
+        department: "Engineering",
+        designation: "QA Engineer",
+        programType: "Internship",
+        role: "employee",
+        companyId: "carrezza-global-solutions",
+        employeeStatus: "Active",
+        shiftStart: "09:00",
+        shiftEnd: "18:00",
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    seedStaff.forEach(staff => {
+      if (!parsed.some(u => u.email === staff.email)) {
+        parsed.push(staff);
+        updated = true;
+      }
+    });
 
     if (updated) {
       localStorage.setItem("att_users", JSON.stringify(parsed));
@@ -139,7 +199,38 @@ const localDb = {
 
   getAttendance: () => {
     const logs = localStorage.getItem("att_logs");
-    return logs ? JSON.parse(logs) : [];
+    let parsed = logs ? JSON.parse(logs) : [];
+    if (parsed.length === 0) {
+      const today = new Date().toISOString().split("T")[0];
+      parsed = [
+        {
+          id: "log-1",
+          userId: "user-deepak-001",
+          userName: "Deepak K N",
+          userDept: "Development & Designing",
+          date: today,
+          checkIn: "09:05",
+          checkOut: "",
+          status: "in-progress",
+          companyId: "carrezza-global-solutions",
+          totalHours: "Live"
+        },
+        {
+          id: "log-2",
+          userId: "user-naveeth-002",
+          userName: "Mohammed Naveeth",
+          userDept: "Engineering",
+          date: today,
+          checkIn: "09:00",
+          checkOut: "18:00",
+          status: "completed",
+          companyId: "carrezza-global-solutions",
+          totalHours: "9.0"
+        }
+      ];
+      localStorage.setItem("att_logs", JSON.stringify(parsed));
+    }
+    return parsed;
   },
 
   saveAttendance: (logs) => {

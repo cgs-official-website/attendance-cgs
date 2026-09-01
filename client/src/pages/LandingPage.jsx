@@ -60,7 +60,7 @@ export default function LandingPage() {
       
       {/* Deep Mesh Background */}
       <div className="fixed inset-0 z-0 bg-bg-base pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-15"></div>
         <div className={`absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-brand-primary/20' : 'bg-brand-primary/40'}`}></div>
         <div className={`absolute bottom-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-indigo-600/20' : 'bg-indigo-400/40'}`}></div>
         <div className={`absolute top-[40%] right-[10%] w-[30vw] h-[30vw] rounded-full blur-[120px] transition-all duration-1000 ${isDark ? 'bg-purple-600/20' : 'bg-purple-400/40'}`}></div>

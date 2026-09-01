@@ -108,7 +108,7 @@ export default function Login() {
     setResetLoading(true);
     try {
       await sendPasswordReset(resetEmail);
-      showToast("Password reset email sent (check console if in local dev mode).", "success");
+      showToast("Password reset email sent! Please check your inbox.", "success");
       setIsResetModalOpen(false);
       setResetEmail("");
     } catch (error) {

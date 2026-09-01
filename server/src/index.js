@@ -30,20 +30,23 @@ io.on("connection", (socket) => {
 
 export { io };
 
-function startServer(port) {
-  server.listen(port, () => {
-    console.log(`🚀 HRMS Backend Server running on port ${port}`);
-    console.log(`📡 Health check available at: http://localhost:${port}/api/health`);
-  });
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.warn(`⚠️ Port ${PORT} is in use. Trying port ${PORT + 1}...`);
+    PORT++;
+    setTimeout(() => {
+      server.close();
+      server.listen(PORT, () => {
+        console.log(`🚀 HRMS Backend Server running on port ${PORT}`);
+        console.log(`📡 Health check available at: http://localhost:${PORT}/api/health`);
+      });
+    }, 300);
+  } else {
+    console.error("Server error:", err);
+  }
+});
 
-  server.on("error", (err) => {
-    if (err.code === "EADDRINUSE") {
-      console.warn(`⚠️ Port ${port} is in use. Trying port ${port + 1}...`);
-      startServer(port + 1);
-    } else {
-      console.error("Server error:", err);
-    }
-  });
-}
-
-startServer(PORT);
+server.listen(PORT, () => {
+  console.log(`🚀 HRMS Backend Server running on port ${PORT}`);
+  console.log(`📡 Health check available at: http://localhost:${PORT}/api/health`);
+});

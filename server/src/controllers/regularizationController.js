@@ -31,7 +31,7 @@ export const getRegularizationRequests = async (req, res) => {
       sql += ` AND r.status = $${params.length}`;
     }
 
-    sql += " ORDER BY r.applied_at DESC NULLS LAST LIMIT 500";
+    sql += " ORDER BY r.created_at DESC NULLS LAST LIMIT 500";
     const result = await query(sql, params);
     res.json(result.rows);
   } catch (err) {

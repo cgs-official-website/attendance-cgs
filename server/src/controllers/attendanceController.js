@@ -177,7 +177,7 @@ export const deleteAttendance = async (req, res) => {
 // Rules
 export const getAttendanceRules = async (req, res) => {
   try {
-    const result = await query("SELECT value FROM settings WHERE key = 'attendance_rules' OR id = 'attendance_rules'");
+    const result = await query("SELECT value FROM settings WHERE key = 'attendance_rules'");
     if (result.rows.length > 0) {
       res.json({ rules: result.rows[0].value?.rules || result.rows[0].value || "" });
     } else {
@@ -193,9 +193,9 @@ export const updateAttendanceRules = async (req, res) => {
   try {
     const { rules } = req.body;
     await query(
-      `INSERT INTO settings (id, key, value)
-       VALUES ('attendance_rules', 'attendance_rules', $1)
-       ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+      `INSERT INTO settings (key, value)
+       VALUES ('attendance_rules', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
       [JSON.stringify({ rules })]
     );
     res.json({ success: true, rules });

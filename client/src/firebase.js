@@ -21,6 +21,7 @@ export const apiFetch = async (endpoint, options = {}) => {
   // Determine candidate URLs
   const candidateUrls = [];
   if (isLocal) {
+    candidateUrls.push(`http://localhost:5005/api${cleanEndpoint}`);
     candidateUrls.push(`${LOCAL_API_URL}${cleanEndpoint}`);
   }
   if (import.meta.env.VITE_API_URL) {
@@ -48,10 +49,19 @@ export const apiFetch = async (endpoint, options = {}) => {
         return await response.json();
       }
 
-      // If 404 or 500, check if we have next candidate
       const err = await response.json().catch(() => ({ error: response.statusText }));
-      lastError = new Error(err.error || err.message || `Request failed with status ${response.status}`);
+      const errorMsg = err.error || err.message || `Request failed with status ${response.status}`;
+
+      // If it is an authoritative response (400, 401, 403, 404, 409, 500 from active local server), throw immediately
+      if (response.status < 500 || isLocal) {
+        throw new Error(errorMsg);
+      }
+
+      lastError = new Error(errorMsg);
     } catch (err) {
+      if (err.message && !err.message.includes("Failed to fetch") && !err.message.includes("NetworkError") && !err.message.includes("fetch failed")) {
+        throw err;
+      }
       lastError = err;
     }
   }
@@ -166,15 +176,17 @@ export const logoutUser = async () => {
 };
 
 export const sendPasswordReset = async (email) => {
-  try {
-    await apiFetch("/auth/reset-password", {
-      method: "POST",
-      body: JSON.stringify({ email: email.toLowerCase().trim() })
-    });
-    return true;
-  } catch (e) {
-    return true;
-  }
+  return apiFetch("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ email: email.toLowerCase().trim() })
+  });
+};
+
+export const confirmPasswordReset = async (token, newPassword) => {
+  return apiFetch("/auth/confirm-reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, newPassword })
+  });
 };
 
 export const changeUserPassword = async (newPassword) => {
@@ -628,29 +640,106 @@ export const joinChannel = async () => true;
 export const leaveChannel = async () => true;
 export const deleteChannel = async (channelId) => apiFetch(`/chat/channels/${channelId}`, { method: "DELETE" }).catch(() => {});
 
-export const sendChatMessage = async (channelId, text, senderId, senderName, senderAvatar = "", replyTo = null, attachments = [], companyId = "") => {
-  return apiFetch("/chat/messages", {
+export const sendChatMessage = async (...args) => {
+  let channelId, content, senderId, senderName, senderAvatar, attachments, companyId;
+  if (typeof args[1] === "string" && (args[1] === "channel" || args[1] === "dm" || typeof args[5] === "string")) {
+    // Called with: (threadId, threadType, senderId, senderName, senderAvatar, text, fileData, companyId)
+    channelId = args[0];
+    senderId = args[2];
+    senderName = args[3];
+    senderAvatar = args[4];
+    content = args[5];
+    const fileData = args[6];
+    companyId = args[7];
+    attachments = fileData ? [fileData] : [];
+  } else {
+    // Called with: (channelId, text, senderId, senderName, senderAvatar, replyTo, attachments, companyId)
+    channelId = args[0];
+    content = args[1];
+    senderId = args[2];
+    senderName = args[3];
+    senderAvatar = args[4];
+    attachments = args[6] || [];
+    companyId = args[7];
+  }
+
+  const res = await apiFetch("/chat/messages", {
     method: "POST",
     body: JSON.stringify({
       channelId,
-      content: text,
+      content,
       senderId,
       senderName,
       userAvatar: senderAvatar,
-      replyToId: replyTo?.id || null,
       attachments,
       companyId
     })
   });
+
+  return res ? {
+    ...res,
+    text: res.content || res.text || content || "",
+    senderAvatar: res.user_avatar || res.senderAvatar || senderAvatar || "",
+    fileData: (res.file_url || res.fileUrl) ? {
+      url: res.file_url || res.fileUrl,
+      name: res.file_name || res.fileName || "Attachment",
+      type: res.file_type || res.fileType || ""
+    } : (attachments?.[0] || null),
+    isPinned: Boolean(res.reactions?.pinned?.isPinned || res.isPinned),
+    pinExpiresAt: res.reactions?.pinned?.pinExpiresAt || res.reactions?.pinned?.pinnedUntil || res.pinExpiresAt || null,
+    pinDurationDays: res.reactions?.pinned?.pinDurationDays || res.pinDurationDays || null,
+    pinnedAt: res.reactions?.pinned?.pinnedAt || res.pinnedAt || null,
+    pinnedBy: res.reactions?.pinned?.pinnedBy || res.pinnedBy || null
+  } : res;
 };
 
-export const subscribeToMessages = (channelId, companyId, callback) => {
+const mapMessageData = (m) => {
+  if (!m) return m;
+  const pinned = m.reactions?.pinned || {};
+  const isPinned = m.isPinned !== undefined ? Boolean(m.isPinned) : Boolean(pinned.isPinned);
+  const pinExpiresAt = m.pinExpiresAt || pinned.pinExpiresAt || pinned.pinnedUntil || null;
+  const pinDurationDays = m.pinDurationDays || pinned.pinDurationDays || null;
+  const pinnedAt = m.pinnedAt || pinned.pinnedAt || null;
+  const pinnedBy = m.pinnedBy || pinned.pinnedBy || null;
+
+  return {
+    ...m,
+    text: m.text ?? m.content ?? "",
+    senderAvatar: m.senderAvatar ?? m.user_avatar ?? "",
+    fileData: m.fileData || ((m.file_url || m.fileUrl) ? {
+      url: m.file_url || m.fileUrl,
+      name: m.file_name || m.fileName || "Attachment",
+      type: m.file_type || m.fileType || ""
+    } : null),
+    isPinned,
+    pinExpiresAt,
+    pinDurationDays,
+    pinnedAt,
+    pinnedBy
+  };
+};
+
+export const subscribeToMessages = (channelId, companyIdOrCallback, maybeCallback) => {
+  let companyId = "";
+  let callback = null;
+  if (typeof companyIdOrCallback === "function") {
+    callback = companyIdOrCallback;
+    companyId = "";
+  } else {
+    companyId = companyIdOrCallback || "";
+    callback = maybeCallback;
+  }
+
   let isMounted = true;
   const fetchMsgs = () => {
+    if (!channelId) return;
     apiFetch(`/chat/messages?channelId=${channelId}&companyId=${companyId || ""}`).then(data => {
-      if (isMounted) callback(Array.isArray(data) ? data : []);
+      if (isMounted && typeof callback === "function") {
+        const msgs = Array.isArray(data) ? data.map(mapMessageData) : [];
+        callback(msgs);
+      }
     }).catch(() => {
-      if (isMounted) callback([]);
+      if (isMounted && typeof callback === "function") callback([]);
     });
   };
   fetchMsgs();
@@ -665,9 +754,12 @@ export const subscribeToAllMessages = (companyId, callback) => {
   let isMounted = true;
   const fetchAll = () => {
     apiFetch(`/chat/messages?companyId=${companyId || ""}`).then(data => {
-      if (isMounted) callback(Array.isArray(data) ? data : []);
+      if (isMounted && typeof callback === "function") {
+        const msgs = Array.isArray(data) ? data.map(mapMessageData) : [];
+        callback(msgs);
+      }
     }).catch(() => {
-      if (isMounted) callback([]);
+      if (isMounted && typeof callback === "function") callback([]);
     });
   };
   fetchAll();
@@ -678,18 +770,33 @@ export const subscribeToAllMessages = (companyId, callback) => {
   };
 };
 
-export const pinChatMessage = async (messageId, durationHours = 24) => {
-  const pinnedUntil = new Date(Date.now() + durationHours * 3600 * 1000).toISOString();
+export const pinChatMessage = async (messageId, durationDays = 1, pinnedBy = "", threadId = "") => {
+  const days = typeof durationDays === "number" ? durationDays : 1;
+  const pinExpiresAt = new Date(Date.now() + days * 24 * 3600 * 1000).toISOString();
   return apiFetch(`/chat/messages/${messageId}/pin`, {
     method: "PATCH",
-    body: JSON.stringify({ isPinned: true, pinnedDuration: `${durationHours}h`, pinnedUntil })
+    body: JSON.stringify({
+      isPinned: true,
+      pinDurationDays: days,
+      pinExpiresAt,
+      pinnedUntil: pinExpiresAt,
+      pinnedBy: pinnedBy || "User",
+      pinnedAt: new Date().toISOString()
+    })
   });
 };
 
 export const unpinChatMessage = async (messageId) => {
   return apiFetch(`/chat/messages/${messageId}/pin`, {
     method: "PATCH",
-    body: JSON.stringify({ isPinned: false, pinnedDuration: null, pinnedUntil: null })
+    body: JSON.stringify({
+      isPinned: false,
+      pinDurationDays: null,
+      pinExpiresAt: null,
+      pinnedUntil: null,
+      pinnedBy: null,
+      pinnedAt: null
+    })
   });
 };
 

@@ -6,6 +6,7 @@ import {
   onAuthUserChanged,
   getDbType,
   sendPasswordReset,
+  confirmPasswordReset,
   changeUserPassword
 } from "../firebase";
 
@@ -79,6 +80,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateCurrentUserState,
     sendPasswordReset,
+    confirmPasswordReset,
     changeUserPassword
   };
 

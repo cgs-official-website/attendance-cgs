@@ -19,6 +19,7 @@ import PurchaseOrganization from "./pages/PurchaseOrganization";
 import ClientChat from "./pages/ClientChat";
 import ProjectCalendar from "./pages/ProjectCalendar";
 import EnvironmentalSetup from "./modules/environmentalSetup/pages/EnvironmentalSetup";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import InactiveAccount from "./pages/InactiveAccount";
 
@@ -135,6 +136,14 @@ export default function App() {
           element={
             <PublicRoute>
               <Login />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/reset-password" 
+          element={
+            <PublicRoute>
+              <ResetPassword />
             </PublicRoute>
           } 
         />

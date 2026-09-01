@@ -42,11 +42,45 @@ export const createChannel = async (req, res) => {
   }
 };
 
+const formatMessageRow = (row) => {
+  if (!row) return null;
+  const pinned = (row.reactions && typeof row.reactions === "object" ? row.reactions.pinned : null) || {};
+  const isPinned = Boolean(pinned.isPinned);
+  const pinExpiresAt = pinned.pinExpiresAt || pinned.pinnedUntil || null;
+  const pinDurationDays = pinned.pinDurationDays || null;
+  const pinnedAt = pinned.pinnedAt || null;
+  const pinnedBy = pinned.pinnedBy || null;
+
+  return {
+    id: row.id,
+    threadId: row.channel_id,
+    channelId: row.channel_id,
+    companyId: row.company_id,
+    senderId: row.user_id || row.sender_id || row.senderId,
+    senderName: row.user_name || row.sender_name || row.senderName || "User",
+    senderAvatar: row.user_avatar || row.sender_avatar || row.senderAvatar || "",
+    text: row.content || row.text || "",
+    content: row.content || row.text || "",
+    timestamp: row.created_at || row.timestamp,
+    fileData: (row.file_url || row.fileUrl) ? {
+      url: row.file_url || row.fileUrl,
+      name: row.file_name || row.fileName || "Attachment",
+      type: row.file_type || row.fileType || ""
+    } : (row.fileData || null),
+    reactions: row.reactions || {},
+    isPinned,
+    pinExpiresAt,
+    pinDurationDays,
+    pinnedAt,
+    pinnedBy
+  };
+};
+
 // Messages
 export const getMessages = async (req, res) => {
   try {
     const { channelId, companyId } = req.query;
-    let sql = "SELECT *, user_id as \"senderId\", user_name as \"senderName\", created_at as timestamp FROM messages WHERE 1=1";
+    let sql = "SELECT * FROM messages WHERE 1=1";
     const params = [];
 
     if (channelId) {
@@ -60,7 +94,7 @@ export const getMessages = async (req, res) => {
 
     sql += " ORDER BY created_at ASC LIMIT 1000";
     const result = await query(sql, params);
-    res.json(result.rows);
+    res.json(result.rows.map(formatMessageRow));
   } catch (err) {
     console.error("getMessages error:", err);
     res.status(500).json({ error: "Failed to fetch messages." });
@@ -87,13 +121,7 @@ export const sendMessage = async (req, res) => {
       [id, channelId, targetCompanyId, senderId, senderName, userAvatar, content, fileUrl, fileName, fileType]
     );
 
-    const row = result.rows[0];
-    res.status(201).json({
-      ...row,
-      senderId: row.user_id,
-      senderName: row.user_name,
-      timestamp: row.created_at
-    });
+    res.status(201).json(formatMessageRow(result.rows[0]));
   } catch (err) {
     console.error("sendMessage error:", err);
     res.status(500).json({ error: "Failed to send message." });
@@ -103,20 +131,41 @@ export const sendMessage = async (req, res) => {
 export const pinMessage = async (req, res) => {
   try {
     const { id } = req.params;
-    const { pinnedDuration, pinnedUntil, isPinned = true } = req.body;
+    const {
+      isPinned = true,
+      pinDurationDays,
+      pinnedDuration,
+      pinnedUntil,
+      pinExpiresAt,
+      pinnedBy,
+      pinnedAt
+    } = req.body;
+
+    const days = pinDurationDays || (pinnedDuration ? parseInt(pinnedDuration, 10) : null);
+    const expiresAt = pinExpiresAt || pinnedUntil || (days ? new Date(Date.now() + days * 24 * 3600 * 1000).toISOString() : null);
+
+    const pinData = {
+      isPinned: Boolean(isPinned),
+      pinDurationDays: days,
+      pinExpiresAt: expiresAt,
+      pinnedUntil: expiresAt,
+      pinnedBy: pinnedBy || req.user?.name || null,
+      pinnedAt: pinnedAt || (isPinned ? new Date().toISOString() : null)
+    };
+
     const result = await query(
       `UPDATE messages
        SET reactions = jsonb_set(COALESCE(reactions, '{}'::jsonb), '{pinned}', $1::jsonb)
        WHERE id = $2
        RETURNING *`,
-      [JSON.stringify({ isPinned, pinnedDuration, pinnedUntil, pinnedAt: new Date().toISOString() }), id]
+      [JSON.stringify(pinData), id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Message not found." });
     }
 
-    res.json(result.rows[0]);
+    res.json(formatMessageRow(result.rows[0]));
   } catch (err) {
     console.error("pinMessage error:", err);
     res.status(500).json({ error: "Failed to pin message." });

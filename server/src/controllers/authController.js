@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { query } from "../config/db.js";
 import { generateToken } from "../middlewares/auth.js";
-import { sendWelcomeEmail } from "../services/emailService.js";
+import { sendWelcomeEmail, sendPasswordResetEmail } from "../services/emailService.js";
 
 export const login = async (req, res) => {
   try {
@@ -135,3 +136,102 @@ export const getMe = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch user profile." });
   }
 };
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required." });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const result = await query("SELECT id, name, email FROM users WHERE email = $1", [cleanEmail]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "No account found with this email address." });
+    }
+
+    const user = result.rows[0];
+    const jwtSecret = process.env.JWT_SECRET || "hrms_jwt_super_secret_railway_2026";
+
+    // Generate a reset token valid for 30 minutes
+    const resetToken = jwt.sign(
+      { id: user.id, email: user.email, type: "password_reset" },
+      jwtSecret,
+      { expiresIn: "30m" }
+    );
+
+    // Determine client base URL dynamically
+    const origin = req.headers.origin || req.headers.referer;
+    let baseUrl = process.env.APP_URL || "https://attendance-cgs.vercel.app";
+    if (origin) {
+      try {
+        const parsed = new URL(origin);
+        baseUrl = parsed.origin;
+      } catch (e) {
+        // use default baseUrl
+      }
+    }
+
+    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
+
+    const emailResult = await sendPasswordResetEmail({
+      email: user.email,
+      name: user.name,
+      resetToken,
+      resetUrl
+    });
+
+    if (!emailResult.success && emailResult.reason === "SMTP_NOT_CONFIGURED") {
+      return res.status(500).json({ error: "Email service is not configured on the server." });
+    }
+
+    if (!emailResult.success) {
+      return res.status(500).json({ error: emailResult.error || "Failed to deliver reset email." });
+    }
+
+    res.json({ message: "Password reset email sent successfully. Please check your inbox." });
+  } catch (err) {
+    console.error("forgotPassword error:", err);
+    res.status(500).json({ error: "Internal server error while processing password reset." });
+  }
+};
+
+export const confirmResetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new password are required." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long." });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET || "hrms_jwt_super_secret_railway_2026";
+    let decoded;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch (err) {
+      return res.status(400).json({ error: "Password reset link is invalid or has expired. Please request a new one." });
+    }
+
+    if (decoded.type !== "password_reset" || !decoded.id) {
+      return res.status(400).json({ error: "Invalid password reset token." });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    const updateRes = await query("UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, email, name", [passwordHash, decoded.id]);
+    if (updateRes.rows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    res.json({ message: "Password has been successfully reset. You can now log in with your new password." });
+  } catch (err) {
+    console.error("confirmResetPassword error:", err);
+    res.status(500).json({ error: "Internal server error while resetting password." });
+  }
+};
+

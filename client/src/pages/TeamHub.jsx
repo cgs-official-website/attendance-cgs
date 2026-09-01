@@ -117,7 +117,7 @@ function PinDurationModal({ target, onPin, onUnpin, onClose }) {
       >
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center">
               <Pin size={16} />
             </div>
             <div>
@@ -156,21 +156,21 @@ function PinDurationModal({ target, onPin, onUnpin, onClose }) {
                 onClick={() => setSelectedDuration(opt.days)}
                 className={`w-full p-3 rounded-[14px] border text-left transition-all flex items-center justify-between cursor-pointer ${
                   isSelected
-                    ? "border-amber-500/60 bg-amber-500/10 shadow-sm"
+                    ? "border-brand-primary/60 bg-brand-primary/10 shadow-sm"
                     : "border-border-card bg-bg-base/40 hover:bg-bg-base hover:border-border-card/80"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isSelected ? "bg-amber-500 text-white" : "bg-bg-card text-text-mut border border-border-card"}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isSelected ? "bg-brand-primary text-white" : "bg-bg-card text-text-mut border border-border-card"}`}>
                     <Icon size={14} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold ${isSelected ? "text-amber-500 dark:text-amber-400" : "text-text-main"}`}>
+                      <span className={`text-xs font-bold ${isSelected ? "text-brand-primary" : "text-text-main"}`}>
                         {opt.label}
                       </span>
                       {opt.badge && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded-full font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300">
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full font-extrabold bg-brand-primary/15 text-brand-primary">
                           {opt.badge}
                         </span>
                       )}
@@ -178,7 +178,7 @@ function PinDurationModal({ target, onPin, onUnpin, onClose }) {
                     <p className="text-[10px] text-text-mut mt-0.5">{opt.desc}</p>
                   </div>
                 </div>
-                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? "border-amber-500 bg-amber-500 text-white" : "border-text-mut/40"}`}>
+                <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? "border-brand-primary bg-brand-primary text-white" : "border-text-mut/40"}`}>
                   {isSelected && <Check size={10} strokeWidth={3} />}
                 </div>
               </button>
@@ -298,8 +298,8 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward, onPin
       <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
         {/* Pinned Tag Indicator */}
         {isPinnedActive && (
-          <div className={`flex items-center gap-1 text-[10px] font-bold text-amber-500 mb-0.5 ${isOwn ? "justify-end" : "justify-start"}`}>
-            <Pin size={10} className="fill-amber-500" />
+          <div className={`flex items-center gap-1 text-[10px] font-bold text-brand-primary mb-0.5 ${isOwn ? "justify-end" : "justify-start"}`}>
+            <Pin size={10} className="fill-brand-primary" />
             <span>Pinned · {msg.pinDurationDays ? `${msg.pinDurationDays}d` : "Active"} ({formatPinExpiry(msg.pinExpiresAt)})</span>
           </div>
         )}
@@ -312,7 +312,7 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward, onPin
             isOwn
               ? "bg-gradient-to-br from-brand-primary to-brand-hover text-white rounded-[18px] rounded-br-[4px]"
               : "bg-bg-card border border-border-card text-text-main rounded-[18px] rounded-bl-[4px]"
-          } ${isPinnedActive ? "ring-2 ring-amber-500/40" : ""}`}>
+          } ${isPinnedActive ? "ring-2 ring-brand-primary/40" : ""}`}>
             <span className="block break-words">{renderMessageText(msg.text)}</span>
           </div>
         )}
@@ -324,10 +324,10 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward, onPin
         <div className={`absolute top-1 ${isOwn ? "left-2" : "right-2"} flex items-center gap-1 bg-bg-card border border-border-card rounded-[8px] shadow-md p-1 z-10 animate-fade-in`}>
           <button
             onClick={() => onPin && onPin(msg)}
-            className={`p-1 ${isPinnedActive ? "text-amber-500 bg-amber-500/10" : "text-text-mut hover:text-amber-500 hover:bg-amber-500/10"} rounded transition-colors cursor-pointer`}
+            className={`p-1 ${isPinnedActive ? "text-brand-primary bg-brand-primary/10" : "text-text-mut hover:text-brand-primary hover:bg-brand-primary/10"} rounded transition-colors cursor-pointer`}
             title={isPinnedActive ? "Manage pinned message" : "Pin message (1, 7, or 30 days)"}
           >
-            <Pin size={12} className={isPinnedActive ? "fill-amber-500" : ""} />
+            <Pin size={12} className={isPinnedActive ? "fill-brand-primary" : ""} />
           </button>
           <button
             onClick={() => onForward && onForward(msg)}
@@ -1262,9 +1262,9 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
     const el = document.getElementById(`msg-${msgId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("ring-2", "ring-amber-500");
+      el.classList.add("ring-2", "ring-brand-primary");
       setTimeout(() => {
-        el.classList.remove("ring-2", "ring-amber-500");
+        el.classList.remove("ring-2", "ring-brand-primary");
       }, 2500);
     }
   };
@@ -1346,17 +1346,17 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
 
       {/* Pinned Messages Header Banner */}
       {activePinnedMessages.length > 0 && (
-        <div className="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-amber-500/15 via-orange-500/8 to-transparent border-b border-amber-500/25 flex items-center justify-between text-xs backdrop-blur-sm animate-fade-in shadow-sm z-10">
+        <div className="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-brand-primary/15 via-brand-primary/5 to-transparent border-b border-brand-primary/25 flex items-center justify-between text-xs backdrop-blur-sm animate-fade-in shadow-sm z-10">
           <div
             onClick={() => scrollToMessage(activePinnedMessages[0].id)}
             className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer group"
           >
-            <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              <Pin size={12} className="fill-amber-500 animate-pulse" />
+            <div className="w-6 h-6 rounded-full bg-brand-primary/20 text-brand-primary flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+              <Pin size={12} className="fill-brand-primary animate-pulse" />
             </div>
             <div className="min-w-0 flex-1 text-left">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                <span className="text-[10px] font-extrabold text-brand-primary uppercase tracking-wider">
                   Pinned Message {activePinnedMessages.length > 1 ? `(1 of ${activePinnedMessages.length})` : ""}
                 </span>
                 <span className="text-[10px] text-text-mut">
@@ -1371,7 +1371,7 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
           <div className="flex items-center gap-1 flex-shrink-0 ml-2">
             <button
               onClick={() => setMessageToPin(activePinnedMessages[0])}
-              className="p-1.5 text-text-mut hover:text-amber-500 hover:bg-amber-500/10 rounded-full transition-colors cursor-pointer"
+              className="p-1.5 text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 rounded-full transition-colors cursor-pointer"
               title="Change pin duration or unpin"
             >
               <Clock size={13} />
@@ -1963,7 +1963,7 @@ export default function TeamHub() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs font-bold truncate">{otherName}</span>
-                              {isPinned && <Pin size={10} className="text-amber-500 fill-amber-500 flex-shrink-0" />}
+                              {isPinned && <Pin size={10} className="text-brand-primary fill-brand-primary flex-shrink-0" />}
                             </div>
                             <div className="text-[10px] text-text-mut truncate">
                               {otherUser?.department || otherUser?.designation || "Team member"}
@@ -1981,11 +1981,11 @@ export default function TeamHub() {
                             setThreadToPin({ id: thread.id, name: otherName, type: "dm", isThreadPinned: isPinned });
                           }}
                           className={`p-1 rounded opacity-0 group-hover:opacity-100 ${
-                            isPinned ? "opacity-100 text-amber-500 bg-amber-500/10" : "text-text-mut hover:text-amber-500 hover:bg-amber-500/10"
+                            isPinned ? "opacity-100 text-brand-primary bg-brand-primary/10" : "text-text-mut hover:text-brand-primary hover:bg-brand-primary/10"
                           } transition-all cursor-pointer`}
                           title={isPinned ? "Manage pinned conversation" : "Pin conversation (1, 7, 30 days)"}
                         >
-                          <Pin size={11} className={isPinned ? "fill-amber-500" : ""} />
+                          <Pin size={11} className={isPinned ? "fill-brand-primary" : ""} />
                         </button>
                       </div>
                     );
@@ -2248,7 +2248,7 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
         <Hash size={13} className={`flex-shrink-0 ${isActive ? "text-brand-primary" : "text-text-mut"}`} />
         <span className="text-xs font-semibold truncate flex-1">{ch.displayName || ch.name}</span>
         {isPinned && (
-          <Pin size={11} className="text-amber-500 fill-amber-500 flex-shrink-0 ml-1" />
+          <Pin size={11} className="text-brand-primary fill-brand-primary flex-shrink-0 ml-1" />
         )}
         {unreadCount > 0 && !isActive && (
           <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold ml-1">
@@ -2266,10 +2266,10 @@ function ChannelItem({ ch, isActive, isMember, isAdmin, joiningId, onClick, onLe
           {onPin && (
             <button
               onClick={(e) => { e.stopPropagation(); onPin(); }}
-              className={`p-1 ${isPinned ? "text-amber-500 bg-amber-500/10" : "text-text-mut hover:text-amber-500 hover:bg-amber-500/10"} transition-colors cursor-pointer rounded`}
+              className={`p-1 ${isPinned ? "text-brand-primary bg-brand-primary/10" : "text-text-mut hover:text-brand-primary hover:bg-brand-primary/10"} transition-colors cursor-pointer rounded`}
               title={isPinned ? "Manage pinned channel" : "Pin channel (1, 7, 30 days)"}
             >
-              <Pin size={11} className={isPinned ? "fill-amber-500" : ""} />
+              <Pin size={11} className={isPinned ? "fill-brand-primary" : ""} />
             </button>
           )}
           {isAdmin && ch.id !== "general" && (

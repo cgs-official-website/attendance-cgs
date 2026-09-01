@@ -13,6 +13,7 @@ import payrollRoutes from "./routes/payroll.routes.js";
 import rolesRoutes from "./routes/roles.routes.js";
 import envSettingsRoutes from "./routes/envSettings.routes.js";
 import companiesRoutes from "./routes/companies.routes.js";
+import externalLinksRoutes from "./routes/externalLinks.routes.js";
 
 const app = express();
 
@@ -39,5 +40,6 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/roles", rolesRoutes);
 app.use("/api/environment-settings", envSettingsRoutes);
 app.use("/api/companies", companiesRoutes);
+app.use("/api/external-links", externalLinksRoutes);
 
 export default app;

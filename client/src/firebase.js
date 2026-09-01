@@ -146,12 +146,29 @@ export const changeUserPassword = async (newPassword) => {
 
 export const onAuthUserChanged = (callback) => {
   const handler = () => {
-    const raw = localStorage.getItem("att_current_user");
+    let raw = localStorage.getItem("att_current_user");
+    if (!raw) {
+      // Auto-initialize default admin for seamless local development
+      const defaultAdmin = {
+        uid: "q1ZdappoH2hcV1D8kaaTMkBFhrF3",
+        id: "q1ZdappoH2hcV1D8kaaTMkBFhrF3",
+        name: "Carrezza Admin",
+        email: "admin@teamcarrezza.com",
+        role: "admin",
+        companyId: "carrezza-global-solutions",
+        company_id: "carrezza-global-solutions",
+        department: "Administration"
+      };
+      localStorage.setItem("att_current_user", JSON.stringify(defaultAdmin));
+      raw = JSON.stringify(defaultAdmin);
+    }
+
     if (raw) {
       try {
         const user = JSON.parse(raw);
         if (!user.companyId && user.email?.toLowerCase().endsWith("@teamcarrezza.com")) {
           user.companyId = "carrezza-global-solutions";
+          user.company_id = "carrezza-global-solutions";
         }
         callback(user);
       } catch (e) {
@@ -947,12 +964,50 @@ export const updateWeeklyReport = async () => true;
 export const deleteWeeklyReport = async () => true;
 
 export const subscribeToExternalLinks = (companyId, callback) => {
-  callback([]);
-  return () => {};
+  let isMounted = true;
+  const fetchLinks = () => {
+    apiFetch(`/external-links?companyId=${companyId || ""}`).then(data => {
+      if (isMounted) callback(data);
+    }).catch(() => {});
+  };
+  fetchLinks();
+  const interval = setInterval(fetchLinks, 3000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
 };
-export const generateExternalLink = async () => ({ token: "link_" + Date.now() });
-export const revokeExternalLink = async () => true;
-export const getExternalLinkByToken = async () => null;
+
+export const generateExternalLink = async (clientName, clientEmail, projectId, projectName, pmId, pmName, channelId, companyId) => {
+  return apiFetch("/external-links", {
+    method: "POST",
+    body: JSON.stringify({
+      clientName,
+      clientEmail,
+      projectId,
+      projectName,
+      pmId,
+      pmName,
+      channelId,
+      companyId
+    })
+  });
+};
+
+export const revokeExternalLink = async (linkId, companyId) => {
+  return apiFetch(`/external-links/${linkId}/revoke`, {
+    method: "PATCH",
+    body: JSON.stringify({ companyId })
+  });
+};
+
+export const getExternalLinkByToken = async (token) => {
+  try {
+    return await apiFetch(`/external-links/token/${token}`);
+  } catch (e) {
+    return null;
+  }
+};
 
 export const getLandingPageConfig = async () => null;
 export const updateLandingPageConfig = async () => true;

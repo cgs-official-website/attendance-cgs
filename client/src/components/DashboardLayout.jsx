@@ -199,7 +199,7 @@ export default function DashboardLayout({ children }) {
       link.href = url || "/favicon.png";
     };
 
-    const userIsSuperAdmin = currentUser?.role === "superadmin" || currentUser?.email === "admin@teamcarrezza.com" || currentUser?.email?.toLowerCase().includes("superadmin");
+    const userIsSuperAdmin = currentUser?.role === "superadmin" || currentUser?.email?.toLowerCase().includes("superadmin@");
     const effectiveCompanyId = currentUser?.companyId || (currentUser?.email?.toLowerCase().endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "");
 
     if (effectiveCompanyId) {
@@ -586,7 +586,7 @@ export default function DashboardLayout({ children }) {
   };
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.email === "admin@teamcarrezza.com";
-  const isSuperAdmin = currentUser?.role === "superadmin" || currentUser?.email === "admin@teamcarrezza.com";
+  const isSuperAdmin = currentUser?.role === "superadmin";
   const activeTabParam = searchParams.get("tab") || "live";
 
   const activeTasksCount = currentUser?.tasks?.filter(t => !t.completed)?.length || 0;

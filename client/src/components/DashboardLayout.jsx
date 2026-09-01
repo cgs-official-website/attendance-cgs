@@ -199,26 +199,30 @@ export default function DashboardLayout({ children }) {
       link.href = url || "/favicon.png";
     };
 
-    if (currentUser?.companyId) {
-      unsubscribe = listenToCompany(currentUser.companyId, (companyData) => {
+    const userIsSuperAdmin = currentUser?.role === "superadmin" || currentUser?.email === "admin@teamcarrezza.com" || currentUser?.email?.toLowerCase().includes("superadmin");
+    const effectiveCompanyId = currentUser?.companyId || (currentUser?.email?.toLowerCase().endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "");
+
+    if (effectiveCompanyId) {
+      unsubscribe = listenToCompany(effectiveCompanyId, (companyData) => {
         if (companyData) {
-          document.title = companyData.name;
-          setCompanyName(companyData.name || "");
+          document.title = companyData.name || "Carrezza Global Solutions";
+          setCompanyName(companyData.name || "Carrezza Global Solutions");
           setCompanyLogo(companyData.logoBase64 || "");
           updateFavicon(companyData.logoBase64);
           setCompanyStatus(companyData.status || "active");
           setCompanyModules(companyData.modules && companyData.modules.length > 0 ? companyData.modules : ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]);
         } else {
-          document.title = "Zuna | HRMS";
+          document.title = "Carrezza Global Solutions";
           updateFavicon("/favicon.png");
+          setCompanyName("Carrezza Global Solutions");
           setCompanyStatus("active");
-          setCompanyModules([]);
+          setCompanyModules(["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]);
         }
       });
     } else if (currentUser) {
       document.title = "Zuna | HRMS";
       updateFavicon("/favicon.png");
-      setCompanyStatus(isSuperAdmin ? "active" : "no_workspace");
+      setCompanyStatus(userIsSuperAdmin ? "active" : "no_workspace");
     }
     
     return () => {
@@ -581,8 +585,8 @@ export default function DashboardLayout({ children }) {
     }
   };
 
-  const isAdmin = currentUser?.role === "admin";
-  const isSuperAdmin = currentUser?.role === "superadmin";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.email === "admin@teamcarrezza.com";
+  const isSuperAdmin = currentUser?.role === "superadmin" || currentUser?.email === "admin@teamcarrezza.com";
   const activeTabParam = searchParams.get("tab") || "live";
 
   const activeTasksCount = currentUser?.tasks?.filter(t => !t.completed)?.length || 0;

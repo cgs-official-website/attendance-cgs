@@ -88,20 +88,27 @@ const localDb = {
     const parsed = users ? JSON.parse(users) : [];
     // Ensure admin user exists
     let updated = false;
-    if (!parsed.some(u => u.email === "admin@teamcarrezza.com")) {
+    const adminIdx = parsed.findIndex(u => u.email === "admin@teamcarrezza.com");
+    if (adminIdx === -1) {
       parsed.push({
         uid: "admin-uid-12345",
-        name: "Super Admin",
+        name: "Carrezza Admin",
         email: "admin@teamcarrezza.com",
         department: "Administration",
         programType: "Internship",
         role: "admin",
+        companyId: "carrezza-global-solutions",
         createdAt: new Date().toISOString()
       });
       updated = true;
+    } else if (!parsed[adminIdx].companyId) {
+      parsed[adminIdx].companyId = "carrezza-global-solutions";
+      updated = true;
     }
+
     // Ensure system admin user exists
-    if (!parsed.some(u => u.email === "systemadmin@teamcarrezza.com")) {
+    const sysIdx = parsed.findIndex(u => u.email === "systemadmin@teamcarrezza.com");
+    if (sysIdx === -1) {
       parsed.push({
         uid: "systemadmin-uid-12345",
         name: "System Admin",
@@ -109,10 +116,15 @@ const localDb = {
         department: "IT Infrastructure",
         programType: "Full-time",
         role: "admin",
+        companyId: "carrezza-global-solutions",
         createdAt: new Date().toISOString()
       });
       updated = true;
+    } else if (!parsed[sysIdx].companyId) {
+      parsed[sysIdx].companyId = "carrezza-global-solutions";
+      updated = true;
     }
+
     if (updated) {
       localStorage.setItem("att_users", JSON.stringify(parsed));
     }
@@ -364,15 +376,22 @@ export const loginUser = async (email, password) => {
       // Fetch profile from Firestore
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
-        return userDoc.data();
+        const data = userDoc.data();
+        if (!data.companyId && cleanEmail.endsWith("@teamcarrezza.com")) {
+          data.companyId = "carrezza-global-solutions";
+          await setDoc(doc(db, "users", user.uid), { companyId: "carrezza-global-solutions" }, { merge: true });
+        }
+        return data;
       } else {
+        const defaultCompId = cleanEmail.endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "";
         const userData = {
           uid: user.uid,
-          name: cleanEmail === "admin@teamcarrezza.com" ? "Super Admin" : user.displayName || "User",
+          name: cleanEmail === "admin@teamcarrezza.com" ? "Carrezza Admin" : user.displayName || "User",
           department: cleanEmail === "admin@teamcarrezza.com" ? "Administration" : "Unknown",
           programType: "Internship",
           email: cleanEmail,
           role,
+          companyId: defaultCompId,
           createdAt: new Date().toISOString()
         };
         await setDoc(doc(db, "users", user.uid), userData, { merge: true });
@@ -387,11 +406,12 @@ export const loginUser = async (email, password) => {
           const user = userCredential.user;
           const userData = {
             uid: user.uid,
-            name: "Super Admin",
+            name: "Carrezza Admin",
             department: "Administration",
             programType: "Internship",
             email: cleanEmail,
             role: "admin",
+            companyId: "carrezza-global-solutions",
             createdAt: new Date().toISOString()
           };
           await setDoc(doc(db, "users", user.uid), userData, { merge: true });
@@ -491,10 +511,15 @@ export const onAuthUserChanged = (callback) => {
       if (firebaseUser) {
         unsubscribeSnapshot = onSnapshot(doc(db, "users", firebaseUser.uid), (userDoc) => {
           if (userDoc.exists()) {
-            callback(userDoc.data());
+            const data = userDoc.data();
+            if (!data.companyId && firebaseUser.email?.toLowerCase().endsWith("@teamcarrezza.com")) {
+              data.companyId = "carrezza-global-solutions";
+            }
+            callback(data);
           } else {
             // Default fallbacks and automatic profile synchronization
             const role = firebaseUser.email === "admin@teamcarrezza.com" ? "admin" : "user";
+            const defaultCompId = firebaseUser.email?.toLowerCase().endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "";
             const fallbackData = {
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || firebaseUser.email.split("@")[0] || "User",
@@ -502,6 +527,7 @@ export const onAuthUserChanged = (callback) => {
               role,
               department: "Engineering",
               programType: "Internship",
+              companyId: defaultCompId,
               createdAt: new Date().toISOString()
             };
 
@@ -2141,7 +2167,21 @@ const saveLocalDmThreads = (threads) => {
 
 const getLocalCompanies = () => {
   const raw = localStorage.getItem("att_companies");
-  return raw ? JSON.parse(raw) : [];
+  const list = raw ? JSON.parse(raw) : [];
+  if (!list.some(c => c.id === "carrezza-global-solutions" || c.slug === "carrezza-global-solutions")) {
+    const carrezzaCompany = {
+      id: "carrezza-global-solutions",
+      name: "Carrezza Global Solutions",
+      displayName: "Carrezza Global Solutions",
+      slug: "carrezza-global-solutions",
+      status: "active",
+      modules: ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"],
+      createdAt: new Date().toISOString()
+    };
+    list.unshift(carrezzaCompany);
+    localStorage.setItem("att_companies", JSON.stringify(list));
+  }
+  return list;
 };
 
 const saveLocalCompanies = (companies) => {

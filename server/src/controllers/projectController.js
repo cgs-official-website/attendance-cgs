@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import { sendTaskAssignmentEmail } from "../services/emailService.js";
 
 // --- PROJECTS ---
 export const getProjects = async (req, res) => {
@@ -89,7 +90,36 @@ export const createTask = async (req, res) => {
       [id, companyId, projectId || null, title, description || null, assignedTo || null, req.user.id, priority, dueDate || null]
     );
 
-    res.status(201).json(result.rows[0]);
+    const task = result.rows[0];
+
+    // Asynchronously notify assignee if assigned
+    if (assignedTo) {
+      (async () => {
+        try {
+          const userRes = await query("SELECT email, name FROM users WHERE id = $1", [assignedTo]);
+          if (userRes.rows.length > 0) {
+            let projectName = null;
+            if (projectId) {
+              const pRes = await query("SELECT name FROM projects WHERE id = $1", [projectId]);
+              projectName = pRes.rows[0]?.name;
+            }
+            sendTaskAssignmentEmail({
+              email: userRes.rows[0].email,
+              name: userRes.rows[0].name,
+              taskTitle: title,
+              description,
+              priority,
+              dueDate,
+              projectName
+            }).catch(() => {});
+          }
+        } catch (e) {
+          console.error("Error dispatching task email:", e);
+        }
+      })();
+    }
+
+    res.status(201).json(task);
   } catch (err) {
     console.error("createTask error:", err);
     res.status(500).json({ error: "Failed to create task." });

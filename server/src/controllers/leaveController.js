@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import { sendLeaveRequestNotification, sendLeaveStatusEmail } from "../services/emailService.js";
 
 export const getLeaveRequests = async (req, res) => {
   try {
@@ -58,7 +59,34 @@ export const createLeaveRequest = async (req, res) => {
       [id, userId, companyId, leaveType, startDate, endDate, Number(totalDays || 1), reason]
     );
 
-    res.status(201).json(result.rows[0]);
+    const leave = result.rows[0];
+
+    // Asynchronously notify company admin / manager
+    (async () => {
+      try {
+        const userRes = await query("SELECT name FROM users WHERE id = $1", [userId]);
+        const employeeName = userRes.rows[0]?.name || "An employee";
+        const adminRes = await query(
+          "SELECT email FROM users WHERE company_id = $1 AND role IN ('admin', 'superadmin', 'manager') LIMIT 5",
+          [companyId]
+        );
+        for (const admin of adminRes.rows) {
+          sendLeaveRequestNotification({
+            adminEmail: admin.email,
+            employeeName,
+            leaveType,
+            startDate,
+            endDate,
+            totalDays: Number(totalDays || 1),
+            reason
+          }).catch(() => {});
+        }
+      } catch (e) {
+        console.error("Error dispatching leave request email:", e);
+      }
+    })();
+
+    res.status(201).json(leave);
   } catch (err) {
     console.error("createLeaveRequest error:", err);
     res.status(500).json({ error: "Failed to create leave request." });
@@ -87,9 +115,34 @@ export const updateLeaveStatus = async (req, res) => {
       return res.status(404).json({ error: "Leave request not found." });
     }
 
-    res.json(result.rows[0]);
+    const updatedLeave = result.rows[0];
+
+    // Asynchronously notify the employee about leave decision
+    (async () => {
+      try {
+        const userRes = await query("SELECT email, name FROM users WHERE id = $1", [updatedLeave.user_id]);
+        if (userRes.rows.length > 0) {
+          const user = userRes.rows[0];
+          sendLeaveStatusEmail({
+            email: user.email,
+            name: user.name,
+            leaveType: updatedLeave.leave_type,
+            startDate: updatedLeave.start_date,
+            endDate: updatedLeave.end_date,
+            totalDays: updatedLeave.total_days,
+            status: updatedLeave.status,
+            rejectionReason: updatedLeave.rejection_reason
+          }).catch(() => {});
+        }
+      } catch (e) {
+        console.error("Error dispatching leave status email:", e);
+      }
+    })();
+
+    res.json(updatedLeave);
   } catch (err) {
     console.error("updateLeaveStatus error:", err);
     res.status(500).json({ error: "Failed to update leave request status." });
   }
 };
+

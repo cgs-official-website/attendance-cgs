@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { query } from "../config/db.js";
 import { generateToken } from "../middlewares/auth.js";
+import { sendWelcomeEmail } from "../services/emailService.js";
 
 export const login = async (req, res) => {
   try {
@@ -103,6 +104,16 @@ export const register = async (req, res) => {
       role: newUser.role,
       companyId: newUser.company_id
     });
+
+    // Send welcome email asynchronously
+    sendWelcomeEmail({
+      email: newUser.email,
+      name: newUser.name,
+      employeeId: employeeId || null,
+      shiftStart: shiftStart || "09:00",
+      shiftEnd: shiftEnd || "18:00",
+      role: newUser.role
+    }).catch(e => console.error("Error sending welcome email:", e));
 
     res.status(201).json({ token, user: newUser });
   } catch (err) {

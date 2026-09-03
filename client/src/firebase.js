@@ -85,44 +85,24 @@ export const getLocalDateString = () => {
 
 export const loginUser = async (email, password) => {
   const cleanEmail = email.toLowerCase().trim();
-  try {
-    const res = await apiFetch("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email: cleanEmail, password })
-    });
+  const res = await apiFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email: cleanEmail, password })
+  });
 
-    if (res.token) {
-      localStorage.setItem("att_auth_token", res.token);
-    }
-
-    const user = {
-      ...res.user,
-      uid: res.user.id,
-      companyId: res.user.company_id || (cleanEmail.endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "")
-    };
-
-    localStorage.setItem("att_current_user", JSON.stringify(user));
-    window.dispatchEvent(new Event("local-auth-updated"));
-    return user;
-  } catch (err) {
-    // If admin login on local
-    if (cleanEmail === "admin@teamcarrezza.com") {
-      const fallbackUser = {
-        uid: "q1ZdappoH2hcV1D8kaaTMkBFhrF3",
-        id: "q1ZdappoH2hcV1D8kaaTMkBFhrF3",
-        name: "Carrezza Admin",
-        email: "admin@teamcarrezza.com",
-        role: "admin",
-        companyId: "carrezza-global-solutions",
-        company_id: "carrezza-global-solutions",
-        department: "Administration"
-      };
-      localStorage.setItem("att_current_user", JSON.stringify(fallbackUser));
-      window.dispatchEvent(new Event("local-auth-updated"));
-      return fallbackUser;
-    }
-    throw err;
+  if (res.token) {
+    localStorage.setItem("att_auth_token", res.token);
   }
+
+  const user = {
+    ...res.user,
+    uid: res.user.id,
+    companyId: res.user.company_id || (cleanEmail.endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "")
+  };
+
+  localStorage.setItem("att_current_user", JSON.stringify(user));
+  window.dispatchEvent(new Event("local-auth-updated"));
+  return user;
 };
 
 export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "", additionalData = {}) => {
@@ -200,23 +180,7 @@ export const changeUserPassword = async (newPassword) => {
 
 export const onAuthUserChanged = (callback) => {
   const handler = () => {
-    let raw = localStorage.getItem("att_current_user");
-    if (!raw) {
-      // Auto-load default admin for local developer seamless experience
-      const defaultAdmin = {
-        uid: "q1ZdappoH2hcV1D8kaaTMkBFhrF3",
-        id: "q1ZdappoH2hcV1D8kaaTMkBFhrF3",
-        name: "Carrezza Admin",
-        email: "admin@teamcarrezza.com",
-        role: "admin",
-        companyId: "carrezza-global-solutions",
-        company_id: "carrezza-global-solutions",
-        department: "Administration"
-      };
-      localStorage.setItem("att_current_user", JSON.stringify(defaultAdmin));
-      raw = JSON.stringify(defaultAdmin);
-    }
-
+    const raw = localStorage.getItem("att_current_user");
     if (raw) {
       try {
         const user = JSON.parse(raw);

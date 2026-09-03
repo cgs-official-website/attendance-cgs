@@ -56,6 +56,9 @@ export default function ResetPassword() {
     setLoading(true);
     try {
       await confirmPasswordReset(token, password);
+      localStorage.removeItem("att_auth_token");
+      localStorage.removeItem("att_current_user");
+      window.dispatchEvent(new Event("local-auth-updated"));
       setIsSuccess(true);
       showToast("Password reset successfully! You can now log in.", "success");
     } catch (err) {
@@ -116,7 +119,7 @@ export default function ResetPassword() {
               </p>
               <button
                 type="button"
-                onClick={() => navigate("/login")}
+                onClick={() => navigate(email ? `/login?email=${encodeURIComponent(email)}` : "/login")}
                 className="w-full py-3 bg-brand-primary hover:bg-brand-primary/90 text-white font-bold rounded-[12px] shadow-lg shadow-brand-primary/20 transition-all cursor-pointer"
               >
                 Go to Sign In

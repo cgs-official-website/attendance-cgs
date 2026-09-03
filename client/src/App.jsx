@@ -141,11 +141,7 @@ export default function App() {
         />
         <Route 
           path="/reset-password" 
-          element={
-            <PublicRoute>
-              <ResetPassword />
-            </PublicRoute>
-          } 
+          element={<ResetPassword />} 
         />
         <Route 
           path="/purchase" 

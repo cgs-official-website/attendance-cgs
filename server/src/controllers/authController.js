@@ -11,24 +11,25 @@ export const login = async (req, res) => {
       return res.status(400).json({ error: "Email and password are required." });
     }
 
-    const result = await query("SELECT * FROM users WHERE email = $1", [email.toLowerCase().trim()]);
+    const cleanEmail = email.toLowerCase().trim();
+    const result = await query(
+      "SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER($1) ORDER BY (password_hash IS NOT NULL) DESC, created_at DESC LIMIT 1",
+      [cleanEmail]
+    );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid credentials. User not found." });
     }
 
     const user = result.rows[0];
 
-    // If password_hash exists, verify it. If not set yet (fresh migration), allow first-time password set.
-    if (user.password_hash) {
-      const match = await bcrypt.compare(password, user.password_hash);
-      if (!match) {
-        return res.status(401).json({ error: "Invalid password." });
-      }
-    } else {
-      // First login after migration from Firebase: hash and save new password
-      const salt = await bcrypt.genSalt(10);
-      const hash = await bcrypt.hash(password, salt);
-      await query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, user.id]);
+    // If password_hash does not exist, require user to set a password via Forgot Password
+    if (!user.password_hash) {
+      return res.status(401).json({ error: "Password has not been set for this account. Please use 'Forgot password?' to set your password." });
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(401).json({ error: "Invalid password." });
     }
 
     const token = generateToken({
@@ -145,7 +146,10 @@ export const forgotPassword = async (req, res) => {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const result = await query("SELECT id, name, email FROM users WHERE email = $1", [cleanEmail]);
+    const result = await query(
+      "SELECT id, name, email FROM users WHERE LOWER(TRIM(email)) = LOWER($1) ORDER BY (password_hash IS NOT NULL) DESC, created_at DESC LIMIT 1",
+      [cleanEmail]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "No account found with this email address." });
@@ -223,7 +227,10 @@ export const confirmResetPassword = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(newPassword, salt);
 
-    const updateRes = await query("UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, email, name", [passwordHash, decoded.id]);
+    const updateRes = await query(
+      "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 OR LOWER(TRIM(email)) = LOWER($3) RETURNING id, email, name",
+      [passwordHash, decoded.id, decoded.email]
+    );
     if (updateRes.rows.length === 0) {
       return res.status(404).json({ error: "User not found." });
     }

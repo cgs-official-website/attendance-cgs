@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install @rolldown/binding-linux-x64-gnu@1.0.2 && vite build",
+  "buildCommand": "npm install @rolldown/binding-linux-x64-gnu@1.0.2 lightningcss-linux-x64-gnu@1.32.0 && vite build",
   "outputDirectory": "dist",
   "rewrites": [
     {

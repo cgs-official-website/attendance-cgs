@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install --workspace=client @rolldown/binding-linux-x64-gnu@1.0.2 && npm run build --workspace=client",
+  "buildCommand": "npm install --workspace=client @rolldown/binding-linux-x64-gnu@1.0.2 lightningcss-linux-x64-gnu@1.32.0 && npm run build --workspace=client",
   "outputDirectory": "client/dist",
   "rewrites": [
     {

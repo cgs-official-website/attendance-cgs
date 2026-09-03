@@ -1,86 +1,185 @@
-# 🏢 Enterprise HRMS Monorepo
+<div align="center">
 
-A modern, high-performance Human Resource Management System (HRMS) built with **React (Vite)** on the frontend, **Node.js (Express)** on the backend, and **PostgreSQL (Railway)** for relational data persistence.
+# 🏢 Carrezza Global Solutions — Enterprise HRMS Portal
+
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://attendance-cgs.vercel.app)
+[![Railway PostgreSQL](https://img.shields.io/badge/Railway-PostgreSQL_16-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app)
+[![React 19](https://img.shields.io/badge/React_19-Frontend-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite_8-Bundler-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
+[![Node.js](https://img.shields.io/badge/Node.js-Express_Backend-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS_v4-Design-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+
+<p align="center">
+  <strong>A fullstack, high-availability Human Resource Management System engineered for enterprise workforce tracking, automated shift & attendance control, real-time collaboration, and payroll administration.</strong>
+</p>
+
+[Live Demo](https://attendance-cgs.vercel.app) • [API Architecture](#-backend-api--architecture) • [Database Design](#-database-schema--models) • [Getting Started](#-getting-started)
 
 ---
 
-## 📁 Repository Structure
+</div>
 
-```text
-c:\HRMS\
-├── client/                 # React 18 + Vite Frontend Application
-│   ├── src/                # Pages, Components, State Contexts & Utilities
-│   ├── public/             # Static Assets & Icons
-│   ├── .env.example        # Frontend Environment Template
-│   ├── vite.config.js      # Vite Bundler Configuration
-│   └── package.json        # Frontend Dependencies
-│
-├── server/                 # Node.js + Express Backend API
-│   ├── src/                # Express Controllers, Routes, & DB Pool
-│   ├── scripts/            # PostgreSQL Schemas, Importers & Verifiers
-│   ├── .env.example        # Backend Environment Template
-│   └── package.json        # Backend Dependencies
-│
-├── package.json            # Monorepo Workspace Configuration
-├── .gitignore              # Monorepo Git Ignore Rules
-└── README.md               # Monorepo Documentation
+## 📌 Executive Overview
+
+**Carrezza Global Solutions HRMS** is an enterprise-grade workspace management platform designed with a clean micro-monorepo architecture. It bridges real-time attendance tracking with geolocation verification, end-to-end leave lifecycle approvals, collaborative channel-based communication, project milestones, and statutory payroll calculation.
+
+```
+                      ┌────────────────────────────────────────┐
+                      │    Client (React 19 + Vite + Tailwind)  │
+                      │    Hosted on Vercel Edge Network       │
+                      └──────────────────┬─────────────────────┘
+                                         │ HTTPS / WSS API
+                                         ▼
+                      ┌────────────────────────────────────────┐
+                      │    API Engine (Node.js + Express + WS)  │
+                      │    Hosted on Railway Cloud             │
+                      └──────────────────┬─────────────────────┘
+                                         │ Connection Pool
+                                         ▼
+                      ┌────────────────────────────────────────┐
+                      │    PostgreSQL 16 Relational Database   │
+                      │    Multi-Tenant Architecture on Railway│
+                      └────────────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## ✨ Key Platform Features
+
+### ⏱️ 1. Precision Attendance & Geofencing
+- **One-Click Check-In / Check-Out**: Live GPS coordinate verification and device location binding.
+- **Automated Working Hours & Shift Calculation**: Real-time duration trackers, half-day/full-day status resolution.
+- **Regularization Lifecycle**: Instant request workflow with approval trails for missed punches.
+
+### 👥 2. Role-Based Access Control (RBAC) & Multi-Tenancy
+- **Super Admin Portal**: Global tenant provisioning, module activation toggles, and workspace freezing.
+- **Company Admin Console**: Real-time live attendance board, staff directory, custom domain provisioning, and approval workflows.
+- **Employee Portal**: Personalized leave balances, assigned task lists, asset records, and interactive payslip generators.
+
+### 💬 3. Real-Time Team Hub
+- **Channel Discussions & Direct Messaging**: General broadcast channels, private project threads, and unread indicator counters.
+- **Client Chats & External Links**: Direct customer-collaboration chat gateways with tokenized access links.
+
+### 💼 4. Project & Task Operations
+- **Interactive Project Calendar & Milestones**: Gantt-style planning and multi-member team assignments.
+- **Task Management & Timesheets**: Dynamic timer logs, task activity reports, and performance analytics.
+
+### 💳 5. Payroll & Asset Governance
+- **Statutory Indian Payroll**: Automated calculations for gross salary, paid leave deductions, allowances, and printable PDF payslips.
+- **Hardware & Software Asset Tracking**: Serial number assignment, condition logging, and return history.
+
+---
+
+## 🏗️ Repository Architecture
+
+```text
+├── client/                     # Frontend Application (React 19 + Vite)
+│   ├── src/
+│   │   ├── components/         # Reusable Design System Components
+│   │   ├── context/            # Auth, Theme, Permissions, & Toast Providers
+│   │   ├── modules/            # Enterprise Environmental Setup Modules
+│   │   ├── pages/              # Admin, SuperAdmin, Employee, & Auth Views
+│   │   ├── utils/              # PDF Generators, Geolocation, & Formatters
+│   │   ├── App.jsx             # Main Router & Role Protected Routes
+│   │   └── firebase.js         # Unified PostgreSQL API Client Layer
+│   ├── vercel.json             # Vercel Deployment Configuration
+│   └── package.json            # Frontend Dependencies & Build Scripts
+│
+├── server/                     # Backend API Service (Node.js + Express)
+│   ├── src/
+│   │   ├── config/             # PostgreSQL Pool & Environment Configuration
+│   │   ├── controllers/        # Auth, Attendance, Projects, Leaves & Payroll
+│   │   ├── middlewares/        # JWT Authentication & Role Validators
+│   │   ├── routes/             # RESTful API Endpoint Definitions
+│   │   └── services/           # Nodemailer SMTP & Notification Dispatcher
+│   ├── scripts/                # Database Schemas, Seeders & Verifiers
+│   └── package.json            # Backend Dependencies
+│
+├── vercel.json                 # Monorepo Vercel Deployment Orchestration
+├── railway.json                # Monorepo Railway Deployment Orchestration
+└── package.json                # Root Monorepo Workspace Configuration
+```
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology | Description |
+| :--- | :--- | :--- |
+| **Frontend Framework** | React 19, Vite 8 | Ultra-fast client application with instant HMR |
+| **UI & Styling** | Tailwind CSS v4, Lucide Icons | Responsive modern enterprise aesthetic |
+| **Backend Runtime** | Node.js (ES Modules), Express.js | High-throughput REST & WebSocket API engine |
+| **Database** | PostgreSQL 16 (`pg` pool) | Relational multi-tenant schema hosted on Railway |
+| **Authentication** | JWT & Bcrypt | Stateless token-based auth with salted password hashing |
+| **Communication** | Nodemailer (Gmail SMTP), Socket.io | Transactional password reset & real-time messaging |
+| **Deployment** | Vercel (Client) + Railway (Server & DB) | Automated CI/CD pipeline from `main` branch |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- **Node.js**: `v20.x` or `v22.x` (LTS recommended)
+- **PostgreSQL**: Local instance or Railway connection URL
+- **npm**: `v10.x+`
 
 ### 1. Installation
-Clone the repository and install all workspace dependencies:
+Clone the monorepo and install all workspace dependencies:
 ```bash
-npm run install:all
+git clone https://github.com/cgs-official-website/attendance-cgs.git
+cd attendance-cgs
+npm install
 ```
 
 ### 2. Configure Environment Variables
 
-- **Backend:** Copy `server/.env.example` to `server/.env` and provide your Railway PostgreSQL URL:
-  ```env
-  DATABASE_URL=postgresql://user:password@host:port/database
-  PORT=5000
-  ```
+#### Backend Configuration (`server/.env`)
+```env
+PORT=5005
+DATABASE_URL=postgresql://postgres:password@host:port/railway
+JWT_SECRET=your_jwt_super_secret_key
+NODE_ENV=development
 
-- **Frontend:** Copy `client/.env.example` to `client/.env`:
-  ```env
-  VITE_API_URL=http://localhost:5000/api
-  VITE_SOCKET_URL=http://localhost:5000
-  ```
-
-### 3. Running Development Servers
-
-- **Start Backend API Server:**
-  ```bash
-  npm run dev:server
-  # Backend runs at http://localhost:5000
-  ```
-
-- **Start Frontend Web App:**
-  ```bash
-  npm run dev:client
-  # Frontend runs at http://localhost:5173
-  ```
-
----
-
-## 🗄️ Database Architecture (PostgreSQL on Railway)
-
-The system manages 24 relational tables:
-- **Core Entities:** `companies`, `company_domains`, `users`, `roles`, `environment_settings`
-- **Attendance & Leave:** `attendance`, `leave_requests`, `paid_leaves`, `regularization_requests`
-- **Project & Task Management:** `projects`, `project_members`, `tasks`, `task_reports`
-- **Team Hub & Chat:** `channels`, `messages`, `dm_threads`, `direct_messages`
-- **Operations & Reports:** `daily_reports`, `weekly_reports`, `payroll`, `assets`, `notifications`, `external_links`, `settings`
-
----
-
-## 📊 Codebase Knowledge Graph (Graphify)
-
-This repository includes architectural knowledge graphs powered by Graphify:
-```bash
-npm run graphify
+# SMTP Email Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-gmail-app-password
+SMTP_FROM="Zuna HRMS" <your-email@gmail.com>
+APP_URL=http://localhost:5173
 ```
-Open `client/graphify-out/graph.html` or `server/graphify-out/graph.html` in your browser for interactive call-flow and dependency navigation.
+
+#### Frontend Configuration (`client/.env`)
+```env
+VITE_API_URL=http://localhost:5005/api
+VITE_SOCKET_URL=http://localhost:5005
+```
+
+### 3. Start Development Servers
+
+```bash
+# Start backend API (Port 5005)
+npm run dev:server
+
+# Start frontend application (Port 5173)
+npm run dev:client
+```
+
+---
+
+## 🔒 Security & Best Practices
+
+- **Sanitized Password Security**: Pure bcrypt salt hashing with zero plaintext credential exposure.
+- **Time-Limited Reset Tokens**: Cryptographically signed 30-minute expiration JWT tokens for password resets.
+- **SQL Injection Prevention**: 100% parameterized queries across all database controllers.
+- **CORS & Environment Isolation**: Strict domain whitelisting and production origin validation.
+
+---
+
+## 📄 License & Attribution
+
+Distributed under the **Commercial License** for Carrezza Global Solutions. All rights reserved.
+
+<div align="center">
+  <sub>Built with precision for <strong>Carrezza Global Solutions</strong></sub>
+</div>

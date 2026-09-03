@@ -145,7 +145,7 @@ export default function DashboardLayout({ children }) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
 
-  const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'hr_admin' || currentUser?.isAdmin || (currentUser && !['employee', 'staff', 'teacher', 'user'].includes(currentUser?.role));
+  const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'hr_admin' || currentUser?.isAdmin || currentUser?.email === 'admin@teamcarrezza.com' || (currentUser && !['employee', 'staff', 'teacher', 'user'].includes(currentUser?.role));
 
   useEffect(() => {
     setLocalSearch(searchParams.get("q") || "");

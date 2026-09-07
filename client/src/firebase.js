@@ -95,10 +95,17 @@ export const loginUser = async (email, password) => {
     localStorage.setItem("att_auth_token", res.token);
   }
 
+  const meta = res.user.metadata && typeof res.user.metadata === "object" ? res.user.metadata : {};
+  const empId = res.user.employeeId || res.user.employee_id || meta.employeeId || meta.employee_id || "";
+
   const user = {
     ...res.user,
-    uid: res.user.id,
-    companyId: res.user.company_id || (cleanEmail.endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "")
+    ...meta,
+    uid: res.user.id || res.user.uid,
+    id: res.user.id || res.user.uid,
+    employeeId: empId,
+    employee_id: empId,
+    companyId: res.user.company_id || res.user.companyId || (cleanEmail.endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "")
   };
 
   localStorage.setItem("att_current_user", JSON.stringify(user));
@@ -180,16 +187,42 @@ export const changeUserPassword = async (newPassword) => {
 };
 
 export const onAuthUserChanged = (callback) => {
-  const handler = () => {
+  let isSubscribed = true;
+
+  const handler = async () => {
     const raw = localStorage.getItem("att_current_user");
     if (raw) {
       try {
-        const user = JSON.parse(raw);
+        let user = JSON.parse(raw);
         if (!user.companyId && user.email?.toLowerCase().endsWith("@teamcarrezza.com")) {
           user.companyId = "carrezza-global-solutions";
           user.company_id = "carrezza-global-solutions";
         }
         callback(user);
+
+        // Transparently re-sync latest live user profile from PostgreSQL
+        const token = localStorage.getItem("att_auth_token");
+        const userId = user.id || user.uid;
+        if (token && userId) {
+          try {
+            const fresh = await apiFetch(`/users/${userId}`);
+            if (fresh && fresh.id && isSubscribed) {
+              const freshEmpId = fresh.employeeId || fresh.employee_id || "";
+              const merged = {
+                ...user,
+                ...fresh,
+                uid: fresh.id,
+                id: fresh.id,
+                employeeId: freshEmpId || user.employeeId || "",
+                employee_id: freshEmpId || user.employee_id || ""
+              };
+              localStorage.setItem("att_current_user", JSON.stringify(merged));
+              callback(merged);
+            }
+          } catch (fetchErr) {
+            // Ignore background sync errors
+          }
+        }
       } catch (e) {
         callback(null);
       }
@@ -200,7 +233,10 @@ export const onAuthUserChanged = (callback) => {
 
   handler();
   window.addEventListener("local-auth-updated", handler);
-  return () => window.removeEventListener("local-auth-updated", handler);
+  return () => {
+    isSubscribed = false;
+    window.removeEventListener("local-auth-updated", handler);
+  };
 };
 
 export const getAllRegisteredUsers = async (companyId = "") => {

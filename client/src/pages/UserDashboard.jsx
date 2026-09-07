@@ -1954,8 +1954,13 @@ export default function UserDashboard() {
       {/* Upper Dashboard welcome panel */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight">
-            Welcome back, {currentUser.name.split(" ")[0]}
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-main tracking-tight flex items-center gap-2.5 flex-wrap">
+            <span>Welcome back, {currentUser.name.split(" ")[0]}</span>
+            {(currentUser.employeeId || currentUser.employee_id) && (
+              <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+                {currentUser.employeeId || currentUser.employee_id}
+              </span>
+            )}
           </h1>
           <p className="text-xs sm:text-sm font-semibold text-text-sec mt-1 flex items-center gap-1.5 sm:gap-2">
             <CalendarDays size={14} className="text-brand-primary flex-shrink-0" />

@@ -39,8 +39,30 @@ export const login = async (req, res) => {
       companyId: user.company_id
     });
 
-    const { password_hash, ...userProfile } = user;
-    res.json({ token, user: userProfile });
+    const { password_hash, metadata = {}, ...userProfile } = user;
+    const meta = metadata && typeof metadata === "object" ? metadata : {};
+    const empId = user.employee_id || meta.employeeId || meta.employee_id || "";
+
+    const mappedUser = {
+      ...userProfile,
+      ...meta,
+      uid: user.id,
+      id: user.id,
+      employeeId: empId,
+      employee_id: empId,
+      companyId: user.company_id,
+      company_id: user.company_id,
+      shiftStart: user.shift_start,
+      shiftEnd: user.shift_end,
+      annualLeaves: Number(user.casual_leave_quota || 25),
+      sickLeaves: Number(user.sick_leave_quota || 10),
+      casualLeaves: Number(user.paid_leave_quota || 6),
+      isProjectManager: user.is_project_manager,
+      projects: Array.isArray(user.projects) ? user.projects : (meta.projects || []),
+      tasks: Array.isArray(meta.tasks) ? meta.tasks : []
+    };
+
+    res.json({ token, user: mappedUser });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Internal server error during login." });

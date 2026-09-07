@@ -536,6 +536,21 @@ export default function Profile() {
                   max={new Date().toISOString().split("T")[0]}
                 />
               </div>
+
+              {/* Employee ID (Read Only) */}
+              <div className="flex flex-col gap-1.5 opacity-80">
+                <label className="text-xs font-bold text-text-sec flex items-center gap-1.5">
+                  <Award size={13} className="text-text-mut" />
+                  Employee ID
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3.5 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-xs text-brand-primary font-mono font-bold outline-none cursor-not-allowed"
+                  value={currentUser?.employeeId || currentUser?.employee_id || "Not Assigned"}
+                  readOnly
+                  disabled
+                />
+              </div>
             </div>
 
             {/* Shift Times */}

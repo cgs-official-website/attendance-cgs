@@ -3,15 +3,14 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useModal } from "../context/ModalContext";
-import { collection, onSnapshot, query, where, updateDoc, doc, getDoc } from "firebase/firestore";
 import { 
-  db, 
-  getDbType, 
+  subscribeToAllUsers,
   subscribeToTaskReports,
   subscribeToDailyReports,
   updateDailyReport,
   subscribeToProjects,
-  addTeamMemberToProject
+  addTeamMemberToProject,
+  updateUserTasks
 } from "../firebase";
 import { 
   ChevronLeft, 
@@ -110,31 +109,11 @@ export default function ProjectCalendar() {
   // Fetch All Users in Company
   useEffect(() => {
     if (!currentUser) return;
-
-    if (getDbType() === "firebase") {
-      const qRef = query(collection(db, "users"), where("companyId", "==", currentUser.companyId));
-      const unsubscribe = onSnapshot(qRef, (snapshot) => {
-        const users = snapshot.docs.map(d => ({ ...d.data(), uid: d.id }));
-        setAllUsers(users);
-        setLoading(false);
-      }, (err) => {
-        console.error(err);
-        setLoading(false);
-      });
-      return unsubscribe;
-    } else {
-      const handler = () => {
-        let users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
-        if (currentUser.companyId) {
-          users = users.filter(u => u.companyId === currentUser.companyId);
-        }
-        setAllUsers(users);
-        setLoading(false);
-      };
-      handler();
-      window.addEventListener("local-auth-updated", handler);
-      return () => window.removeEventListener("local-auth-updated", handler);
-    }
+    const unsubscribe = subscribeToAllUsers(currentUser.companyId, (users) => {
+      setAllUsers(users || []);
+      setLoading(false);
+    });
+    return unsubscribe;
   }, [currentUser]);
 
   // Fetch projects in Company
@@ -221,18 +200,9 @@ export default function ProjectCalendar() {
       const currentTasks = targetUser.tasks || [];
       const updatedTasks = [...currentTasks, newTask];
 
-      if (getDbType() === "firebase") {
-        const userRef = doc(db, "users", selectedTeammateId);
-        await updateDoc(userRef, { tasks: updatedTasks });
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users") || "[]");
-        const idx = users.findIndex(u => u.uid === selectedTeammateId);
-        if (idx !== -1) {
-          users[idx].tasks = updatedTasks;
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
-        }
-      }
+      await updateUserTasks(selectedTeammateId, updatedTasks);
+      // Optimistic update
+      setAllUsers(prev => prev.map(u => u.uid === selectedTeammateId ? { ...u, tasks: updatedTasks } : u));
 
       showToast("Task assigned successfully", "success");
       setShowAssignTaskModal(false);
@@ -782,8 +752,10 @@ export default function ProjectCalendar() {
                           const tReps = allTaskReports[t.id] || [];
                           const manualReps = tReps.filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused"));
                           if (manualReps.length > 0) {
-                            const sorted = [...manualReps].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-                            if (!latestReport || new Date(sorted[0].timestamp) > new Date(latestReport.timestamp)) {
+                            const sorted = [...manualReps].sort((a,b) => new Date(b.timestamp || b.createdAt || b.submittedAt) - new Date(a.timestamp || a.createdAt || a.submittedAt));
+                            const candDate = sorted[0].timestamp || sorted[0].createdAt || sorted[0].submittedAt;
+                            const prevDate = latestReport ? (latestReport.timestamp || latestReport.createdAt || latestReport.submittedAt) : null;
+                            if (!latestReport || new Date(candDate) > new Date(prevDate)) {
                               latestReport = sorted[0];
                             }
                           }
@@ -830,7 +802,12 @@ export default function ProjectCalendar() {
                               {latestReport ? (
                                 <div>
                                   <p className="font-semibold text-text-main line-clamp-2">"{latestReport.reportText}"</p>
-                                  <span className="text-[8px] text-text-mut mt-0.5 block">{new Date(latestReport.timestamp).toLocaleDateString()} at {new Date(latestReport.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                  {(() => {
+                                    const d = latestReport.timestamp || latestReport.createdAt || latestReport.submittedAt;
+                                    return d ? (
+                                      <span className="text-[8px] text-text-mut mt-0.5 block">{new Date(d).toLocaleDateString()} at {new Date(d).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                    ) : null;
+                                  })()}
                                 </div>
                               ) : (
                                 <span className="text-text-mut italic">No progress reports yet</span>

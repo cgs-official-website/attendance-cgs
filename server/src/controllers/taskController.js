@@ -26,7 +26,10 @@ export const getTasks = async (req, res) => {
       sql += ` AND t.project_id = $${params.length}`;
     }
 
-    if (assigneeId) {
+    if (req.user?.role === "employee") {
+      params.push(req.user.id);
+      sql += ` AND t.assigned_to = $${params.length}`;
+    } else if (assigneeId) {
       params.push(assigneeId);
       sql += ` AND t.assigned_to = $${params.length}`;
     }

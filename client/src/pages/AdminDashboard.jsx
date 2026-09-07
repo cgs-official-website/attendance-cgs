@@ -477,6 +477,7 @@ export default function AdminDashboard() {
   const [chatFilter, setChatFilter]           = useState(""); // search
   const [chatTypeFilter, setChatTypeFilter]   = useState("all"); // 'all' | 'channel' | 'dm'
   const [chatThreadFilter, setChatThreadFilter] = useState("all"); // specific thread id or 'all'
+  const [chatStatusFilter, setChatStatusFilter] = useState("all"); // 'all' | 'deleted' | 'active'
   const [chatPage, setChatPage] = useState(1);
 
 
@@ -603,7 +604,7 @@ export default function AdminDashboard() {
     // Subscribe to attendance rules
     const unsubscribeRules = subscribeToAttendanceRules((data) => {
       setRulesInput(data || "");
-    });
+    }, currentUser.companyId);
 
     // Subscribe to paid leaves
     const unsubscribePaidLeaves = subscribeToPaidLeaves(currentUser.companyId, (data) => {
@@ -661,7 +662,7 @@ export default function AdminDashboard() {
     setRegsPendingPage(1);
     setHistoryPage(1);
     setChatPage(1);
-  }, [activeTab, approvalsSubTab, searchQuery, historySearch, historyType, historyStatus, chatFilter, chatTypeFilter, chatThreadFilter]);
+  }, [activeTab, approvalsSubTab, searchQuery, historySearch, historyType, historyStatus, chatFilter, chatTypeFilter, chatThreadFilter, chatStatusFilter]);
 
   useEffect(() => {
     let isMounted = true;
@@ -892,6 +893,8 @@ export default function AdminDashboard() {
     try {
       await updateLeaveRequest(id, "approved", comment);
       showToast(`Leave request approved for ${name}.`, "success");
+      setLeaveRequests(prev => prev.filter(r => r.id !== id));
+      setAllRequests(prev => prev.map(r => r.id === id ? { ...r, status: "approved", managerComment: comment, rejectionReason: comment } : r));
       setManagerCommentInput("");
       setSelectedRequestId(null);
       loadDirectoryData();
@@ -904,6 +907,8 @@ export default function AdminDashboard() {
     try {
       await updateLeaveRequest(id, "rejected", comment);
       showToast(`Leave request rejected for ${name}.`, "error");
+      setLeaveRequests(prev => prev.filter(r => r.id !== id));
+      setAllRequests(prev => prev.map(r => r.id === id ? { ...r, status: "rejected", managerComment: comment, rejectionReason: comment } : r));
       setManagerCommentInput("");
       setSelectedRequestId(null);
       loadDirectoryData();
@@ -917,6 +922,8 @@ export default function AdminDashboard() {
     try {
       await updateRegularizationRequest(id, "approved", comment);
       showToast(`Regularization request approved for ${name}.`, "success");
+      setRegularizationRequests(prev => prev.filter(r => r.id !== id));
+      setAllRegularizationRequests(prev => prev.map(r => r.id === id ? { ...r, status: "approved", managerComment: comment, rejectionReason: comment } : r));
       setRegManagerCommentInput("");
       setSelectedRegRequestId(null);
     } catch (err) {
@@ -928,6 +935,8 @@ export default function AdminDashboard() {
     try {
       await updateRegularizationRequest(id, "rejected", comment);
       showToast(`Regularization request rejected for ${name}.`, "error");
+      setRegularizationRequests(prev => prev.filter(r => r.id !== id));
+      setAllRegularizationRequests(prev => prev.map(r => r.id === id ? { ...r, status: "rejected", managerComment: comment, rejectionReason: comment } : r));
       setRegManagerCommentInput("");
       setSelectedRegRequestId(null);
     } catch (err) {
@@ -1270,7 +1279,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setActionLoading(true);
     try {
-      await updateAttendanceRules(rulesInput);
+      await updateAttendanceRules(rulesInput, currentUser?.companyId);
       showToast("Attendance rules updated successfully.", "success");
     } catch (err) {
       showToast(err.message || "Failed to update attendance rules.", "error");
@@ -5238,19 +5247,22 @@ export default function AdminDashboard() {
         const filteredMsgs = chatMessages.filter(m => {
           const matchType = chatTypeFilter === "all" || m.threadType === chatTypeFilter;
           const matchThread = chatThreadFilter === "all" || m.threadId === chatThreadFilter;
+          const matchStatus = chatStatusFilter === "all" ||
+            (chatStatusFilter === "deleted" && m.isDeleted) ||
+            (chatStatusFilter === "active" && !m.isDeleted);
           const q = chatFilter.toLowerCase();
           const matchSearch = !chatFilter ||
             (m.senderName || "").toLowerCase().includes(q) ||
             (m.text || "").toLowerCase().includes(q) ||
             getThreadLabel(m).toLowerCase().includes(q);
-          return matchType && matchThread && matchSearch;
+          return matchType && matchThread && matchStatus && matchSearch;
         });
 
         const handleDeleteMsg = async (id) => {
-          showConfirm("Delete Message", "Delete this message permanently?", async () => {
+          showConfirm("Delete Message", "Are you sure you want to delete this message? It will be marked as deleted in chat but retained here in Chat Monitor.", async () => {
             await deleteChatMessage(id);
-            setChatMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
-            showToast("Message removed", "success");
+            setChatMessages(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true, deletedBy: currentUser.name || "Admin" } : m));
+            showToast("Message deleted", "success");
           }, { confirmText: "Delete", cancelText: "Cancel" });
         };
 
@@ -5269,7 +5281,7 @@ export default function AdminDashboard() {
               m.threadType,
               getThreadLabel(m),
               m.senderName,
-              m.text || "",
+              m.isDeleted ? `[DELETED] ${m.text || ""}` : (m.text || ""),
               m.fileData?.name || "",
               fileUrl
             ];
@@ -5328,13 +5340,16 @@ export default function AdminDashboard() {
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Total Messages", val: chatMessages.length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary" },
-                { label: "Deleted Messages", val: chatMessages.filter(m => m.isDeleted).length, icon: <Trash2 size={18} className='inline-block mr-1' />, color: "text-red-500" },
+                { label: "Total Messages", val: chatMessages.length, icon: <MessageSquare size={18} className='inline-block mr-1' />, color: "text-brand-primary", filter: "all" },
+                { label: "Deleted Messages", val: chatMessages.filter(m => m.isDeleted).length, icon: <Trash2 size={18} className='inline-block mr-1' />, color: "text-red-500", filter: "deleted" },
                 { label: "Channels", val: chatChannels.length, icon: "#", color: "text-indigo-500" },
-                { label: "DM Threads", val: chatDmThreads.length, icon: <Mail size={18} className='inline-block mr-1' />, color: "text-amber-500" },
-                { label: "Files Shared", val: chatMessages.filter(m => m.fileData && !m.isDeleted).length, icon: <Paperclip size={18} className='inline-block mr-1' />, color: "text-emerald-500" }
+                { label: "DM Threads", val: chatDmThreads.length, icon: <Mail size={18} className='inline-block mr-1' />, color: "text-amber-500" }
               ].map((s, i) => (
-                <div key={i} className="bg-bg-card border border-border-card rounded-[16px] p-4 flex items-center gap-3">
+                <div 
+                  key={i} 
+                  onClick={() => s.filter && setChatStatusFilter(prev => prev === s.filter ? "all" : s.filter)}
+                  className={`bg-bg-card border border-border-card rounded-[16px] p-4 flex items-center gap-3 ${s.filter ? "cursor-pointer hover:border-brand-primary/40 transition-colors" : ""} ${s.filter && chatStatusFilter === s.filter ? "ring-2 ring-brand-primary" : ""}`}
+                >
                   <span className={`text-2xl font-black ${s.color}`}>{s.icon}</span>
                   <div>
                     <div className="text-[10px] font-bold text-text-mut uppercase tracking-wider">{s.label}</div>
@@ -5356,6 +5371,15 @@ export default function AdminDashboard() {
                   className="bg-transparent text-sm text-text-main outline-none flex-1"
                 />
               </div>
+              <select
+                value={chatStatusFilter}
+                onChange={e => setChatStatusFilter(e.target.value)}
+                className="bg-bg-base border border-border-card text-text-main text-xs font-semibold rounded-[10px] px-3 py-2 outline-none cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="deleted">Deleted Messages Only</option>
+                <option value="active">Active Messages Only</option>
+              </select>
               <select
                 value={chatTypeFilter}
                 onChange={e => { setChatTypeFilter(e.target.value); setChatThreadFilter("all"); }}
@@ -5428,13 +5452,18 @@ export default function AdminDashboard() {
                               <span className="text-xs font-semibold text-text-main whitespace-nowrap">{msg.senderName}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 max-w-[260px]">
+                          <td className="px-4 py-3 max-w-[280px]">
                             {msg.isDeleted ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20">
-                                <AlertCircle size={10} /> Message deleted
-                              </span>
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-red-500/15 text-red-500 border border-red-500/30 w-fit">
+                                  <Trash2 size={10} /> Deleted {msg.deletedBy ? `by ${msg.deletedBy}` : ""}
+                                </span>
+                                <span className="text-xs text-red-400/90 line-through line-clamp-2" title={msg.text}>
+                                  {msg.text || <span className="text-text-mut italic">—</span>}
+                                </span>
+                              </div>
                             ) : (
-                              <span className="text-xs text-text-sec line-clamp-2">{msg.text || <span className="text-text-mut italic">—</span>}</span>
+                              <span className="text-xs text-text-sec line-clamp-2" title={msg.text}>{msg.text || <span className="text-text-mut italic">—</span>}</span>
                             )}
                           </td>
                           <td className="px-4 py-3">

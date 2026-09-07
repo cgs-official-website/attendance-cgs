@@ -13,7 +13,26 @@ export const getExternalLinks = async (req, res) => {
     }
     sql += " ORDER BY created_at DESC";
     const result = await query(sql, params);
-    res.json(result.rows);
+    
+    const formatted = result.rows.map(row => ({
+      ...row,
+      id: row.id,
+      _id: row.id,
+      token: row.link_token,
+      linkToken: row.link_token,
+      clientName: row.client_name,
+      clientEmail: row.client_email,
+      projectName: row.project_name,
+      projectId: row.project_id,
+      pmId: row.pm_id,
+      pmName: row.pm_name,
+      channelId: row.channel_id,
+      status: row.status,
+      companyId: row.company_id,
+      createdAt: row.created_at
+    }));
+
+    res.json(formatted);
   } catch (err) {
     console.error("getExternalLinks error:", err);
     res.status(500).json({ error: "Failed to fetch external links." });
@@ -23,13 +42,17 @@ export const getExternalLinks = async (req, res) => {
 export const getExternalLinkByToken = async (req, res) => {
   try {
     const { token } = req.params;
-    const result = await query("SELECT * FROM external_links WHERE token = $1", [token]);
+    const result = await query("SELECT * FROM external_links WHERE link_token = $1", [token]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "External link not found or expired." });
     }
     const row = result.rows[0];
     res.json({
       ...row,
+      id: row.id,
+      _id: row.id,
+      token: row.link_token,
+      linkToken: row.link_token,
       channelId: row.channel_id,
       clientName: row.client_name,
       clientEmail: row.client_email,
@@ -38,6 +61,7 @@ export const getExternalLinkByToken = async (req, res) => {
       pmId: row.pm_id,
       pmName: row.pm_name,
       companyId: row.company_id,
+      status: row.status,
       createdAt: row.created_at
     });
   } catch (err) {
@@ -56,10 +80,12 @@ export const createExternalLink = async (req, res) => {
       pmId,
       pmName,
       channelId,
-      companyId
+      companyId,
+      userId
     } = req.body;
 
     const targetCompanyId = companyId || req.user?.companyId;
+    const targetUserId = userId || req.user?.id || pmId || null;
     const token = "link_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
     const id = "ext_" + Math.random().toString(36).substr(2, 9);
 
@@ -76,20 +102,26 @@ export const createExternalLink = async (req, res) => {
     }
 
     const result = await query(
-      `INSERT INTO external_links (id, company_id, token, channel_id, client_name, client_email, project_id, project_name, pm_id, pm_name, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active')
+      `INSERT INTO external_links (id, company_id, user_id, link_token, channel_id, client_name, client_email, project_id, project_name, pm_id, pm_name, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active')
        RETURNING *`,
-      [id, targetCompanyId, token, finalChannelId, clientName, clientEmail, projectId, projectName, pmId, pmName]
+      [id, targetCompanyId, targetUserId, token, finalChannelId, clientName, clientEmail, projectId, projectName, pmId, pmName]
     );
 
     const row = result.rows[0];
     res.status(201).json({
       ...row,
+      id: row.id,
+      _id: row.id,
       token,
+      linkToken: token,
       channelId: row.channel_id,
       clientName: row.client_name,
       clientEmail: row.client_email,
-      projectName: row.project_name
+      projectName: row.project_name,
+      pmName: row.pm_name,
+      status: row.status,
+      createdAt: row.created_at
     });
   } catch (err) {
     console.error("createExternalLink error:", err);
@@ -101,13 +133,22 @@ export const revokeExternalLink = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await query(
-      "UPDATE external_links SET status = 'revoked' WHERE id = $1 OR token = $1 RETURNING *",
+      "UPDATE external_links SET status = 'revoked' WHERE id = $1 OR link_token = $1 RETURNING *",
       [id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "External link not found." });
     }
-    res.json({ message: "External link revoked.", link: result.rows[0] });
+    const row = result.rows[0];
+    res.json({
+      message: "External link revoked.",
+      link: {
+        ...row,
+        token: row.link_token,
+        linkToken: row.link_token,
+        channelId: row.channel_id
+      }
+    });
   } catch (err) {
     console.error("revokeExternalLink error:", err);
     res.status(500).json({ error: "Failed to revoke external link." });

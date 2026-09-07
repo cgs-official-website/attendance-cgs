@@ -18,6 +18,7 @@ import {
   subscribeToLeaveRequests,
   getAllRegisteredUsers,
   stopTaskTimer,
+  subscribeToUserTasks,
   getLocalDateString,
   subscribeToAssets,
   subscribeToCompanyPayroll,
@@ -168,6 +169,7 @@ export default function UserDashboard() {
 
   const [userLogs, setUserLogs] = useState([]);
   const [myAssets, setMyAssets] = useState([]);
+  const [userTasks, setUserTasks] = useState(currentUser?.tasks || []);
   const [myPayslips, setMyPayslips] = useState([]);
   const [showPayslipModal, setShowPayslipModal] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
@@ -188,20 +190,7 @@ export default function UserDashboard() {
           }
         }
       });
-      
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return () => unsub();
+      return () => unsub();
     }
   }, [currentUser?.companyId]);
   const [todayLog, setTodayLog] = useState(null);
@@ -391,13 +380,14 @@ export default function UserDashboard() {
     });
 
     const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (list) => {
-      setMyLeaveRequests(list.filter(r => r.userId === currentUser.uid));
+      const items = Array.isArray(list) ? list : [];
+      setMyLeaveRequests(items.filter(r => (r.userId || r.user_id) === currentUser.uid));
       
       const todayStr = getLocalDateString();
-      const deptOnLeave = list.filter(r => 
+      const deptOnLeave = items.filter(r => 
         r.status === "approved" && 
-        r.userDept === currentUser.department && 
-        r.userId !== currentUser.uid &&
+        (r.userDept || r.department) === currentUser.department && 
+        (r.userId || r.user_id) !== currentUser.uid &&
         r.startDate <= todayStr && 
         r.endDate >= todayStr
       );
@@ -422,21 +412,7 @@ export default function UserDashboard() {
         const parts = u.dob.split('-');
         if (parts.length !== 3) return false;
         const month = parseInt(parts[1], 10);
-        const day = parseInt(parts[2], 10);
-        
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return (month === todayMonth && day === todayDay) || (month === tmrwMonth && day === tmrwDay);
+        return (month === todayMonth && day === todayDay) || (month === tmrwMonth && day === tmrwDay);
       }).map(u => {
         const parts = u.dob.split('-');
         const month = parseInt(parts[1], 10);
@@ -447,31 +423,23 @@ export default function UserDashboard() {
     }).catch(err => console.warn("Failed to fetch team members:", err));
 
     const unsubscribeAssets = subscribeToAssets(currentUser.companyId, (list) => {
-      setMyAssets(list.filter(a => a.assignedUserId === currentUser.uid));
+      setMyAssets(list.filter(a => a.assignedUserId === currentUser.uid || a.assigned_to === currentUser.uid || a.assignedUser === currentUser.uid));
+    });
+
+    const unsubscribeTasks = subscribeToUserTasks(currentUser.uid, (tasks) => {
+      setUserTasks(tasks || []);
     });
 
     const unsubscribePayroll = subscribeToCompanyPayroll(currentUser.companyId, null, null, (list) => {
       setMyPayslips(list.filter(p => p.employeeId === currentUser.uid));
     });
 
-    
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return () => {
+    return () => {
       unsubscribe();
       unsubscribePaid();
       unsubscribeLeaves();
       unsubscribeAssets();
+      unsubscribeTasks();
       unsubscribePayroll();
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -515,20 +483,7 @@ export default function UserDashboard() {
       }
     }
 
-    
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return () => {
+    return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [todayLog]);
@@ -774,7 +729,7 @@ export default function UserDashboard() {
 
     setActionLoading(true);
     try {
-      await requestLeave(
+      const createdLeave = await requestLeave(
         currentUser.uid,
         currentUser.name,
         currentUser.department || "Engineering",
@@ -787,6 +742,9 @@ export default function UserDashboard() {
         isEmergency,
         currentUser.companyId
       );
+      if (createdLeave) {
+        setMyLeaveRequests(prev => [createdLeave, ...prev.filter(r => r.id !== createdLeave.id)]);
+      }
       showToast("Leave request submitted successfully.", "success");
       setLeaveType("Annual Leave");
       setStartDate("");
@@ -2416,54 +2374,39 @@ export default function UserDashboard() {
         <div className="space-y-8">
 
           {/* Card: Active Tasks */}
-          {currentUser.tasks && currentUser.tasks.some(t => t.timerStartedAt && !t.completed) && (
+          {userTasks && userTasks.some(t => t.timerStartedAt && !t.completed) && (
             <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-sm">
               <h3 className="font-extrabold text-base text-text-main tracking-tight mb-4 flex items-center gap-2">
                 <Activity size={18} className="text-brand-primary" />
                 Active Tasks
               </h3>
               <div className="space-y-3">
-                {currentUser.tasks.filter(t => t.timerStartedAt && !t.completed).map(task => {
-                  
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return (
-                    <div key={task.id} className="p-3 bg-bg-base/30 border border-border-card rounded-[16px]">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-bold text-sm text-text-main pr-2">{task.title}</h4>
-                        <button
-                          onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
-                          className="flex-shrink-0 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-1.5 rounded-[8px] transition-colors"
-                          title="Stop Timer"
-                        >
-                          <Square size={14} fill="currentColor" />
-                        </button>
-                      </div>
-                      <div className="text-xs font-bold text-brand-primary flex items-center gap-1 animate-pulse">
-                        <Clock size={12} />
-                        {(() => {
-                           const startedTime = new Date(task.timerStartedAt).getTime();
-                           const rawElapsed = Math.max(0, Math.floor((currentTime.getTime() - startedTime) / 1000));
-                           const elapsed = Math.min(rawElapsed, 8 * 3600);
-                           const h = Math.floor(elapsed / 3600);
-                           const m = Math.floor((elapsed % 3600) / 60);
-                           const s = elapsed % 60;
-                           return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
-                        })()}
-                      </div>
+                {userTasks.filter(t => t.timerStartedAt && !t.completed).map(task => (
+                  <div key={task.id} className="p-3 bg-bg-base/30 border border-border-card rounded-[16px]">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-bold text-sm text-text-main pr-2">{task.title}</h4>
+                      <button
+                        onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
+                        className="flex-shrink-0 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-1.5 rounded-[8px] transition-colors"
+                        title="Stop Timer"
+                      >
+                        <Square size={14} fill="currentColor" />
+                      </button>
                     </div>
-                  );
-                })}
+                    <div className="text-xs font-bold text-brand-primary flex items-center gap-1 animate-pulse">
+                      <Clock size={12} />
+                      {(() => {
+                         const startedTime = new Date(task.timerStartedAt).getTime();
+                         const rawElapsed = Math.max(0, Math.floor((currentTime.getTime() - startedTime) / 1000));
+                         const elapsed = Math.min(rawElapsed, 8 * 3600);
+                         const h = Math.floor(elapsed / 3600);
+                         const m = Math.floor((elapsed % 3600) / 60);
+                         const s = elapsed % 60;
+                         return `${h > 0 ? h + 'h ' : ''}${m}m ${s}s`;
+                      })()}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -2576,22 +2519,7 @@ export default function UserDashboard() {
                 if (act.type === "out") dotColor = "bg-brand-danger";
                 if (act.type === "break") dotColor = "bg-brand-warning";
                 if (act.type === "work") dotColor = "bg-brand-primary";
-                if (act.type === "in") dotColor = "bg-brand-success";
-
-                
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return (
+                return (
                   <div key={idx} className="relative min-w-[130px] pt-7 flex-shrink-0">
                     {/* Node Dot */}
                     <div className={`absolute left-0 top-[11px] w-3 h-3 rounded-full border-2 border-bg-card ${dotColor} z-10`} />

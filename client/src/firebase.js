@@ -1,3 +1,4 @@
+
 // ============================================================================
 // HRMS POSTGRESQL DIRECT BACKEND CLIENT LAYER (ZERO FIRESTORE DEPENDENCY)
 // ============================================================================
@@ -216,6 +217,12 @@ export const getAllRegisteredUsers = async (companyId = "") => {
 };
 
 export const updateUserRecord = async (uid, name, department, programType, shiftStart, shiftEnd, annualLeaves, sickLeaves, casualLeaves, avatar, dob, joiningDate, projects, tasks, jobType, designation, isProjectManager, employeeId, additionalData = {}) => {
+  if (typeof name === "object" && name !== null) {
+    return apiFetch(`/users/${uid}`, {
+      method: "PUT",
+      body: JSON.stringify(name)
+    });
+  }
   return apiFetch(`/users/${uid}`, {
     method: "PUT",
     body: JSON.stringify({
@@ -335,17 +342,17 @@ export const subscribeToAdminDashboard = (companyId, callback) => {
   };
 };
 
-export const updateAttendanceRules = async (rules) => {
+export const updateAttendanceRules = async (rules, companyId = "") => {
   return apiFetch("/attendance/rules", {
     method: "POST",
-    body: JSON.stringify({ rules })
+    body: JSON.stringify({ rules, companyId })
   });
 };
 
-export const subscribeToAttendanceRules = (callback) => {
+export const subscribeToAttendanceRules = (callback, companyId = "") => {
   let isMounted = true;
   const fetchRules = () => {
-    apiFetch("/attendance/rules").then(res => {
+    apiFetch(`/attendance/rules?companyId=${encodeURIComponent(companyId || "")}`).then(res => {
       if (isMounted) callback(res?.rules || "");
     }).catch(() => {
       if (isMounted) callback("");
@@ -363,7 +370,42 @@ export const subscribeToAttendanceRules = (callback) => {
 // LEAVES & REGULARIZATION
 // ----------------------------------------------------
 
-export const requestLeave = async (userId, userName, userDept, startDate, endDate, totalDays, leaveType, reason, companyId = "") => {
+export const requestLeave = async (
+  userId,
+  userName,
+  userDept,
+  a4,
+  a5,
+  a6,
+  a7,
+  a8,
+  a9,
+  a10,
+  a11
+) => {
+  let leaveType = "Casual Leave";
+  let startDate = "";
+  let endDate = "";
+  let totalDays = 1;
+  let reason = "";
+  let companyId = "";
+
+  if (typeof a4 === "string" && a4.match(/^\d{4}-\d{2}-\d{2}/)) {
+    startDate = a4;
+    endDate = a5;
+    totalDays = parseInt(a6) || 1;
+    leaveType = a7 || "Casual Leave";
+    reason = a8 || "";
+    companyId = a9 || "";
+  } else {
+    leaveType = a4 || "Casual Leave";
+    totalDays = parseInt(a5) || 1;
+    startDate = a6;
+    endDate = a7;
+    reason = a8 || "";
+    companyId = a11 || a9 || "";
+  }
+
   return apiFetch("/leaves", {
     method: "POST",
     body: JSON.stringify({
@@ -474,10 +516,26 @@ export const subscribeToRegularizationRequests = (companyId, callback) => {
 // PROJECTS & TASKS
 // ----------------------------------------------------
 
-export const createProject = async (name, description, teamMembers = [], deadline = "", companyId = "") => {
+export const createProject = async (...args) => {
+  let name, description, teamMembers, deadline, companyId, startDate, managerId, status;
+  if (typeof args[0] === "object") {
+    ({ name, description, teamMembers, deadline, companyId, startDate, managerId, status } = args[0]);
+  } else {
+    [name, description, teamMembers = [], deadline = "", companyId = "", startDate = "", managerId = "", status = "Ongoing"] = args;
+  }
   return apiFetch("/projects", {
     method: "POST",
-    body: JSON.stringify({ name, description, teamMembers, deadline, companyId })
+    body: JSON.stringify({
+      name,
+      description,
+      teamMembers,
+      deadline,
+      companyId,
+      startDate: startDate || deadline,
+      endDate: deadline,
+      managerId,
+      status
+    })
   });
 };
 
@@ -493,7 +551,12 @@ export const deleteProject = async (projectId) => {
 };
 
 export const updateProjectTeam = async (projectId, teamMembers) => updateProject(projectId, { teamMembers });
-export const addTeamMemberToProject = async () => true;
+export const addTeamMemberToProject = async (projectId, userId) => {
+  return apiFetch(`/projects/${projectId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ userId })
+  }).catch(() => true);
+};
 
 export const subscribeToProjects = (companyId, callback) => {
   let isMounted = true;
@@ -547,21 +610,173 @@ export const subscribeToTasks = (companyId, callback) => {
   };
 };
 
-export const startTaskTimer = async (userId, taskId) => updateTask(taskId, { timerStartedAt: new Date().toISOString() });
-export const stopTaskTimer = async (userId, taskId) => updateTask(taskId, { timerStartedAt: null });
-export const stopAllTaskTimers = async () => true;
+export const startTaskTimer = async (userId, taskId) => {
+  try {
+    const user = await apiFetch(`/users/${userId}`);
+    const tasks = user?.tasks || [];
+    const updatedTasks = tasks.map(t => ({
+      ...t,
+      timerStartedAt: t.id === taskId ? new Date().toISOString() : null
+    }));
+    await updateUserTasks(userId, updatedTasks);
+    return true;
+  } catch (err) {
+    console.error("startTaskTimer error:", err);
+    return false;
+  }
+};
 
-export const addTaskReport = async (reportData) => {
-  return apiFetch("/tasks/reports", {
+export const stopTaskTimer = async (userId, taskId) => {
+  try {
+    const user = await apiFetch(`/users/${userId}`);
+    const tasks = user?.tasks || [];
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        return { ...t, timerStartedAt: null };
+      }
+      return t;
+    });
+    await updateUserTasks(userId, updatedTasks);
+    return true;
+  } catch (err) {
+    console.error("stopTaskTimer error:", err);
+    return false;
+  }
+};
+
+export const stopAllTaskTimers = async (userId) => {
+  try {
+    if (!userId) {
+      const cur = JSON.parse(localStorage.getItem("att_current_user") || "null");
+      userId = cur?.uid;
+    }
+    if (!userId) return true;
+    const user = await apiFetch(`/users/${userId}`);
+    const tasks = user?.tasks || [];
+    const updatedTasks = tasks.map(t => ({ ...t, timerStartedAt: null }));
+    await updateUserTasks(userId, updatedTasks);
+    return true;
+  } catch {
+    return true;
+  }
+};
+
+export const addTaskReport = async (arg1, arg2, arg3, arg4) => {
+  let reportData;
+  if (typeof arg1 === "object" && arg1 !== null) {
+    reportData = arg1;
+  } else {
+    reportData = {
+      taskId: arg1,
+      userId: arg2,
+      pmId: arg3,
+      content: arg4
+    };
+  }
+  return apiFetch("/reports/tasks", {
     method: "POST",
     body: JSON.stringify(reportData)
   }).catch(() => ({ success: true }));
 };
 
-export const updateTaskWarningSent = async () => true;
-export const subscribeToTaskReports = (companyId, callback) => {
-  callback([]);
-  return () => {};
+export const updateTaskWarningSent = async (userId, taskId) => {
+  try {
+    const user = await apiFetch(`/users/${userId}`);
+    const tasks = user?.tasks || [];
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        return { ...t, warningSentAt: new Date().toISOString() };
+      }
+      return t;
+    });
+    await updateUserTasks(userId, updatedTasks);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const subscribeToUserTasks = (userId, callback) => {
+  let isMounted = true;
+  const fetchUserTasks = () => {
+    if (!userId) return;
+    apiFetch(`/users/${userId}`).then(user => {
+      if (isMounted) callback(Array.isArray(user?.tasks) ? user.tasks : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchUserTasks();
+  const interval = setInterval(fetchUserTasks, 3000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+};
+
+export const subscribeToTaskReports = (arg, callback) => {
+  let isMounted = true;
+  let queryParam = "";
+  if (typeof arg === "object" && arg !== null) {
+    const parts = [];
+    if (arg.companyId) parts.push(`companyId=${encodeURIComponent(arg.companyId)}`);
+    if (arg.taskId) parts.push(`taskId=${encodeURIComponent(arg.taskId)}`);
+    if (arg.userId) parts.push(`userId=${encodeURIComponent(arg.userId)}`);
+    queryParam = parts.join("&");
+  } else if (typeof arg === "string") {
+    if (arg.includes("carrezza") || arg.includes("comp_") || arg.length > 25) {
+      queryParam = `companyId=${encodeURIComponent(arg)}`;
+    } else {
+      queryParam = `taskId=${encodeURIComponent(arg)}`;
+    }
+  }
+
+  const fetchReports = () => {
+    apiFetch(`/reports/tasks?${queryParam}`).then(data => {
+      if (isMounted) callback(Array.isArray(data) ? data : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchReports();
+  const interval = setInterval(fetchReports, 3000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+};
+
+export const updateUserTasks = async (userId, tasks) => {
+  return apiFetch(`/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify({ tasks })
+  });
+};
+
+export const updateUserProjects = async (userId, projects) => {
+  return apiFetch(`/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify({ projects })
+  });
+};
+
+export const subscribeToAllUsers = (companyId, callback) => {
+  let isMounted = true;
+  const fetchUsers = () => {
+    getAllRegisteredUsers(companyId).then(users => {
+      if (isMounted) callback(Array.isArray(users) ? users : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchUsers();
+  const interval = setInterval(fetchUsers, 4000);
+  window.addEventListener("local-auth-updated", fetchUsers);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+    window.removeEventListener("local-auth-updated", fetchUsers);
+  };
 };
 
 // ----------------------------------------------------
@@ -666,6 +881,11 @@ const mapMessageData = (m) => {
   const pinnedAt = m.pinnedAt || pinned.pinnedAt || null;
   const pinnedBy = m.pinnedBy || pinned.pinnedBy || null;
 
+  const isDeleted = m.isDeleted !== undefined ? Boolean(m.isDeleted) : Boolean(m.is_deleted || m.reactions?.isDeleted);
+  const deletedBy = m.deletedBy || m.deleted_by || m.reactions?.deletedBy || null;
+  const deletedAt = m.deletedAt || m.deleted_at || m.reactions?.deletedAt || null;
+  const deletedFor = m.deletedFor || m.deleted_for || m.reactions?.deletedFor || [];
+
   return {
     ...m,
     text: m.text ?? m.content ?? "",
@@ -679,7 +899,11 @@ const mapMessageData = (m) => {
     pinExpiresAt,
     pinDurationDays,
     pinnedAt,
-    pinnedBy
+    pinnedBy,
+    isDeleted,
+    deletedBy,
+    deletedAt,
+    deletedFor
   };
 };
 
@@ -767,8 +991,19 @@ export const unpinChatMessage = async (messageId) => {
 export const pinChatThread = async () => true;
 export const unpinChatThread = async () => true;
 export const markThreadAsRead = async () => true;
-export const deleteChatMessageForMe = async () => true;
-export const deleteChatMessage = async () => true;
+export const deleteChatMessageForMe = async (messageId, userId) => {
+  return apiFetch(`/chat/messages/${messageId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ deleteType: "me", userId })
+  }).catch(() => ({ success: true }));
+};
+
+export const deleteChatMessage = async (messageId) => {
+  return apiFetch(`/chat/messages/${messageId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ deleteType: "everyone" })
+  }).catch(() => ({ success: true }));
+};
 
 export const getAllMessagesAdmin = async (companyId = "") => {
   try {
@@ -878,7 +1113,10 @@ export const subscribeToAssets = (companyId, callback) => {
 export const subscribeToCompanyPayroll = (companyId, month, year, callback) => {
   let isMounted = true;
   const fetchPayroll = () => {
-    apiFetch(`/payroll?companyId=${companyId || ""}&month=${month || ""}&year=${year || ""}`).then(data => {
+    let url = `/payroll?companyId=${encodeURIComponent(companyId || "")}`;
+    if (month) url += `&month=${encodeURIComponent(month)}`;
+    if (year) url += `&year=${encodeURIComponent(year)}`;
+    apiFetch(url).then(data => {
       if (isMounted) callback(Array.isArray(data) ? data : []);
     }).catch(() => {
       if (isMounted) callback([]);
@@ -892,15 +1130,41 @@ export const subscribeToCompanyPayroll = (companyId, month, year, callback) => {
   };
 };
 
-export const saveEmployeePayroll = async (payrollData) => {
+export const saveEmployeePayroll = async (...args) => {
+  let payload = {};
+  if (args.length >= 3) {
+    const [companyId, userId, data] = args;
+    payload = {
+      ...data,
+      companyId,
+      userId,
+      employeeId: userId
+    };
+  } else if (typeof args[0] === "object" && args[0] !== null) {
+    payload = args[0];
+  }
   return apiFetch("/payroll", {
     method: "POST",
-    body: JSON.stringify(payrollData)
+    body: JSON.stringify(payload)
   });
 };
 
-export const deleteEmployeePayroll = async (payrollId) => apiFetch(`/payroll/${payrollId}`, { method: "DELETE" });
-export const wipeAllEmployeePayrolls = async () => true;
+export const deleteEmployeePayroll = async (...args) => {
+  if (args.length >= 4) {
+    const [companyId, userId, month, year] = args;
+    const url = `/payroll?companyId=${encodeURIComponent(companyId || "")}&employeeId=${encodeURIComponent(userId || "")}&month=${encodeURIComponent(month || "")}&year=${encodeURIComponent(year || "")}`;
+    return apiFetch(url, { method: "DELETE" });
+  }
+  const payrollId = args[0];
+  return apiFetch(`/payroll/${payrollId}`, { method: "DELETE" });
+};
+
+export const wipeAllEmployeePayrolls = async (companyId, month, year) => {
+  let url = `/payroll/all?companyId=${encodeURIComponent(companyId || "")}`;
+  if (month) url += `&month=${encodeURIComponent(month)}`;
+  if (year) url += `&year=${encodeURIComponent(year)}`;
+  return apiFetch(url, { method: "DELETE" });
+};
 
 export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
   return apiFetch(`/users/${userId}`, {
@@ -1090,19 +1354,37 @@ export const subscribeToExternalLinks = (companyId, callback) => {
   };
 };
 
-export const generateExternalLink = async (clientName, clientEmail, projectId, projectName, pmId, pmName, channelId, companyId) => {
+export const generateExternalLink = async (arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) => {
+  let payload;
+  if (typeof arg1 === "object" && arg1 !== null) {
+    payload = arg1;
+  } else if (arg7 !== undefined) {
+    // Called from ExternalLinksTab: (userId, companyId, projectId, projectName, pmId, pmName, clientEmail, clientName)
+    payload = {
+      userId: arg1,
+      companyId: arg2,
+      projectId: arg3,
+      projectName: arg4,
+      pmId: arg5,
+      pmName: arg6,
+      clientEmail: arg7,
+      clientName: arg8
+    };
+  } else {
+    payload = {
+      clientName: arg1,
+      clientEmail: arg2,
+      projectId: arg3,
+      projectName: arg4,
+      pmId: arg5,
+      pmName: arg6,
+      channelId: arg7,
+      companyId: arg8
+    };
+  }
   return apiFetch("/external-links", {
     method: "POST",
-    body: JSON.stringify({
-      clientName,
-      clientEmail,
-      projectId,
-      projectName,
-      pmId,
-      pmName,
-      channelId,
-      companyId
-    })
+    body: JSON.stringify(payload)
   });
 };
 
@@ -1133,24 +1415,138 @@ export const subscribeToNotifications = (userId, callback) => {
 export const markNotificationRead = async () => true;
 
 export const subscribeToDailyReports = (companyId, callback) => {
-  callback([]);
-  return () => {};
+  let isMounted = true;
+  const fetchDaily = () => {
+    apiFetch(`/reports/daily?companyId=${companyId || ""}`).then(data => {
+      if (isMounted) callback(Array.isArray(data) ? data : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchDaily();
+  const interval = setInterval(fetchDaily, 4000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
 };
+
 export const subscribeToMyDailyReports = (userId, callback) => {
-  callback([]);
-  return () => {};
+  let isMounted = true;
+  const fetchMyDaily = () => {
+    apiFetch(`/reports/daily?userId=${userId || ""}`).then(data => {
+      if (isMounted) callback(Array.isArray(data) ? data : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchMyDaily();
+  const interval = setInterval(fetchMyDaily, 4000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
 };
-export const addDailyReport = async () => true;
-export const updateDailyReport = async () => true;
-export const deleteDailyReport = async () => true;
+
+export const addDailyReport = async (reportData) => {
+  return apiFetch("/reports/daily", {
+    method: "POST",
+    body: JSON.stringify(reportData)
+  });
+};
+
+export const updateDailyReport = async (reportId, updates) => {
+  return apiFetch(`/reports/daily/${reportId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates)
+  });
+};
+
+export const deleteDailyReport = async (reportId) => {
+  return apiFetch(`/reports/daily/${reportId}`, {
+    method: "DELETE"
+  });
+};
 
 export const subscribeToWeeklyReports = (companyId, callback) => {
-  callback([]);
-  return () => {};
+  let isMounted = true;
+  const fetchWeekly = () => {
+    apiFetch(`/reports/weekly?companyId=${companyId || ""}`).then(data => {
+      if (isMounted) callback(Array.isArray(data) ? data : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchWeekly();
+  const interval = setInterval(fetchWeekly, 4000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
 };
-export const addWeeklyReport = async () => true;
-export const updateWeeklyReport = async () => true;
-export const deleteWeeklyReport = async () => true;
+
+export const addWeeklyReport = async (reportData) => {
+  return apiFetch("/reports/weekly", {
+    method: "POST",
+    body: JSON.stringify(reportData)
+  });
+};
+
+export const updateWeeklyReport = async (reportId, updates) => {
+  return apiFetch(`/reports/weekly/${reportId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates)
+  });
+};
+
+export const deleteWeeklyReport = async (reportId) => {
+  return apiFetch(`/reports/weekly/${reportId}`, {
+    method: "DELETE"
+  });
+};
+
+// ----------------------------------------------------
+// COMPANY DOMAINS
+// ----------------------------------------------------
+export const getCompanyDomains = async (companyId) => {
+  return apiFetch(`/companies/domains?companyId=${companyId || ""}`);
+};
+
+export const subscribeToCompanyDomains = (companyId, callback) => {
+  let isMounted = true;
+  const fetchDomains = () => {
+    apiFetch(`/companies/domains?companyId=${companyId || ""}`).then(data => {
+      if (isMounted) callback(Array.isArray(data) ? data : []);
+    }).catch(() => {
+      if (isMounted) callback([]);
+    });
+  };
+  fetchDomains();
+  const interval = setInterval(fetchDomains, 3000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+};
+
+export const addCompanyDomain = async (companyId, domain) => {
+  return apiFetch("/companies/domains", {
+    method: "POST",
+    body: JSON.stringify({ companyId, domain })
+  });
+};
+
+export const deleteCompanyDomain = async (domain) => {
+  return apiFetch(`/companies/domains/${encodeURIComponent(domain)}`, {
+    method: "DELETE"
+  });
+};
+
+export const verifyCompanyDomain = async (domain) => {
+  return apiFetch(`/companies/domains/${encodeURIComponent(domain)}/verify`, {
+    method: "POST"
+  });
+};
 
 export const getLandingPageConfig = async () => null;
 export const updateLandingPageConfig = async () => true;

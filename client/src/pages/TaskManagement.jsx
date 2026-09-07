@@ -2,10 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
 import { 
-  db, 
-  getDbType, 
   createNotification, 
   addTaskReport, 
   subscribeToTaskReports, 
@@ -14,7 +11,9 @@ import {
   subscribeToMyDailyReports,
   addDailyReport,
   deleteDailyReport,
-  subscribeToProjects
+  subscribeToProjects,
+  subscribeToUserTasks,
+  updateUserTasks
 } from "../firebase";
 import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity, Plus, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
@@ -73,61 +72,29 @@ export default function TaskManagement() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.uid) return;
     
-    if (getDbType() === "firebase") {
-      const unsubscribe = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
-        if (docSnap.exists()) {
-          const rawTasks = docSnap.data().tasks || [];
-          // Auto-settle stale timers older than 12 hours
-          rawTasks.forEach(t => {
-            if (t.timerStartedAt) {
-              const start = new Date(t.timerStartedAt).getTime();
-              if (Date.now() - start > 12 * 3600 * 1000) {
-                stopTaskTimer(currentUser.uid, t.id, t.assignedBy).catch(() => {});
-              }
-            }
-          });
-          const sorted = [...rawTasks].reverse().sort((a, b) => {
-            const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
-            const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
-            if (dateA && dateB) return dateB - dateA;
-            return 0;
-          });
-          setTasks(sorted);
+    const unsubscribe = subscribeToUserTasks(currentUser.uid, (rawTasks) => {
+      // Auto-settle stale timers older than 12 hours
+      rawTasks.forEach(t => {
+        if (t.timerStartedAt) {
+          const start = new Date(t.timerStartedAt).getTime();
+          if (Date.now() - start > 12 * 3600 * 1000) {
+            stopTaskTimer(currentUser.uid, t.id, t.assignedBy).catch(() => {});
+          }
         }
-        setLoading(false);
       });
-      return unsubscribe;
-    } else {
-      const handler = () => {
-        const users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
-        const me = users.find(u => u.uid === currentUser.uid);
-        if (me) {
-          const rawTasks = me.tasks || [];
-          // Auto-settle stale timers older than 12 hours
-          rawTasks.forEach(t => {
-            if (t.timerStartedAt) {
-              const start = new Date(t.timerStartedAt).getTime();
-              if (Date.now() - start > 12 * 3600 * 1000) {
-                stopTaskTimer(currentUser.uid, t.id, t.assignedBy).catch(() => {});
-              }
-            }
-          });
-          const sorted = [...rawTasks].reverse().sort((a, b) => {
-            const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
-            const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
-            if (dateA && dateB) return dateB - dateA;
-            return 0;
-          });
-          setTasks(sorted);
-        }
-        setLoading(false);
-      };
-      handler();
-      window.addEventListener("local-auth-updated", handler);
-      return () => window.removeEventListener("local-auth-updated", handler);
-    }
+      const sorted = [...rawTasks].reverse().sort((a, b) => {
+        const dateA = a.assignedAt ? new Date(a.assignedAt).getTime() : 0;
+        const dateB = b.assignedAt ? new Date(b.assignedAt).getTime() : 0;
+        if (dateA && dateB) return dateB - dateA;
+        return 0;
+      });
+      setTasks(sorted);
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, [currentUser]);
 
   // Subscribe to reports for all tasks
@@ -249,17 +216,7 @@ export default function TaskManagement() {
     updatedTasks[taskIdx].completed = isComplete;
 
     try {
-      if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", currentUser.uid), { tasks: updatedTasks });
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users"));
-        const idx = users.findIndex(u => u.uid === currentUser.uid);
-        if (idx !== -1) {
-          users[idx].tasks = updatedTasks;
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
-        }
-      }
+      await updateUserTasks(currentUser.uid, updatedTasks);
       showToast(isComplete ? "Task marked as completed!" : "Task marked as incomplete.", "success");
       
       // Notify PM if marked complete
@@ -340,12 +297,13 @@ export default function TaskManagement() {
       const status = t.completed ? "Done" : "Active";
       tableData.push([{ content: t.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${t.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
       
-      const reports = [...(taskReports[t.id] || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const reports = [...(taskReports[t.id] || [])].sort((a, b) => new Date(a.timestamp || a.createdAt || a.submittedAt) - new Date(b.timestamp || b.createdAt || b.submittedAt));
       if (reports.length > 0) {
         reports.forEach(r => {
+          const reportDate = r.timestamp || r.createdAt || r.submittedAt;
           tableData.push([
             { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } },
-            { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 }, halign: 'right' } }
+            { content: reportDate ? new Date(reportDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—", styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 }, halign: 'right' } }
           ]);
         });
       } else {
@@ -391,16 +349,17 @@ export default function TaskManagement() {
         "Update Timestamp": ""
       });
       
-      const reports = [...(taskReports[t.id] || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const reports = [...(taskReports[t.id] || [])].sort((a, b) => new Date(a.timestamp || a.createdAt || a.submittedAt) - new Date(b.timestamp || b.createdAt || b.submittedAt));
       if (reports.length > 0) {
         reports.forEach(r => {
+          const reportDate = r.timestamp || r.createdAt || r.submittedAt;
           tableData.push({
             "Employee": "",
             "Task Title": "",
             "Status": "",
             "Est. Hours": "",
             "Update Detail": r.reportText,
-            "Update Timestamp": new Date(r.timestamp).toLocaleString()
+            "Update Timestamp": reportDate ? new Date(reportDate).toLocaleString() : ""
           });
         });
       } else {
@@ -438,12 +397,13 @@ export default function TaskManagement() {
     const status = task.completed ? "Done" : "Active";
     tableData.push([{ content: task.title, styles: { fontStyle: 'bold', fillColor: [243, 244, 246] } }, { content: status, styles: { fillColor: [243, 244, 246] } }, { content: `${task.duration || 0}h`, styles: { fillColor: [243, 244, 246] } }]);
     
-    const reports = [...(taskReports[task.id] || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const reports = [...(taskReports[task.id] || [])].sort((a, b) => new Date(a.timestamp || a.createdAt || a.submittedAt) - new Date(b.timestamp || b.createdAt || b.submittedAt));
     if (reports.length > 0) {
       reports.forEach(r => {
+        const reportDate = r.timestamp || r.createdAt || r.submittedAt;
         tableData.push([
           { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 14, top: 6, bottom: 6, right: 8 } } },
-          { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 }, halign: 'right' } }
+          { content: reportDate ? new Date(reportDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—", styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { left: 8, top: 6, bottom: 6, right: 8 }, halign: 'right' } }
         ]);
       });
     } else {
@@ -814,12 +774,15 @@ export default function TaskManagement() {
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {taskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).map(r => (
-                                  <div key={r.id} className="text-[10px]">
-                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
-                                    <span className="text-text-main ml-2">{r.reportText}</span>
-                                  </div>
-                                ))}
+                                {taskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).map(r => {
+                                  const reportDate = r.timestamp || r.createdAt || r.submittedAt;
+                                  return (
+                                    <div key={r.id} className="text-[10px]">
+                                      <span className="font-bold text-text-sec">[{reportDate ? new Date(reportDate).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : "Recent"}]</span>
+                                      <span className="text-text-main ml-2">{r.reportText}</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </td>
                           </tr>
@@ -1049,7 +1012,10 @@ export default function TaskManagement() {
                       <div key={r.id} className="bg-bg-card p-2 rounded-[8px] border border-border-card/50">
                         <p className="text-xs text-text-main">{r.reportText}</p>
                         <p className="text-[9px] text-text-mut mt-1 text-right">
-                          {new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {(() => {
+                            const d = r.timestamp || r.createdAt || r.submittedAt;
+                            return d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now";
+                          })()}
                         </p>
                       </div>
                     ))}

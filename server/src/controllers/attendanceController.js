@@ -12,11 +12,11 @@ export const getAttendance = async (req, res) => {
     `;
     const params = [];
 
-    if (userId) {
-      params.push(userId);
-      sql += ` AND a.user_id = $${params.length}`;
-    } else if (req.user && req.user.role === "employee") {
+    if (req.user && req.user.role === "employee") {
       params.push(req.user.id);
+      sql += ` AND a.user_id = $${params.length}`;
+    } else if (userId) {
+      params.push(userId);
       sql += ` AND a.user_id = $${params.length}`;
     }
 
@@ -177,9 +177,21 @@ export const deleteAttendance = async (req, res) => {
 // Rules
 export const getAttendanceRules = async (req, res) => {
   try {
+    const { companyId } = req.query;
+    const targetCompanyId = companyId || req.user?.companyId;
+
+    if (targetCompanyId) {
+      const compResult = await query("SELECT value FROM settings WHERE key = $1", [`attendance_rules_${targetCompanyId}`]);
+      if (compResult.rows.length > 0) {
+        const val = compResult.rows[0].value;
+        return res.json({ rules: typeof val === "object" && val !== null ? (val.rules || "") : (val || "") });
+      }
+    }
+
     const result = await query("SELECT value FROM settings WHERE key = 'attendance_rules'");
     if (result.rows.length > 0) {
-      res.json({ rules: result.rows[0].value?.rules || result.rows[0].value || "" });
+      const val = result.rows[0].value;
+      res.json({ rules: typeof val === "object" && val !== null ? (val.rules || "") : (val || "") });
     } else {
       res.json({ rules: "" });
     }
@@ -191,13 +203,25 @@ export const getAttendanceRules = async (req, res) => {
 
 export const updateAttendanceRules = async (req, res) => {
   try {
-    const { rules } = req.body;
+    const { rules, companyId } = req.body;
+    const targetCompanyId = companyId || req.user?.companyId;
+
+    if (targetCompanyId) {
+      await query(
+        `INSERT INTO settings (key, value)
+         VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [`attendance_rules_${targetCompanyId}`, JSON.stringify({ rules })]
+      );
+    }
+
     await query(
       `INSERT INTO settings (key, value)
        VALUES ('attendance_rules', $1)
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
       [JSON.stringify({ rules })]
     );
+
     res.json({ success: true, rules });
   } catch (err) {
     console.error("updateAttendanceRules error:", err);

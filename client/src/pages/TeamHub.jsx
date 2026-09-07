@@ -235,9 +235,16 @@ function MessageBubble({ msg, currentUserId, isAdmin, onDelete, onForward, onPin
             <span className="text-[11px] font-bold text-text-sec">{isOwn ? "You" : msg.senderName}</span>
             <span className="text-[10px] text-text-mut">{formatTime(msg.timestamp)}</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-2 rounded-[14px] border border-dashed border-border-card bg-bg-base text-[11px] text-text-mut italic">
-            <AlertCircle size={11} className="flex-shrink-0" />
-            This message was deleted
+          <div className="flex flex-col gap-1 px-3 py-2 rounded-[14px] border border-dashed border-border-card bg-bg-base text-[11px] text-text-mut">
+            <div className="flex items-center gap-1.5 italic">
+              <AlertCircle size={11} className="flex-shrink-0 text-red-500" />
+              <span>This message was deleted {msg.deletedBy ? `by ${msg.deletedBy}` : ""}</span>
+            </div>
+            {isAdmin && msg.text && (
+              <span className="text-[11px] line-through text-text-mut opacity-75">
+                {msg.text}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1285,17 +1292,18 @@ function ThreadPanel({ thread, currentUser, isAdmin, allUsers = [], channels = [
     );
   }
 
-  // Filter messages if search is active
+  // Filter messages if search is active or deleted for me
+  const userFilteredMessages = messages.filter(m => !m.deletedFor || !m.deletedFor.includes(currentUser.uid));
   const cleanSearch = inChatSearch.trim().toLowerCase();
   const visibleMessages = cleanSearch
-    ? messages.filter(m =>
+    ? userFilteredMessages.filter(m =>
         !m.isDeleted && (
           m.text?.toLowerCase().includes(cleanSearch) ||
           m.senderName?.toLowerCase().includes(cleanSearch) ||
           m.fileData?.name?.toLowerCase().includes(cleanSearch)
         )
       )
-    : messages;
+    : userFilteredMessages;
 
   // Group messages by date
   const groupedMessages = visibleMessages.reduce((acc, msg) => {
@@ -1722,9 +1730,9 @@ export default function TeamHub() {
     if (!query) return sorted;
 
     return sorted.filter(thread => {
-      const otherId = thread.participantIds.find(id => id !== currentUser?.uid);
-      const otherName = thread.participantNames?.[otherId] || "";
+      const otherId = (thread.participantIds || []).find(id => id !== currentUser?.uid);
       const otherUser = allUsers.find(u => u.uid === otherId);
+      const otherName = otherUser?.name || thread.participantNames?.[otherId] || "";
       
       const matchName = otherName.toLowerCase().includes(query);
       const matchDept = (otherUser?.department || "").toLowerCase().includes(query);
@@ -1942,9 +1950,9 @@ export default function TeamHub() {
                     </p>
                   )}
                   {filteredDmThreads.map(thread => {
-                    const otherId = thread.participantIds.find(id => id !== currentUser?.uid);
-                    const otherName = thread.participantNames?.[otherId] || "Unknown";
+                    const otherId = (thread.participantIds || []).find(id => id !== currentUser?.uid);
                     const otherUser = allUsers.find(u => u.uid === otherId);
+                    const otherName = otherUser?.name || thread.participantNames?.[otherId] || "Team Member";
                     const isPinned = isThreadPinned(thread.id);
                     return (
                       <div

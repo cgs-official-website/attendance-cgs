@@ -287,14 +287,15 @@ export default function DashboardLayout({ children }) {
 
     const unsubscribeRules = subscribeToAttendanceRules((data) => {
       setRules(data);
-    });
+    }, currentUser.companyId);
 
     const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (data) => {
+      const items = Array.isArray(data) ? data : [];
       if (currentUser.role === "admin") {
-        const pending = data.filter(r => r.status === "pending");
+        const pending = items.filter(r => r.status === "pending");
         setLeaveRequestsList(pending);
       } else {
-        const myRequests = data.filter(r => r.userId === currentUser.uid);
+        const myRequests = items.filter(r => (r.userId || r.user_id) === currentUser.uid);
         setLeaveRequestsList(myRequests);
       }
     });
@@ -302,7 +303,7 @@ export default function DashboardLayout({ children }) {
     let unsubscribeRegs = () => {};
     if (currentUser.role === "admin") {
       unsubscribeRegs = subscribeToRegularizationRequests(currentUser.companyId, (data) => {
-        const pending = (data || []).filter(r => r.status === "pending");
+        const pending = (Array.isArray(data) ? data : []).filter(r => r.status === "pending");
         setRegularizationRequestsList(pending);
       });
     }

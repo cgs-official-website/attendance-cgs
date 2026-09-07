@@ -1,52 +1,44 @@
 import bcrypt from "bcryptjs";
 import { query } from "../src/config/db.js";
 
-async function setPassword() {
-  const email = "mohamed.naveeth@teamcarrezza.com".toLowerCase().trim();
-  const rawPassword = "Samwilliams@675";
-
+async function setAllCarrezzaPasswords() {
+  const rawPassword = "12345678";
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(rawPassword, salt);
 
-  console.log(`Generated bcrypt hash for ${email}`);
+  console.log(`Hashing password '${rawPassword}'...`);
 
-  // Check if user exists
-  const checkRes = await query("SELECT id, name, email FROM users WHERE email = $1", [email]);
+  // 1. Identify all users belonging to Carrezza Global Solutions or with teamcarrezza email
+  const userListRes = await query(`
+    SELECT id, name, email, role, company_id 
+    FROM users 
+    WHERE company_id = 'carrezza-global-solutions' 
+       OR email ILIKE '%@teamcarrezza.com'
+    ORDER BY name ASC
+  `);
 
-  if (checkRes.rows.length > 0) {
-    const user = checkRes.rows[0];
-    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, user.id]);
-    console.log(`Successfully updated password for existing user: ${user.name} (${email})`);
-  } else {
-    // Create new user if not present
-    const userId = "usr_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-    await query(
-      `INSERT INTO users (id, company_id, email, password_hash, name, role, department, designation, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        userId,
-        "carrezza-global-solutions",
-        email,
-        passwordHash,
-        "Mohamed Naveeth",
-        "employee",
-        "Engineering",
-        "Software Engineer",
-        "active"
-      ]
-    );
-    console.log(`Created new user with password hash: Mohamed Naveeth (${email})`);
+  console.log(`Found ${userListRes.rows.length} Carrezza Global Solutions users.`);
+
+  // 2. Update password_hash to 12345678 for all of them
+  const updateRes = await query(`
+    UPDATE users 
+    SET password_hash = $1, 
+        updated_at = CURRENT_TIMESTAMP 
+    WHERE company_id = 'carrezza-global-solutions' 
+       OR email ILIKE '%@teamcarrezza.com'
+    RETURNING id, name, email, role
+  `, [passwordHash]);
+
+  console.log(`\n Successfully updated password to '${rawPassword}' for ${updateRes.rows.length} users:`);
+  for (const u of updateRes.rows) {
+    const isMatch = await bcrypt.compare(rawPassword, passwordHash);
+    console.log(`- ${u.name} (${u.email}) [Role: ${u.role}] -> Password verified: ${isMatch}`);
   }
-
-  // Verify compare
-  const verifyRes = await query("SELECT password_hash FROM users WHERE email = $1", [email]);
-  const isMatch = await bcrypt.compare(rawPassword, verifyRes.rows[0].password_hash);
-  console.log(`Verification check: bcrypt.compare("${rawPassword}", hash) === ${isMatch}`);
 
   process.exit(0);
 }
 
-setPassword().catch(err => {
-  console.error("Error setting password:", err);
+setAllCarrezzaPasswords().catch(err => {
+  console.error("Error setting Carrezza passwords:", err);
   process.exit(1);
 });

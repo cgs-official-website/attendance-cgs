@@ -2,11 +2,9 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext"; // Vite cache bust
 import { useToast } from "../context/ToastContext";
-import { collection, onSnapshot, query, updateDoc, doc, where } from "firebase/firestore";
 import { 
-  db, 
-  getDbType, 
   createNotification, 
+  subscribeToAllUsers,
   subscribeToTaskReports,
   subscribeToDailyReports,
   updateDailyReport,
@@ -17,7 +15,10 @@ import {
   subscribeToWeeklyReports,
   addWeeklyReport,
   updateWeeklyReport,
-  deleteWeeklyReport
+  deleteWeeklyReport,
+  updateUserTasks,
+  updateUserProjects,
+  updateUserRecord
 } from "../firebase";
 import { useModal } from "../context/ModalContext";
 import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase, Sparkles, Zap } from "lucide-react";
@@ -122,64 +123,30 @@ export default function ProjectManagement() {
 
   useEffect(() => {
     if (!currentUser) return;
-    
-    if (getDbType() === "firebase") {
-      let qRef = collection(db, "users");
-      if (currentUser.companyId) {
-        qRef = query(qRef, where("companyId", "==", currentUser.companyId));
+
+    const unsubscribe = subscribeToAllUsers(currentUser.companyId, (users) => {
+      const userList = Array.isArray(users) ? users : [];
+      setAllUsers(userList);
+
+      if (currentUser.role === "admin") {
+        setTeamMembers(userList.filter(u => u.role !== "admin"));
+      } else {
+        const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
+        setTeamMembers(userList.filter(u => {
+          const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
+          return uProjects.some(p => currentUserProjects.includes(p));
+        }));
       }
-      const unsubscribe = onSnapshot(qRef, (snapshot) => {
-        const users = snapshot.docs.map(d => ({ ...d.data(), uid: d.id }));
-        setAllUsers(users);
-        
-        if (currentUser.role === "admin") {
-          setTeamMembers(users.filter(u => u.role !== "admin"));
-        } else {
-          const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
-          setTeamMembers(users.filter(u => {
-            const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
-            return uProjects.some(p => currentUserProjects.includes(p));
-          }));
-        }
-        
-        // Update taskTargetUser if it's currently selected
-        if (taskTargetUser) {
-          const updatedTarget = users.find(u => u.uid === taskTargetUser.uid);
-          if (updatedTarget) setTaskTargetUser(updatedTarget);
-        }
-        
-        setLoading(false);
-      });
-      return unsubscribe;
-    } else {
-      const handler = () => {
-        let users = localStorage.getItem("att_users") ? JSON.parse(localStorage.getItem("att_users")) : [];
-        if (currentUser.companyId) {
-          users = users.filter(u => u.companyId === currentUser.companyId);
-        }
-        setAllUsers(users);
-        
-        if (currentUser.role === "admin") {
-          setTeamMembers(users.filter(u => u.role !== "admin"));
-        } else {
-          const currentUserProjects = currentUser.projects?.length ? currentUser.projects : (currentUser.project ? [currentUser.project] : []);
-          setTeamMembers(users.filter(u => {
-            const uProjects = u.projects?.length ? u.projects : (u.project ? [u.project] : []);
-            return uProjects.some(p => currentUserProjects.includes(p));
-          }));
-        }
-        
-        if (taskTargetUser) {
-          const updatedTarget = users.find(u => u.uid === taskTargetUser.uid);
-          if (updatedTarget) setTaskTargetUser(updatedTarget);
-        }
-        
-        setLoading(false);
-      };
-      handler();
-      window.addEventListener("local-auth-updated", handler);
-      return () => window.removeEventListener("local-auth-updated", handler);
-    }
+
+      if (taskTargetUser) {
+        const updatedTarget = userList.find(u => u.uid === taskTargetUser.uid);
+        if (updatedTarget) setTaskTargetUser(updatedTarget);
+      }
+
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, [currentUser, taskTargetUser?.uid]);
 
   useEffect(() => {
@@ -372,10 +339,11 @@ export default function ProjectManagement() {
         const reports = allTaskReports[t.id] || [];
         if (reports.length > 0) {
           reports.forEach(r => {
+            const reportDate = r.timestamp || r.createdAt || r.submittedAt;
             tableData.push([
               "",
               { content: `• Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [51, 65, 85], cellPadding: { left: 8, top: 2.5, bottom: 2.5 } } },
-              { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 7.5, textColor: [100, 116, 139], cellPadding: { top: 2.5, bottom: 2.5 }, halign: 'right' } }
+              { content: reportDate ? new Date(reportDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—", styles: { fontSize: 7.5, textColor: [100, 116, 139], cellPadding: { top: 2.5, bottom: 2.5 }, halign: 'right' } }
             ]);
           });
         } else {
@@ -425,13 +393,14 @@ export default function ProjectManagement() {
         const reports = allTaskReports[t.id] || [];
         if (reports.length > 0) {
           reports.forEach(r => {
+            const reportDate = r.timestamp || r.createdAt || r.submittedAt;
             tableData.push({
               "Employee": "",
               "Task Title": "",
               "Status": "",
               "Est. Hours": "",
               "Update Detail": r.reportText,
-              "Update Timestamp": new Date(r.timestamp).toLocaleString()
+              "Update Timestamp": reportDate ? new Date(reportDate).toLocaleString() : ""
             });
           });
         } else {
@@ -1050,7 +1019,8 @@ export default function ProjectManagement() {
       const filteredReports = reports.filter(r => {
         if (r.reportText.startsWith("Worked for") || r.reportText.startsWith("Auto-stopped") || r.reportText.startsWith("Auto-paused")) return false;
         
-        const reportDateObj = new Date(r.timestamp);
+        const reportDateVal = r.timestamp || r.createdAt || r.submittedAt;
+        const reportDateObj = reportDateVal ? new Date(reportDateVal) : new Date();
         
         if (memberFilterDate) {
           if (reportDateObj.toISOString().split('T')[0] !== memberFilterDate) return false;
@@ -1115,9 +1085,10 @@ export default function ProjectManagement() {
       
       if (t.filteredReports.length > 0) {
         t.filteredReports.forEach(r => {
+          const reportDate = r.timestamp || r.createdAt || r.submittedAt;
           tableData.push([
             { content: `Update: ${r.reportText}`, colSpan: 2, styles: { textColor: [60, 60, 60], cellPadding: { left: 10, top: 3, bottom: 3 } } },
-            { content: new Date(r.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 }, halign: 'right' } }
+            { content: reportDate ? new Date(reportDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—", styles: { fontSize: 8, textColor: [120, 120, 120], cellPadding: { top: 3, bottom: 3 }, halign: 'right' } }
           ]);
         });
       } else {
@@ -1166,13 +1137,14 @@ export default function ProjectManagement() {
       
       if (t.filteredReports.length > 0) {
         t.filteredReports.forEach(r => {
+          const reportDate = r.timestamp || r.createdAt || r.submittedAt;
           tableData.push({
             "Task Title": "",
             "Project": "",
             "Status": "",
             "Est. Hours": "",
             "Update Detail": r.reportText,
-            "Update Timestamp": new Date(r.timestamp).toLocaleString()
+            "Update Timestamp": reportDate ? new Date(reportDate).toLocaleString() : ""
           });
         });
       } else {
@@ -1203,49 +1175,26 @@ export default function ProjectManagement() {
       const selectedManager = allUsers.find(u => u.uid === projectManagerId);
       if (!selectedManager) return showToast("Selected manager not found", "error");
 
+      const finalStatus = projectStatus === "Other" ? (customProjectStatus || "Ongoing") : projectStatus;
       const newProj = {
         name: projectNameInput,
         startDate: projectStartDate,
         endDate: projectEndDate,
         managerId: projectManagerId,
         teamMembers: [projectManagerId], // Manager is automatically a team member
-        companyId: currentUser.companyId
+        companyId: currentUser.companyId,
+        status: finalStatus
       };
 
       await createProject(newProj);
 
       // Assign the project to the manager's profile, making them project manager
-      if (getDbType() === "firebase") {
-        const userRef = doc(db, "users", projectManagerId);
-        const currentProjects = selectedManager.projects?.length ? selectedManager.projects : (selectedManager.project ? [selectedManager.project] : []);
-        const newProjects = [...new Set([...currentProjects, projectNameInput])];
-        await updateDoc(userRef, { 
-          projects: newProjects, 
-          project: newProjects[0] || "",
-          isProjectManager: true 
-        });
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users") || "[]");
-        const idx = users.findIndex(u => u.uid === projectManagerId);
-        if (idx !== -1) {
-          const currentProjects = users[idx].projects?.length ? users[idx].projects : (users[idx].project ? [users[idx].project] : []);
-          const newProjects = [...new Set([...currentProjects, projectNameInput])];
-          users[idx].projects = newProjects;
-          users[idx].project = newProjects[0] || "";
-          users[idx].isProjectManager = true;
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
-        }
-      }
-
-      const finalStatus = projectStatus === "Other" ? (customProjectStatus || "Ongoing") : projectStatus;
-      await createProject({
-        name: projectNameInput,
-        startDate: projectStartDate,
-        endDate: projectEndDate,
-        managerId: projectManagerId,
-        companyId: currentUser.companyId,
-        status: finalStatus
+      const currentProjects = selectedManager.projects?.length ? selectedManager.projects : (selectedManager.project ? [selectedManager.project] : []);
+      const newProjects = [...new Set([...currentProjects, projectNameInput])];
+      await updateUserRecord(projectManagerId, { 
+        projects: newProjects, 
+        project: newProjects[0] || "",
+        isProjectManager: true 
       });
       setShowCreateProjectModal(false);
       setProjectNameInput("");
@@ -1272,28 +1221,13 @@ export default function ProjectManagement() {
     if (!targetProjects.length) return showToast("Please specify a project", "warning");
 
     try {
-      if (getDbType() === "firebase") {
-        const u = allUsers.find(user => user.uid === selectedUserForTeam);
-        const currentProjects = u?.projects?.length ? u.projects : (u?.project ? [u.project] : []);
-        const newProjects = [...new Set([...currentProjects, ...targetProjects])];
-        
-        const updates = { projects: newProjects, project: newProjects[0] || "" };
-        if (currentUser.role === "admin") updates.isProjectManager = true;
-        await updateDoc(doc(db, "users", selectedUserForTeam), updates);
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users"));
-        const idx = users.findIndex(u => u.uid === selectedUserForTeam);
-        if (idx !== -1) {
-          const currentProjects = users[idx].projects?.length ? users[idx].projects : (users[idx].project ? [users[idx].project] : []);
-          const newProjects = [...new Set([...currentProjects, ...targetProjects])];
-          
-          users[idx].projects = newProjects;
-          users[idx].project = newProjects[0] || "";
-          if (currentUser.role === "admin") users[idx].isProjectManager = true;
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
-        }
-      }
+      const u = allUsers.find(user => user.uid === selectedUserForTeam);
+      const currentProjects = u?.projects?.length ? u.projects : (u?.project ? [u.project] : []);
+      const newProjects = [...new Set([...currentProjects, ...targetProjects])];
+      
+      const updates = { projects: newProjects, project: newProjects[0] || "" };
+      if (currentUser.role === "admin") updates.isProjectManager = true;
+      await updateUserRecord(selectedUserForTeam, updates);
       showToast(currentUser.role === "admin" ? "Project assigned successfully" : "Team member added successfully", "success");
       setShowAddTeamModal(false);
       setSelectedUserForTeam("");
@@ -1307,20 +1241,7 @@ export default function ProjectManagement() {
   const handleRemoveMember = async (member) => {
     showConfirm("Remove Team Member", `Are you sure you want to remove ${member.name} from the project?`, async () => {
       try {
-        if (getDbType() === "firebase") {
-          await updateDoc(doc(db, "users", member.uid), { projects: [], project: "", tasks: [], isProjectManager: false });
-        } else {
-          const users = JSON.parse(localStorage.getItem("att_users"));
-          const idx = users.findIndex(u => u.uid === member.uid);
-          if (idx !== -1) {
-            users[idx].projects = [];
-            users[idx].project = "";
-            users[idx].tasks = [];
-            users[idx].isProjectManager = false;
-            localStorage.setItem("att_users", JSON.stringify(users));
-            window.dispatchEvent(new Event("local-auth-updated"));
-          }
-        }
+        await updateUserRecord(member.uid, { projects: [], project: "", tasks: [], isProjectManager: false });
         showToast(`${member.name} removed from the project`, "success");
       } catch (err) {
         showToast("Failed to remove member", "error");
@@ -1364,22 +1285,7 @@ export default function ProjectManagement() {
         updates.isProjectManager = false;
       }
 
-      if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", memberToEdit.uid), updates);
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users"));
-        const idx = users.findIndex(u => u.uid === memberToEdit.uid);
-        if (idx !== -1) {
-          users[idx].designation = editDesignation;
-          users[idx].projects = updatedProjects;
-          users[idx].project = updatedProjects[0] || "";
-          if (updatedProjects.length === 0) {
-            users[idx].isProjectManager = false;
-          }
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
-        }
-      }
+      await updateUserRecord(memberToEdit.uid, updates);
       showToast("Member updated successfully", "success");
       setShowEditMemberModal(false);
     } catch (err) {
@@ -1423,17 +1329,7 @@ export default function ProjectManagement() {
     }
 
     try {
-      if (getDbType() === "firebase") {
-        await updateDoc(doc(db, "users", taskTargetUser.uid), { tasks: currentTasks });
-      } else {
-        const users = JSON.parse(localStorage.getItem("att_users"));
-        const idx = users.findIndex(u => u.uid === taskTargetUser.uid);
-        if (idx !== -1) {
-          users[idx].tasks = currentTasks;
-          localStorage.setItem("att_users", JSON.stringify(users));
-          window.dispatchEvent(new Event("local-auth-updated"));
-        }
-      }
+      await updateUserTasks(taskTargetUser.uid, currentTasks);
       
       if (editingTaskIndex === null) {
         await createNotification(
@@ -1512,21 +1408,10 @@ export default function ProjectManagement() {
           for (const u of usersToUpdate) {
             const updatedProjects = (u.projects || []).filter(p => p !== project.name);
             const updatedProject = u.project === project.name ? "" : u.project;
-            if (getDbType() === "firebase") {
-              await updateDoc(doc(db, "users", u.uid), {
-                projects: updatedProjects,
-                project: updatedProject
-              });
-            } else {
-              const users = JSON.parse(localStorage.getItem("att_users") || "[]");
-              const idx = users.findIndex(user => user.uid === u.uid);
-              if (idx !== -1) {
-                users[idx].projects = updatedProjects;
-                users[idx].project = updatedProject;
-                localStorage.setItem("att_users", JSON.stringify(users));
-                window.dispatchEvent(new Event("local-auth-updated"));
-              }
-            }
+            await updateUserRecord(u.uid, {
+              projects: updatedProjects,
+              project: updatedProject
+            });
           }
         } else {
           await deleteProject(project.id);
@@ -1545,17 +1430,7 @@ export default function ProjectManagement() {
       currentTasks.splice(taskIdx, 1);
       
       try {
-        if (getDbType() === "firebase") {
-          await updateDoc(doc(db, "users", taskTargetUser.uid), { tasks: currentTasks });
-        } else {
-          const users = JSON.parse(localStorage.getItem("att_users"));
-          const idx = users.findIndex(u => u.uid === taskTargetUser.uid);
-          if (idx !== -1) {
-            users[idx].tasks = currentTasks;
-            localStorage.setItem("att_users", JSON.stringify(users));
-            window.dispatchEvent(new Event("local-auth-updated"));
-          }
-        }
+        await updateUserTasks(taskTargetUser.uid, currentTasks);
         showToast("Task deleted", "success");
       } catch (err) {
         showToast("Failed to delete task", "error");
@@ -2952,12 +2827,15 @@ export default function ProjectManagement() {
                           <tr className="border-b border-border-card">
                             <td colSpan="4" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).map(r => (
-                                  <div key={r.id} className="text-[10px]">
-                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
-                                    <span className="text-text-main ml-2">{r.reportText}</span>
-                                  </div>
-                                ))}
+                                {allTaskReports[task.id].filter(r => !r.reportText.startsWith("Worked for") && !r.reportText.startsWith("Auto-stopped") && !r.reportText.startsWith("Auto-paused")).map(r => {
+                                  const reportDate = r.timestamp || r.createdAt || r.submittedAt;
+                                  return (
+                                    <div key={r.id} className="text-[10px]">
+                                      <span className="font-bold text-text-sec">[{reportDate ? new Date(reportDate).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : "Recent"}]</span>
+                                      <span className="text-text-main ml-2">{r.reportText}</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </td>
                           </tr>
@@ -3095,12 +2973,15 @@ export default function ProjectManagement() {
                           <tr className="border-b border-border-card">
                             <td colSpan="3" className="p-3 bg-bg-base/30">
                               <div className="pl-4 border-l-2 border-brand-primary/30 space-y-2">
-                                {task.filteredReports.map(r => (
-                                  <div key={r.id} className="text-[10px]">
-                                    <span className="font-bold text-text-sec">[{new Date(r.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}]</span>
-                                    <span className="text-text-main ml-2">{r.reportText}</span>
-                                  </div>
-                                ))}
+                                {task.filteredReports.map(r => {
+                                  const reportDate = r.timestamp || r.createdAt || r.submittedAt;
+                                  return (
+                                    <div key={r.id} className="text-[10px]">
+                                      <span className="font-bold text-text-sec">[{reportDate ? new Date(reportDate).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : "Recent"}]</span>
+                                      <span className="text-text-main ml-2">{r.reportText}</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </td>
                           </tr>

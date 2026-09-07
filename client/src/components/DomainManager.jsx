@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
+import { 
+  subscribeToCompanyDomains, 
+  addCompanyDomain, 
+  deleteCompanyDomain, 
+  verifyCompanyDomain 
+} from '../firebase';
 import { Globe, Plus, Trash2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 
 export default function DomainManager({ companyId }) {
@@ -11,24 +16,15 @@ export default function DomainManager({ companyId }) {
   const [verifyingId, setVerifyingId] = useState(null);
   const { currentUser } = useAuth();
   const { showToast } = useToast();
-  const db = getFirestore();
 
   useEffect(() => {
-    if (companyId) {
-      fetchDomains();
-    }
+    if (!companyId) return;
+    const unsub = subscribeToCompanyDomains(companyId, (list) => {
+      setDomains(list || []);
+      setLoading(false);
+    });
+    return unsub;
   }, [companyId]);
-
-  const fetchDomains = async () => {
-    try {
-      const q = query(collection(db, 'companyDomains'), where('companyId', '==', companyId));
-      const snapshot = await getDocs(q);
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setDomains(list);
-    } catch (error) {
-      console.error('Error fetching domains:', error);
-    }
-  };
 
   const handleAddDomain = async (e) => {
     e.preventDefault();
@@ -43,33 +39,12 @@ export default function DomainManager({ companyId }) {
 
     setLoading(true);
     try {
-      // Check if already claimed
-      const q = query(collection(db, 'companyDomains'), where('domain', '==', newDomain.toLowerCase()));
-      const exists = await getDocs(q);
-      if (!exists.empty) {
-        showToast('This domain is already claimed by another organization.', 'error');
-        setLoading(false);
-        return;
-      }
-
-      const token = `carrezza-verify=${Math.random().toString(36).substring(2, 15)}-${Date.now()}`;
-      
-      const domainData = {
-        domain: newDomain.toLowerCase(),
-        companyId,
-        status: 'PENDING',
-        verificationToken: token,
-        createdBy: currentUser?.uid,
-        createdAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, 'companyDomains'), domainData);
+      await addCompanyDomain(companyId, newDomain.toLowerCase().trim());
       showToast('Domain added. Please add the DNS record to verify.', 'success');
       setNewDomain('');
-      fetchDomains();
     } catch (error) {
       console.error('Error adding domain:', error);
-      showToast('Failed to add domain.', 'error');
+      showToast(error.message || 'Failed to add domain.', 'error');
     } finally {
       setLoading(false);
     }
@@ -78,38 +53,23 @@ export default function DomainManager({ companyId }) {
   const handleDeleteDomain = async (id) => {
     if (!window.confirm('Are you sure you want to remove this domain? Users with this email domain will no longer be auto-assigned to your organization.')) return;
     try {
-      await deleteDoc(doc(db, 'companyDomains', id));
+      await deleteCompanyDomain(id);
       showToast('Domain removed.', 'success');
-      fetchDomains();
     } catch (error) {
       console.error('Error deleting domain:', error);
-      showToast('Failed to remove domain.', 'error');
+      showToast(error.message || 'Failed to remove domain.', 'error');
     }
   };
 
   const handleVerifyDomain = async (id, domainName) => {
+    const targetDomain = domainName || id;
     setVerifyingId(id);
     try {
-      const token = await currentUser.getIdToken();
-      const response = await fetch('/api/verify-domain', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ domainId: id, domainName })
-      });
-      
-      const result = await response.json();
-      if (response.ok) {
-        showToast(result.message || 'Domain verified successfully!', 'success');
-        fetchDomains();
-      } else {
-        showToast(result.error || 'Verification failed. Please ensure your DNS records are correct.', 'error');
-      }
+      await verifyCompanyDomain(targetDomain);
+      showToast('Domain verified successfully!', 'success');
     } catch (error) {
       console.error('Verification request failed:', error);
-      showToast('Error communicating with verification server.', 'error');
+      showToast(error.message || 'Verification failed. Please ensure your DNS records are correct.', 'error');
     } finally {
       setVerifyingId(null);
     }

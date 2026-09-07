@@ -7,6 +7,8 @@ export const getCompanies = async (req, res) => {
       ...r,
       logoBase64: r.logo_url,
       settings: r.settings || {},
+      payrollSettings: r.settings?.payrollSettings || { pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0, workingDays: 30 },
+      address: r.settings?.address || "",
       modules: r.settings?.modules || ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]
     })));
   } catch (err) {
@@ -27,6 +29,8 @@ export const getCompanyBySlug = async (req, res) => {
       ...r,
       logoBase64: r.logo_url,
       settings: r.settings || {},
+      payrollSettings: r.settings?.payrollSettings || { pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0, workingDays: 30 },
+      address: r.settings?.address || "",
       modules: r.settings?.modules || ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]
     });
   } catch (err) {
@@ -42,7 +46,7 @@ export const createCompany = async (req, res) => {
 
     const settings = {
       address: address || "",
-      payrollSettings: payrollSettings || { pf: true, esi: true, pt: true },
+      payrollSettings: payrollSettings || { pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0, workingDays: 30 },
       modules: modules || ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]
     };
 
@@ -65,6 +69,8 @@ export const createCompany = async (req, res) => {
       ...r,
       logoBase64: r.logo_url,
       settings: r.settings || {},
+      payrollSettings: r.settings?.payrollSettings || settings.payrollSettings,
+      address: r.settings?.address || settings.address,
       modules: r.settings?.modules || ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]
     });
   } catch (err) {
@@ -105,6 +111,8 @@ export const updateCompany = async (req, res) => {
       ...r,
       logoBase64: r.logo_url,
       settings: r.settings || {},
+      payrollSettings: r.settings?.payrollSettings || currentSettings.payrollSettings || { pf: true, esi: true, pt: true, insurance: false, insuranceAmount: 0, workingDays: 30 },
+      address: r.settings?.address || currentSettings.address || "",
       modules: r.settings?.modules || ["attendance", "team-hub", "projects", "tasks", "assets", "payroll"]
     });
   } catch (err) {
@@ -123,9 +131,94 @@ export const getCompanyDomains = async (req, res) => {
       sql += ` AND company_id = $${params.length}`;
     }
     const result = await query(sql, params);
-    res.json(result.rows);
+    const rows = result.rows.map(r => ({
+      ...r,
+      id: r.domain,
+      domain: r.domain,
+      companyId: r.company_id,
+      status: r.status || "PENDING",
+      createdBy: r.created_by,
+      createdAt: r.created_at,
+      verificationToken: `carrezza-verify=${Buffer.from(r.domain).toString('hex').slice(0, 12)}`
+    }));
+    res.json(rows);
   } catch (err) {
     console.error("getCompanyDomains error:", err);
     res.status(500).json({ error: "Failed to fetch company domains." });
+  }
+};
+
+export const addCompanyDomain = async (req, res) => {
+  try {
+    const { domain, companyId } = req.body;
+    const targetCompanyId = companyId || req.user?.companyId;
+    const createdBy = req.user?.id || null;
+
+    if (!domain) {
+      return res.status(400).json({ error: "Domain is required." });
+    }
+    const cleanDomain = domain.toLowerCase().trim();
+
+    const existing = await query("SELECT * FROM company_domains WHERE domain = $1", [cleanDomain]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: "This domain is already claimed by an organization." });
+    }
+
+    const result = await query(
+      `INSERT INTO company_domains (domain, company_id, status, created_by)
+       VALUES ($1, $2, 'PENDING', $3)
+       RETURNING *`,
+      [cleanDomain, targetCompanyId, createdBy]
+    );
+    const r = result.rows[0];
+    res.status(201).json({
+      ...r,
+      id: r.domain,
+      domain: r.domain,
+      companyId: r.company_id,
+      status: r.status,
+      createdBy: r.created_by,
+      createdAt: r.created_at,
+      verificationToken: `carrezza-verify=${Buffer.from(r.domain).toString('hex').slice(0, 12)}`
+    });
+  } catch (err) {
+    console.error("addCompanyDomain error:", err);
+    res.status(500).json({ error: "Failed to add domain." });
+  }
+};
+
+export const deleteCompanyDomain = async (req, res) => {
+  try {
+    const domain = req.params.domain || req.query.domain || req.body.domain;
+    if (!domain) {
+      return res.status(400).json({ error: "Domain parameter is required." });
+    }
+    const cleanDomain = decodeURIComponent(domain).toLowerCase().trim();
+    await query("DELETE FROM company_domains WHERE domain = $1", [cleanDomain]);
+    res.json({ success: true, message: "Domain deleted successfully." });
+  } catch (err) {
+    console.error("deleteCompanyDomain error:", err);
+    res.status(500).json({ error: "Failed to delete domain." });
+  }
+};
+
+export const verifyCompanyDomain = async (req, res) => {
+  try {
+    const domain = req.params.domain || req.body.domainName || req.body.domain;
+    if (!domain) {
+      return res.status(400).json({ error: "Domain parameter is required." });
+    }
+    const cleanDomain = decodeURIComponent(domain).toLowerCase().trim();
+    const result = await query(
+      `UPDATE company_domains SET status = 'VERIFIED' WHERE domain = $1 RETURNING *`,
+      [cleanDomain]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Domain not found." });
+    }
+    res.json({ success: true, status: "VERIFIED", domain: result.rows[0] });
+  } catch (err) {
+    console.error("verifyCompanyDomain error:", err);
+    res.status(500).json({ error: "Failed to verify domain." });
   }
 };

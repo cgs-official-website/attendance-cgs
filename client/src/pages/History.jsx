@@ -52,11 +52,11 @@ export default function History() {
     });
 
     const unsubscribeReg = subscribeToRegularizationRequests(currentUser.companyId, (data) => {
-      setMyRegularizations(data.filter(r => r.userId === currentUser.uid));
+      setMyRegularizations((data || []).filter(r => (r.userId || r.user_id) === currentUser.uid));
     });
 
     const unsubscribeLeaves = subscribeToLeaveRequests(currentUser.companyId, (data) => {
-      setMyLeaves(data.filter(r => r.userId === currentUser.uid));
+      setMyLeaves((data || []).filter(r => (r.userId || r.user_id) === currentUser.uid));
     });
 
     return () => {
@@ -113,7 +113,7 @@ export default function History() {
 
     setRegLoading(true);
     try {
-      await requestRegularization(
+      const newReg = await requestRegularization(
         currentUser.uid,
         currentUser.name,
         currentUser.department || "Engineering",
@@ -123,6 +123,9 @@ export default function History() {
         regReason,
         currentUser.companyId || ""
       );
+      if (newReg) {
+        setMyRegularizations(prev => [newReg, ...prev.filter(r => r.id !== newReg.id)]);
+      }
       showToast("Regularization request raised successfully.", "success");
       setRegDate("");
       setRegCheckIn("10:00");

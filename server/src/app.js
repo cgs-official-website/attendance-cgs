@@ -14,6 +14,7 @@ import rolesRoutes from "./routes/roles.routes.js";
 import envSettingsRoutes from "./routes/envSettings.routes.js";
 import companiesRoutes from "./routes/companies.routes.js";
 import externalLinksRoutes from "./routes/externalLinks.routes.js";
+import reportsRoutes from "./routes/reports.routes.js";
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use("/api/leaves", leavesRoutes);
 app.use("/api/regularization", regularizationRoutes);
 app.use("/api/projects", projectsRoutes);
 app.use("/api/tasks", tasksRoutes);
+app.use("/api/reports", reportsRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/payroll", payrollRoutes);

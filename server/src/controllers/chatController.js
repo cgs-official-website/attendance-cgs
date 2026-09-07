@@ -51,10 +51,16 @@ const formatMessageRow = (row) => {
   const pinnedAt = pinned.pinnedAt || null;
   const pinnedBy = pinned.pinnedBy || null;
 
+  const isDeleted = Boolean(row.is_deleted || (row.reactions && typeof row.reactions === "object" && row.reactions.isDeleted));
+  const deletedBy = row.deleted_by || (row.reactions && typeof row.reactions === "object" ? row.reactions.deletedBy : null) || null;
+  const deletedAt = row.deleted_at || (row.reactions && typeof row.reactions === "object" ? row.reactions.deletedAt : null) || null;
+  const deletedFor = row.deleted_for || (row.reactions && typeof row.reactions === "object" ? row.reactions.deletedFor : []) || [];
+
   return {
     id: row.id,
-    threadId: row.channel_id,
-    channelId: row.channel_id,
+    threadId: row.channel_id || row.thread_id,
+    channelId: row.channel_id || row.thread_id,
+    threadType: (row.channel_id && row.channel_id.startsWith("dm_")) || row.thread_id ? "dm" : "channel",
     companyId: row.company_id,
     senderId: row.user_id || row.sender_id || row.senderId,
     senderName: row.user_name || row.sender_name || row.senderName || "User",
@@ -72,29 +78,119 @@ const formatMessageRow = (row) => {
     pinExpiresAt,
     pinDurationDays,
     pinnedAt,
-    pinnedBy
+    pinnedBy,
+    isDeleted,
+    deletedBy,
+    deletedAt,
+    deletedFor
   };
+};
+
+export const deleteMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deleteType = "everyone" } = req.body || {};
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const userName = req.user?.name || "User";
+
+    // 1. Check in messages table
+    let msgRes = await query("SELECT * FROM messages WHERE id = $1", [id]);
+    let tableName = "messages";
+
+    // 2. If not in messages, check direct_messages table
+    if (msgRes.rows.length === 0) {
+      msgRes = await query("SELECT * FROM direct_messages WHERE id = $1", [id]);
+      tableName = "direct_messages";
+    }
+
+    if (msgRes.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found." });
+    }
+
+    const msg = msgRes.rows[0];
+    const senderId = msg.user_id || msg.sender_id;
+
+    if (deleteType === "me") {
+      const updateRes = await query(
+        `UPDATE ${tableName} 
+         SET deleted_for = array_append(COALESCE(deleted_for, ARRAY[]::TEXT[]), $1)
+         WHERE id = $2
+         RETURNING *`,
+        [userId, id]
+      );
+      return res.json(formatMessageRow(updateRes.rows[0]));
+    }
+
+    // Delete for everyone
+    const isSender = String(senderId) === String(userId);
+    const isAdmin = userRole === "admin" || userRole === "superadmin";
+
+    if (!isSender && !isAdmin) {
+      return res.status(403).json({ error: "You are only authorized to delete your own messages." });
+    }
+
+    // Soft-delete: retain message content for Chat Monitor inspection
+    let updateRes;
+    if (tableName === "messages") {
+      updateRes = await query(
+        `UPDATE messages
+         SET is_deleted = TRUE,
+             deleted_at = CURRENT_TIMESTAMP,
+             deleted_by = $1,
+             reactions = jsonb_set(COALESCE(reactions, '{}'::jsonb), '{isDeleted}', 'true'::jsonb)
+         WHERE id = $2
+         RETURNING *`,
+        [userName, id]
+      );
+    } else {
+      updateRes = await query(
+        `UPDATE direct_messages
+         SET is_deleted = TRUE,
+             deleted_at = CURRENT_TIMESTAMP,
+             deleted_by = $1
+         WHERE id = $2
+         RETURNING *`,
+        [userName, id]
+      );
+    }
+
+    res.json(formatMessageRow(updateRes.rows[0]));
+  } catch (err) {
+    console.error("deleteMessage error:", err);
+    res.status(500).json({ error: "Failed to delete message: " + err.message });
+  }
 };
 
 // Messages
 export const getMessages = async (req, res) => {
   try {
     const { channelId, companyId } = req.query;
-    let sql = "SELECT * FROM messages WHERE 1=1";
+    let sql = `
+      SELECT m.*, u.name as real_user_name, u.avatar_url as real_user_avatar
+      FROM messages m
+      LEFT JOIN users u ON m.user_id = u.id
+      WHERE 1=1
+    `;
     const params = [];
 
     if (channelId) {
       params.push(channelId);
-      sql += ` AND channel_id = $${params.length}`;
+      sql += ` AND m.channel_id = $${params.length}`;
     }
     if (companyId || req.user?.companyId) {
       params.push(companyId || req.user?.companyId);
-      sql += ` AND company_id = $${params.length}`;
+      sql += ` AND m.company_id = $${params.length}`;
     }
 
-    sql += " ORDER BY created_at ASC LIMIT 1000";
+    sql += " ORDER BY m.created_at ASC LIMIT 1000";
     const result = await query(sql, params);
-    res.json(result.rows.map(formatMessageRow));
+    res.json(result.rows.map(row => {
+      const f = formatMessageRow(row);
+      if (row.real_user_name) f.senderName = row.real_user_name;
+      if (row.real_user_avatar && !f.senderAvatar) f.senderAvatar = row.real_user_avatar;
+      return f;
+    }));
   } catch (err) {
     console.error("getMessages error:", err);
     res.status(500).json({ error: "Failed to fetch messages." });
@@ -105,9 +201,17 @@ export const sendMessage = async (req, res) => {
   try {
     const { channelId, content, attachments = [], replyToId = null, companyId } = req.body;
     const senderId = req.user?.id || req.body.senderId;
-    const senderName = req.user?.name || req.body.senderName || "User";
-    const userAvatar = req.user?.avatarUrl || req.body.avatar || null;
+    let senderName = req.body.senderName || req.user?.name;
+    let userAvatar = req.body.userAvatar || req.body.avatar || req.user?.avatarUrl;
     const targetCompanyId = companyId || req.user?.companyId;
+
+    if (!senderName || senderName === "User") {
+      const uRes = await query("SELECT name, avatar_url FROM users WHERE id = $1", [senderId]);
+      if (uRes.rows.length > 0) {
+        senderName = uRes.rows[0].name || "Team Member";
+        userAvatar = userAvatar || uRes.rows[0].avatar_url;
+      }
+    }
 
     const fileUrl = attachments[0]?.url || attachments[0]?.fileUrl || null;
     const fileName = attachments[0]?.name || attachments[0]?.fileName || null;
@@ -121,10 +225,20 @@ export const sendMessage = async (req, res) => {
       [id, channelId, targetCompanyId, senderId, senderName, userAvatar, content, fileUrl, fileName, fileType]
     );
 
-    res.status(201).json(formatMessageRow(result.rows[0]));
+    // If channelId is a DM thread, also update dm_threads last_message
+    if (channelId) {
+      await query(
+        `UPDATE dm_threads SET last_message = $1, last_message_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [content || (fileName ? `Attachment: ${fileName}` : "Sent a file"), channelId]
+      ).catch(() => {});
+    }
+
+    const formatted = formatMessageRow(result.rows[0]);
+    formatted.senderName = senderName;
+    res.status(201).json(formatted);
   } catch (err) {
     console.error("sendMessage error:", err);
-    res.status(500).json({ error: "Failed to send message." });
+    res.status(500).json({ error: "Failed to send message: " + err.message });
   }
 };
 
@@ -179,7 +293,7 @@ export const getDmThreads = async (req, res) => {
     const targetUserId = userId || req.user?.id;
     const targetCompanyId = companyId || req.user?.companyId;
 
-    let sql = "SELECT *, participants as participant_ids, participants as \"participantIds\" FROM dm_threads WHERE 1=1";
+    let sql = "SELECT * FROM dm_threads WHERE 1=1";
     const params = [];
 
     if (targetUserId) {
@@ -193,10 +307,75 @@ export const getDmThreads = async (req, res) => {
 
     sql += " ORDER BY last_message_at DESC NULLS LAST LIMIT 200";
     const result = await query(sql, params);
-    res.json(result.rows);
+
+    // Fetch user map for all participants to provide participantNames and participantDetails
+    const allParticipantIds = new Set();
+    result.rows.forEach(r => {
+      (r.participants || []).forEach(p => allParticipantIds.add(p));
+    });
+
+    const userMap = {};
+    if (allParticipantIds.size > 0) {
+      const uRes = await query(
+        "SELECT id, name, email, avatar_url, department, designation FROM users WHERE id = ANY($1)",
+        [Array.from(allParticipantIds)]
+      );
+      uRes.rows.forEach(u => {
+        userMap[u.id] = u;
+      });
+    }
+
+    const threads = result.rows.map(row => {
+      const participantNames = {};
+      const participantAvatars = {};
+      (row.participants || []).forEach(pId => {
+        const u = userMap[pId];
+        participantNames[pId] = u ? u.name : "Team Member";
+        participantAvatars[pId] = u ? u.avatar_url : "";
+      });
+
+      return {
+        ...row,
+        participant_ids: row.participants,
+        participantIds: row.participants,
+        participantNames,
+        participantAvatars
+      };
+    });
+
+    res.json(threads);
   } catch (err) {
     console.error("getDmThreads error:", err);
     res.status(500).json({ error: "Failed to fetch DM threads." });
+  }
+};
+
+export const createDmThread = async (req, res) => {
+  try {
+    const { participants = [], companyId } = req.body;
+    const targetCompanyId = companyId || req.user?.companyId;
+
+    if (!participants || participants.length < 2) {
+      return res.status(400).json({ error: "At least 2 participants required." });
+    }
+
+    const id = "dm_" + [participants[0], participants[1]].sort().join("_");
+    const result = await query(
+      `INSERT INTO dm_threads (id, company_id, participants, last_message, last_message_at)
+       VALUES ($1, $2, $3, null, CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO UPDATE SET company_id = EXCLUDED.company_id
+       RETURNING *`,
+      [id, targetCompanyId, participants]
+    );
+
+    res.status(201).json({
+      ...result.rows[0],
+      participant_ids: result.rows[0].participants,
+      participantIds: result.rows[0].participants
+    });
+  } catch (err) {
+    console.error("createDmThread error:", err);
+    res.status(500).json({ error: "Failed to create DM thread." });
   }
 };
 

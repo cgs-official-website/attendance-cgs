@@ -124,7 +124,7 @@ CREATE TABLE leave_requests (
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    reviewed_by TEXT REFERENCES users(id),
+    reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at TIMESTAMPTZ,
     rejection_reason TEXT,
     metadata JSONB DEFAULT '{}'::jsonb,
@@ -134,12 +134,12 @@ CREATE TABLE leave_requests (
 
 CREATE TABLE paid_leaves (
     id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
-    month TEXT NOT NULL,
-    year INT NOT NULL,
-    days NUMERIC(4,1) NOT NULL,
-    reason TEXT,
+    title TEXT NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    description TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -152,8 +152,10 @@ CREATE TABLE regularization_requests (
     requested_check_out TIMESTAMPTZ,
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
-    reviewed_by TEXT REFERENCES users(id),
+    reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at TIMESTAMPTZ,
+    manager_comment TEXT,
+    rejection_reason TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -166,7 +168,7 @@ CREATE TABLE projects (
     description TEXT,
     start_date DATE,
     end_date DATE,
-    manager_id TEXT REFERENCES users(id),
+    manager_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     status TEXT DEFAULT 'in-progress',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -184,8 +186,8 @@ CREATE TABLE tasks (
     project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     description TEXT,
-    assigned_to TEXT REFERENCES users(id),
-    created_by TEXT REFERENCES users(id),
+    assigned_to TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     priority TEXT DEFAULT 'medium',
     status TEXT DEFAULT 'pending',
     due_date DATE,
@@ -234,7 +236,7 @@ CREATE TABLE channels (
     company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
-    created_by TEXT REFERENCES users(id),
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     is_private BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );

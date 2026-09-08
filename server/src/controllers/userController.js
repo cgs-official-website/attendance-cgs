@@ -1,10 +1,14 @@
 import bcrypt from "bcryptjs";
-import { query } from "../config/db.js";
+import pool, { query } from "../config/db.js";
 
 export const getUsers = async (req, res) => {
   try {
     const { companyId } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const role = req.user?.role?.toLowerCase();
+    const isSuperAdmin = role === "superadmin";
+
+    // Multi-tenant boundary: Only superadmins can query an arbitrary companyId.
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : (req.user?.companyId || companyId);
 
     let sql = `
       SELECT id, id as uid, name, email, role, department, designation, program_type,
@@ -61,7 +65,19 @@ export const getUsers = async (req, res) => {
 export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await query("SELECT * FROM users WHERE id = $1", [id]);
+    const role = req.user?.role?.toLowerCase();
+    const isSuperAdmin = role === "superadmin";
+
+    let sql = "SELECT * FROM users WHERE id = $1";
+    const params = [id];
+
+    // Non-superadmins can only access users within their own company
+    if (!isSuperAdmin && req.user?.companyId) {
+      sql += " AND company_id = $2";
+      params.push(req.user.companyId);
+    }
+
+    const result = await query(sql, params);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found." });
     }
@@ -90,10 +106,36 @@ export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    const callerRole = req.user?.role?.toLowerCase();
+    const isSuperAdmin = callerRole === "superadmin";
+    const isAdmin = callerRole === "admin" || isSuperAdmin || callerRole === "system admin";
+
+    // 1. Fetch target user to check tenant boundaries
+    const targetCheck = await query("SELECT id, company_id, role FROM users WHERE id = $1", [id]);
+    if (targetCheck.rows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    const targetUser = targetCheck.rows[0];
+
+    // Non-superadmin cannot touch users of another company
+    if (!isSuperAdmin && req.user?.companyId && targetUser.company_id && targetUser.company_id !== req.user.companyId) {
+      return res.status(403).json({ error: "Access denied. Cannot modify user from another organization." });
+    }
+
+    // Non-admins can only update their own profile
+    if (!isAdmin && req.user?.id !== id) {
+      return res.status(403).json({ error: "Access denied. You can only update your own profile." });
+    }
 
     const fields = [];
     const values = [];
     let idx = 1;
+
+    // Sensitive fields that ONLY admins/superadmins can alter
+    const adminOnlyFields = [
+      "role", "company_id", "gross_salary", "paid_days", "casual_leave_quota",
+      "sick_leave_quota", "paid_leave_quota", "status", "is_project_manager", "employee_id"
+    ];
 
     const allowedFields = [
       "name", "department", "designation", "role", "program_type", "employment_type",
@@ -110,6 +152,16 @@ export const updateUser = async (req, res) => {
       if (key === "avatar") snakeKey = "avatar_url";
       if (key === "employeeId") snakeKey = "employee_id";
 
+      // Disallow non-admins from updating administrative fields
+      if (adminOnlyFields.includes(snakeKey) && !isAdmin) {
+        continue;
+      }
+
+      // Non-superadmin cannot assign superadmin role
+      if (snakeKey === "role" && updates[key] === "superadmin" && !isSuperAdmin) {
+        continue;
+      }
+
       if (allowedFields.includes(snakeKey)) {
         fields.push(`${snakeKey} = $${idx}`);
         values.push(updates[key]);
@@ -123,12 +175,15 @@ export const updateUser = async (req, res) => {
       idx++;
     }
 
+    // Password update: either user self-updating, or admin
     if (updates.password) {
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(updates.password, salt);
-      fields.push(`password_hash = $${idx}`);
-      values.push(passwordHash);
-      idx++;
+      if (isAdmin || req.user?.id === id) {
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(updates.password, salt);
+        fields.push(`password_hash = $${idx}`);
+        values.push(passwordHash);
+        idx++;
+      }
     }
 
     if (fields.length === 0) {
@@ -166,31 +221,65 @@ export const updateUser = async (req, res) => {
 };
 
 export const deleteUser = async (req, res) => {
+  const callerRole = req.user?.role?.toLowerCase();
+  const isSuperAdmin = callerRole === "superadmin";
+  const isAdmin = callerRole === "admin" || isSuperAdmin || callerRole === "system admin";
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: "Access forbidden. Admin role required to delete users." });
+  }
+
+  const client = await pool.connect();
   try {
     const { id } = req.params;
 
-    // 1. Nullify references that would otherwise block user deletion
-    await query("UPDATE leave_requests SET reviewed_by = NULL WHERE reviewed_by = $1", [id]);
-    await query("UPDATE regularization_requests SET reviewed_by = NULL WHERE reviewed_by = $1", [id]);
-    await query("UPDATE projects SET manager_id = NULL WHERE manager_id = $1", [id]);
-    await query("UPDATE tasks SET assigned_to = NULL WHERE assigned_to = $1", [id]);
-    await query("UPDATE tasks SET created_by = NULL WHERE created_by = $1", [id]);
-    await query("UPDATE channels SET created_by = NULL WHERE created_by = $1", [id]);
-    await query("UPDATE assets SET assigned_to = NULL WHERE assigned_to = $1", [id]);
-
-    // 2. Remove related junction and report records
-    await query("DELETE FROM task_reports WHERE user_id = $1", [id]);
-    await query("DELETE FROM project_members WHERE user_id = $1", [id]);
-
-    // 3. Delete the user (cascades attendance, leave_requests, regularization, messages, payroll, etc.)
-    const result = await query("DELETE FROM users WHERE id = $1 RETURNING id, name, email", [id]);
-    if (result.rows.length === 0) {
+    // Check target user
+    const checkRes = await client.query("SELECT id, name, email, role, company_id FROM users WHERE id = $1", [id]);
+    if (checkRes.rows.length === 0) {
+      client.release();
       return res.status(404).json({ error: "User not found." });
     }
+    const target = checkRes.rows[0];
+
+    // Cannot delete superadmin unless caller is superadmin
+    if (target.role === "superadmin" && !isSuperAdmin) {
+      client.release();
+      return res.status(403).json({ error: "Access denied. Cannot delete Superadmin." });
+    }
+
+    // Tenant check: Admin can only delete users in their own company
+    if (!isSuperAdmin && req.user?.companyId && target.company_id && target.company_id !== req.user.companyId) {
+      client.release();
+      return res.status(403).json({ error: "Access denied. Cannot delete user from another organization." });
+    }
+
+    await client.query("BEGIN");
+
+    // 1. Nullify references that would otherwise block user deletion
+    await client.query("UPDATE leave_requests SET reviewed_by = NULL WHERE reviewed_by = $1", [id]);
+    await client.query("UPDATE regularization_requests SET reviewed_by = NULL WHERE reviewed_by = $1", [id]);
+    await client.query("UPDATE projects SET manager_id = NULL WHERE manager_id = $1", [id]);
+    await client.query("UPDATE tasks SET assigned_to = NULL WHERE assigned_to = $1", [id]);
+    await client.query("UPDATE tasks SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE channels SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE assets SET assigned_to = NULL WHERE assigned_to = $1", [id]);
+
+    // 2. Remove related junction and report records
+    await client.query("DELETE FROM task_reports WHERE user_id = $1", [id]);
+    await client.query("DELETE FROM project_members WHERE user_id = $1", [id]);
+
+    // 3. Delete the user (cascades attendance, leave_requests, regularization, messages, payroll, etc.)
+    const result = await client.query("DELETE FROM users WHERE id = $1 RETURNING id, name, email", [id]);
+
+    await client.query("COMMIT");
 
     res.json({ message: "User deleted successfully from database.", user: result.rows[0] });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("deleteUser error:", err);
-    res.status(500).json({ error: "Failed to delete user: " + err.message });
+    res.status(500).json({ error: "Failed to delete user." });
+  } finally {
+    client.release();
   }
 };
+

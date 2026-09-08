@@ -3,6 +3,9 @@ import { query } from "../config/db.js";
 export const getAttendance = async (req, res) => {
   try {
     const { userId, companyId, startDate, endDate, date } = req.query;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+
     let sql = `
       SELECT a.*, a.id as "_id", u.name as user_name, u.name as "userName",
              u.email as user_email, u.department as "userDept", u.department
@@ -20,8 +23,8 @@ export const getAttendance = async (req, res) => {
       sql += ` AND a.user_id = $${params.length}`;
     }
 
-    if (companyId || req.user?.companyId) {
-      params.push(companyId || req.user.companyId);
+    if (targetCompanyId) {
+      params.push(targetCompanyId);
       sql += ` AND a.company_id = $${params.length}`;
     }
 
@@ -39,6 +42,7 @@ export const getAttendance = async (req, res) => {
 
     sql += " ORDER BY a.date DESC, a.check_in DESC LIMIT 1000";
     const result = await query(sql, params);
+
     
     // Format check_in/check_out/status for client
     const logs = result.rows.map(row => {
@@ -135,6 +139,13 @@ export const checkOut = async (req, res) => {
 export const updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
+    const callerRole = req.user?.role?.toLowerCase();
+    const isAllowed = callerRole === "admin" || callerRole === "superadmin" || callerRole === "manager" || callerRole === "system admin";
+
+    if (!isAllowed) {
+      return res.status(403).json({ error: "Access forbidden. Admin or Manager role required to edit attendance records." });
+    }
+
     const { checkIn, checkOut, status, date } = req.body;
 
     const result = await query(
@@ -163,6 +174,13 @@ export const updateAttendance = async (req, res) => {
 export const deleteAttendance = async (req, res) => {
   try {
     const { id } = req.params;
+    const callerRole = req.user?.role?.toLowerCase();
+    const isAllowed = callerRole === "admin" || callerRole === "superadmin" || callerRole === "system admin";
+
+    if (!isAllowed) {
+      return res.status(403).json({ error: "Access forbidden. Admin role required to delete attendance records." });
+    }
+
     const result = await query("DELETE FROM attendance WHERE id = $1 RETURNING id", [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Attendance record not found." });
@@ -172,6 +190,7 @@ export const deleteAttendance = async (req, res) => {
     console.error("deleteAttendance error:", err);
     res.status(500).json({ error: "Failed to delete attendance record." });
   }
+
 };
 
 // Rules

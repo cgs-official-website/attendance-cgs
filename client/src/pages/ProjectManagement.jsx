@@ -21,7 +21,7 @@ import {
   updateUserRecord
 } from "../firebase";
 import { useModal } from "../context/ModalContext";
-import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase, Sparkles, Zap } from "lucide-react";
+import { Search, Plus, Calendar, Clock, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, UserPlus, Users, X, FileText, Download, MessageSquare, Briefcase, Sparkles, Zap, Eye, AlertCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logoImg from '../assets/zuna-logo.png';
@@ -36,6 +36,13 @@ export default function ProjectManagement() {
   const { showConfirm } = useModal();
   
   const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsError, setProjectsError] = useState(null);
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [projectStatusFilter, setProjectStatusFilter] = useState("All");
+  const [selectedProjectForDetails, setSelectedProjectForDetails] = useState(null);
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
+
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [projectNameInput, setProjectNameInput] = useState("");
   const [projectStartDate, setProjectStartDate] = useState("");
@@ -151,8 +158,14 @@ export default function ProjectManagement() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const unsubscribe = subscribeToProjects(currentUser.companyId, (data) => {
-      setProjects(data || []);
+    const unsubscribe = subscribeToProjects(currentUser.companyId, (data, err) => {
+      if (err) {
+        setProjectsError("Unable to load projects.");
+      } else {
+        setProjects(data || []);
+        setProjectsError(null);
+      }
+      setProjectsLoading(false);
     });
     return unsubscribe;
   }, [currentUser]);
@@ -1477,9 +1490,19 @@ export default function ProjectManagement() {
 
   const allCombinedProjects = [...projects, ...syntheticProjects];
 
-  const visibleProjects = currentUser?.role === "admin"
+  const visibleProjects = (currentUser?.role === "admin"
     ? allCombinedProjects
-    : allCombinedProjects.filter(p => p.managerId === currentUser?.uid || pmProjects.includes(p.name));
+    : allCombinedProjects.filter(p => p.managerId === currentUser?.uid || p.manager_id === currentUser?.id || p.managerId === currentUser?.id || pmProjects.includes(p.name))
+  ).filter(p => {
+    const query = projectSearchQuery.trim().toLowerCase();
+    const matchesSearch = !query || 
+      (p.name && p.name.toLowerCase().includes(query)) ||
+      (p.managerName && p.managerName.toLowerCase().includes(query)) ||
+      (p.status && p.status.toLowerCase().includes(query));
+    const matchesStatus = projectStatusFilter === "All" || 
+      (p.status || "Ongoing").toLowerCase() === projectStatusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
 
   const filteredReports = dailyReports.filter(r => {
     const isManaged = currentUser?.role === "admin" || teamMembers.some(member => member.uid === r.userId);
@@ -1726,10 +1749,56 @@ export default function ProjectManagement() {
         <ClientChatsPMTab currentUser={currentUser} />
       ) : activeSubTab === "projects" ? (
         <div className="bg-bg-card border border-border-card rounded-[24px] shadow-sm overflow-hidden text-left mb-6">
-          <div className="p-6 border-b border-border-card bg-bg-base/30 flex items-center justify-between">
-            <h3 className="font-extrabold text-base text-text-main tracking-tight">Active Projects</h3>
-            <span className="text-[11px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full">{visibleProjects.length} Total</span>
+          <div className="p-6 border-b border-border-card bg-bg-base/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <h3 className="font-extrabold text-base text-text-main tracking-tight">Active Projects</h3>
+                <span className="text-[11px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full">{visibleProjects.length} Total</span>
+              </div>
+              <p className="text-xs text-text-mut mt-0.5">Database-driven project milestones, manager assignments, and deliverables.</p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Project Search Input */}
+              <div className="relative w-full sm:w-52">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-mut" />
+                <input
+                  type="text"
+                  placeholder="Search projects..."
+                  value={projectSearchQuery}
+                  onChange={(e) => setProjectSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-bg-card border border-border-card rounded-[12px] text-xs text-text-main outline-none focus:border-brand-primary transition-all shadow-sm"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={projectStatusFilter}
+                  onChange={(e) => setProjectStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-bg-card border border-border-card rounded-[12px] text-xs font-semibold text-text-main outline-none focus:border-brand-primary transition-all shadow-sm cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Ongoing">Ongoing</option>
+                  <option value="in-progress">In-Progress</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Testing">Testing</option>
+                </select>
+              </div>
+
+              {/* Create Project Button */}
+              {currentUser?.role === "admin" && (
+                <button
+                  onClick={() => setShowCreateProjectModal(true)}
+                  className="px-4 py-2 bg-brand-primary hover:bg-brand-hover text-white rounded-[12px] text-xs font-bold transition-all shadow-md shadow-brand-primary/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>Create Project</span>
+                </button>
+              )}
+            </div>
           </div>
+
           <div className="overflow-x-auto w-full custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -1740,53 +1809,131 @@ export default function ProjectManagement() {
                   <th className="p-4 font-bold text-center">End Date</th>
                   <th className="p-4 font-bold">Assigned Manager</th>
                   <th className="p-4 font-bold text-center">Status</th>
+                  <th className="p-4 font-bold text-center">Progress</th>
                   <th className="p-4 font-bold text-center">Teammates</th>
                   <th className="p-4 font-bold text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleProjects.length === 0 ? (
+                {projectsLoading ? (
                   <tr>
-                    <td colSpan="7" className="p-8 text-center text-xs text-text-mut italic">No projects created yet. Click "Create Project" to start.</td>
+                    <td colSpan="9" className="p-12 text-center text-xs text-text-mut">
+                      <div className="flex items-center justify-center gap-2">
+                        <Clock className="animate-spin text-brand-primary" size={16} />
+                        <span className="font-semibold">Loading projects...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : projectsError ? (
+                  <tr>
+                    <td colSpan="9" className="p-12 text-center text-xs text-red-500">
+                      <div className="flex items-center justify-center gap-2">
+                        <AlertCircle size={16} />
+                        <span className="font-bold">Unable to load projects.</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : visibleProjects.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="p-12 text-center text-xs text-text-mut italic">
+                      No projects found. {currentUser?.role === "admin" && 'Click "Create Project" to start.'}
+                    </td>
                   </tr>
                 ) : (
                   visibleProjects.map((proj, idx) => {
-                    const manager = allUsers.find(u => u.uid === proj.managerId);
+                    const manager = allUsers.find(u => u.uid === proj.managerId || u.id === proj.managerId);
+                    const managerName = proj.managerName || manager?.name || "Unassigned";
+                    const pStatus = proj.status || "Ongoing";
+                    const isCompleted = pStatus.toLowerCase() === "completed";
+                    const isInProgress = pStatus.toLowerCase().includes("progress") || pStatus.toLowerCase() === "ongoing";
+
                     return (
                       <tr 
                         key={proj.id || idx} 
-                        onClick={() => handleEditProjectClick(proj)}
-                        className="border-b border-border-card/50 hover:bg-bg-base/30 transition-colors text-xs text-text-sec cursor-pointer"
+                        onClick={() => {
+                          setSelectedProjectForDetails(proj);
+                          setShowProjectDetailsModal(true);
+                        }}
+                        className="border-b border-border-card/50 hover:bg-bg-base/40 transition-colors text-xs text-text-sec cursor-pointer group"
                       >
                         <td className="p-4 text-center font-bold text-text-mut">{idx + 1}</td>
-                        <td className="p-4 font-bold text-text-main">{proj.name}</td>
-                        <td className="p-4 text-center">{proj.startDate}</td>
-                        <td className="p-4 text-center">{proj.endDate}</td>
-                        <td className="p-4 font-semibold text-brand-primary">{manager?.name || "Unknown Manager"}</td>
-                        <td className="p-4 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            (proj.status || "Ongoing") === "Completed" ? "bg-green-500/10 text-green-500" :
-                            (proj.status || "Ongoing") === "Ongoing" ? "bg-blue-500/10 text-blue-500" :
-                            "bg-orange-500/10 text-orange-500"
-                          }`}>
-                            {proj.status || "Ongoing"}
-                          </span>
+                        <td className="p-4 font-bold text-text-main">
+                          <div className="flex items-center gap-2">
+                            <span>{proj.name}</span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-mono text-[11px]">{proj.startDate || proj.start_date || "-"}</td>
+                        <td className="p-4 text-center font-mono text-[11px]">{proj.endDate || proj.end_date || "-"}</td>
+                        <td className="p-4 font-semibold text-brand-primary">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] font-bold flex items-center justify-center">
+                              {managerName.charAt(0).toUpperCase()}
+                            </div>
+                            <span>{managerName}</span>
+                          </div>
                         </td>
                         <td className="p-4 text-center">
-                          <span className="bg-brand-primary/10 text-brand-primary font-bold px-2 py-0.5 rounded-full text-[10px]">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            isCompleted ? "bg-green-500/10 text-green-500 border border-green-500/20" :
+                            isInProgress ? "bg-blue-500/10 text-blue-500 border border-blue-500/20" :
+                            "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                          }`}>
+                            {pStatus}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1 items-center max-w-[120px] mx-auto">
+                            <div className="flex justify-between w-full text-[10px] font-bold text-text-mut">
+                              <span>{proj.taskCount ? `${proj.completedTaskCount || 0}/${proj.taskCount}` : "0 tasks"}</span>
+                              <span>{proj.progress ?? 0}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-bg-base rounded-full overflow-hidden border border-border-card/40">
+                              <div 
+                                className={`h-full rounded-full transition-all ${
+                                  (proj.progress ?? 0) === 100 ? "bg-emerald-500" :
+                                  (proj.progress ?? 0) > 0 ? "bg-brand-primary" : "bg-transparent"
+                                }`}
+                                style={{ width: `${proj.progress ?? 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className="bg-brand-primary/10 text-brand-primary font-bold px-2.5 py-1 rounded-full text-[10px]">
                             {proj.teamMembers?.length || 0} Members
                           </span>
                         </td>
                         <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          {currentUser?.role === "admin" && (
+                          <div className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => handleDeleteProject(proj)}
-                              className="text-text-mut hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-full transition-colors cursor-pointer"
-                              title="Delete Project"
+                              onClick={() => {
+                                setSelectedProjectForDetails(proj);
+                                setShowProjectDetailsModal(true);
+                              }}
+                              className="text-text-mut hover:text-brand-primary hover:bg-brand-primary/10 p-1.5 rounded-full transition-colors cursor-pointer"
+                              title="View Project Details"
                             >
-                              <Trash2 size={14} />
+                              <Eye size={14} />
                             </button>
-                          )}
+                            {currentUser?.role === "admin" && (
+                              <>
+                                <button
+                                  onClick={() => handleEditProjectClick(proj)}
+                                  className="text-text-mut hover:text-blue-500 hover:bg-blue-500/10 p-1.5 rounded-full transition-colors cursor-pointer"
+                                  title="Edit Project"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProject(proj)}
+                                  className="text-text-mut hover:text-red-500 hover:bg-red-500/10 p-1.5 rounded-full transition-colors cursor-pointer"
+                                  title="Delete Project"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -3256,6 +3403,164 @@ export default function ProjectManagement() {
                 <button type="submit" className="py-2 px-6 bg-brand-primary hover:bg-brand-hover text-white rounded-[10px] text-xs font-bold shadow-md shadow-brand-primary/20 transition-all cursor-pointer">Save Changes</button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Project Details Modal */}
+      {showProjectDetailsModal && selectedProjectForDetails && createPortal(
+        <div className="fixed inset-0 bg-slate-950/50 dark:bg-black/75 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-xl bg-bg-card border border-border-card rounded-[24px] shadow-2xl animate-scale-up flex flex-col overflow-hidden relative max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border-card bg-bg-base/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center border border-brand-primary/20 shadow-sm">
+                  <Briefcase size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight">
+                      {selectedProjectForDetails.name}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      (selectedProjectForDetails.status || "Ongoing").toLowerCase() === "completed" 
+                        ? "bg-green-500/10 text-green-500 border border-green-500/20" 
+                        : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                    }`}>
+                      {selectedProjectForDetails.status || "Ongoing"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-mut mt-0.5">PostgreSQL Database-Driven Project Record</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowProjectDetailsModal(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-mut hover:text-text-main hover:bg-bg-base transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar text-left">
+              
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-bg-base/40 border border-border-card/60 rounded-[14px] space-y-1">
+                  <span className="text-[10px] font-bold text-text-mut uppercase flex items-center gap-1.5">
+                    <Calendar size={12} className="text-brand-primary" /> Timeline
+                  </span>
+                  <div className="text-xs font-bold text-text-main">
+                    {selectedProjectForDetails.startDate || selectedProjectForDetails.start_date || "-"} 
+                    <span className="text-text-mut font-normal mx-1.5">to</span>
+                    {selectedProjectForDetails.endDate || selectedProjectForDetails.end_date || "-"}
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-bg-base/40 border border-border-card/60 rounded-[14px] space-y-1">
+                  <span className="text-[10px] font-bold text-text-mut uppercase flex items-center gap-1.5">
+                    <Users size={12} className="text-brand-primary" /> Assigned Manager
+                  </span>
+                  <div className="text-xs font-bold text-brand-primary flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-brand-primary/15 text-brand-primary text-[10px] font-bold flex items-center justify-center">
+                      {(selectedProjectForDetails.managerName || "M").charAt(0).toUpperCase()}
+                    </div>
+                    <span>{selectedProjectForDetails.managerName || "Unassigned"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress & Task Metrics */}
+              <div className="p-4 bg-bg-base/30 border border-border-card/60 rounded-[16px] space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-text-main">Deliverables & Tasks</span>
+                  <span className="font-bold text-brand-primary">
+                    {selectedProjectForDetails.completedTaskCount || 0} / {selectedProjectForDetails.taskCount || 0} Completed ({selectedProjectForDetails.progress ?? 0}%)
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-bg-card rounded-full overflow-hidden border border-border-card/50">
+                  <div 
+                    className={`h-full rounded-full transition-all ${
+                      (selectedProjectForDetails.progress ?? 0) === 100 ? "bg-emerald-500" :
+                      (selectedProjectForDetails.progress ?? 0) > 0 ? "bg-brand-primary" : "bg-transparent"
+                    }`}
+                    style={{ width: `${selectedProjectForDetails.progress ?? 0}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Description if present */}
+              {selectedProjectForDetails.description && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-text-mut uppercase">Description</label>
+                  <p className="text-xs text-text-sec bg-bg-base/30 p-3 rounded-[12px] border border-border-card/50 leading-relaxed whitespace-pre-wrap">
+                    {selectedProjectForDetails.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Team Members List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-text-mut uppercase flex items-center gap-1.5">
+                    <UserPlus size={12} className="text-brand-primary" />
+                    Team Members ({selectedProjectForDetails.teamMembers?.length || 0})
+                  </label>
+                </div>
+
+                {(!selectedProjectForDetails.teamMembers || selectedProjectForDetails.teamMembers.length === 0) ? (
+                  <p className="text-xs text-text-mut italic p-3 bg-bg-base/20 rounded-[12px] border border-dashed border-border-card">
+                    No team members assigned yet.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                    {selectedProjectForDetails.teamMembers.map((memberId) => {
+                      const member = allUsers.find(u => u.uid === memberId || u.id === memberId);
+                      return (
+                        <div key={memberId} className="flex items-center gap-2.5 p-2 bg-bg-base/40 border border-border-card/50 rounded-[12px]">
+                          <div className="w-7 h-7 rounded-full bg-brand-primary/10 text-brand-primary font-bold flex items-center justify-center text-xs flex-shrink-0">
+                            {member?.avatar ? (
+                              <img src={member.avatar} alt={member.name} className="w-full h-full rounded-full object-cover" />
+                            ) : (
+                              (member?.name || "?").charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-text-main truncate">{member?.name || "Unknown Member"}</p>
+                            <p className="text-[10px] text-text-mut truncate">{member?.designation || member?.department || member?.email || "Team Member"}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-border-card bg-bg-base/40 flex justify-end gap-2">
+              {currentUser?.role === "admin" && (
+                <button
+                  onClick={() => {
+                    setShowProjectDetailsModal(false);
+                    handleEditProjectClick(selectedProjectForDetails);
+                  }}
+                  className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-[10px] text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Edit2 size={12} />
+                  <span>Edit Project</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowProjectDetailsModal(false)}
+                className="px-4 py-2 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>,
         document.body

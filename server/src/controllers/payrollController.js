@@ -3,7 +3,8 @@ import { query } from "../config/db.js";
 export const getPayroll = async (req, res) => {
   try {
     const { companyId, month, year, userId, employeeId } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
     const targetEmpId = userId || employeeId;
 
     let sql = `
@@ -18,6 +19,7 @@ export const getPayroll = async (req, res) => {
       WHERE 1=1
     `;
     const params = [];
+
 
     if (targetCompanyId) {
       params.push(targetCompanyId);
@@ -286,7 +288,12 @@ export const deletePayroll = async (req, res) => {
 export const wipeAllPayrolls = async (req, res) => {
   try {
     const { companyId, month, year } = req.query;
-    const targetComp = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetComp = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+
+    if (!targetComp && !isSuperAdmin) {
+      return res.status(400).json({ error: "Company ID is required to wipe payroll." });
+    }
 
     let sql = "DELETE FROM payroll WHERE 1=1";
     const params = [];
@@ -312,3 +319,4 @@ export const wipeAllPayrolls = async (req, res) => {
     res.status(500).json({ error: "Failed to wipe payroll records." });
   }
 };
+

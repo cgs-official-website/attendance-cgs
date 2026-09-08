@@ -5,14 +5,15 @@ import {
   updateAsset,
   deleteAsset
 } from "../controllers/assetController.js";
-import { authenticateToken } from "../middlewares/auth.js";
+import { authenticateToken, requireAdmin } from "../middlewares/auth.js";
 
 const router = express.Router();
 
 router.use(authenticateToken);
 router.get("/", getAssets);
-router.post("/", createAsset);
-router.patch("/:id", updateAsset);
-router.delete("/:id", deleteAsset);
+router.post("/", requireAdmin, createAsset);
+router.patch("/:id", requireAdmin, updateAsset);
+router.delete("/:id", requireAdmin, deleteAsset);
 
 export default router;
+

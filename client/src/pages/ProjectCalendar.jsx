@@ -64,6 +64,10 @@ export default function ProjectCalendar() {
   const [remarksText, setRemarksText] = useState("");
   const [remarksStatus, setRemarksStatus] = useState("Completed");
 
+  // Project Details Modal State
+  const [selectedProjectForDetails, setSelectedProjectForDetails] = useState(null);
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
+
   // Task Logs section filters
   const [logsFilterProject, setLogsFilterProject] = useState("All");
   const [logsFilterUser, setLogsFilterUser] = useState("All");
@@ -74,8 +78,10 @@ export default function ProjectCalendar() {
   
   // Memoized managed projects list for the current user
   const managedProjects = React.useMemo(() => {
-    return projects.filter(p => p.managerId === currentUser?.uid);
-  }, [projects, currentUser]);
+    if (isAdmin) return projects;
+    const uId = currentUser?.uid || currentUser?.id;
+    return projects.filter(p => p.managerId === uId || p.manager_id === uId);
+  }, [projects, currentUser, isAdmin]);
 
   const isProjectManager = managedProjects.length > 0;
 
@@ -88,23 +94,58 @@ export default function ProjectCalendar() {
     }
     
     if (isProjectManager) {
-      const teammateIds = managedProjects.flatMap(p => p.teamMembers || []);
-      return allUsers.filter(u => teammateIds.includes(u.uid) && u.uid !== currentUser.uid && u.role !== "admin");
+      const uId = currentUser?.uid || currentUser?.id;
+      const teammateIds = managedProjects.flatMap(p => p.teamMembers || p.team_members || []);
+      return allUsers.filter(u => (teammateIds.includes(u.uid) || teammateIds.includes(u.id)) && u.uid !== uId && u.id !== uId && u.role !== "admin");
     }
     
-    const me = allUsers.find(u => u.uid === currentUser.uid);
+    const me = allUsers.find(u => u.uid === currentUser.uid || u.id === currentUser.id);
     return me ? [me] : [currentUser];
   }, [allUsers, projects, currentUser, isAdmin, isProjectManager, managedProjects]);
 
   const pmProjects = React.useMemo(() => {
     if (isAdmin) {
-      return [...new Set(projects.map(p => p.name))];
+      return [...new Set(projects.map(p => p.name).filter(Boolean))];
     }
     if (isProjectManager) {
-      return managedProjects.map(p => p.name);
+      return [...new Set(managedProjects.map(p => p.name).filter(Boolean))];
     }
     return currentUser?.projects?.length ? currentUser.projects : (currentUser?.project ? [currentUser.project] : []);
   }, [projects, managedProjects, currentUser, isAdmin, isProjectManager]);
+
+  const cleanDateStr = (d) => {
+    if (!d) return "";
+    if (typeof d === "string") return d.split("T")[0];
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dayNum = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dayNum}`;
+    }
+    return String(d);
+  };
+
+  const getProjectsForDate = (dateString) => {
+    if (!dateString) return [];
+    return projects.filter(proj => {
+      if (!isAdmin) {
+        const uId = currentUser?.uid || currentUser?.id;
+        const isInvolved = proj.managerId === uId || proj.manager_id === uId || 
+          (proj.teamMembers || []).includes(uId) || (proj.team_members || []).includes(uId) || 
+          (currentUser?.projects || []).includes(proj.name) || 
+          currentUser?.project === proj.name;
+        if (!isInvolved) return false;
+      }
+      const start = cleanDateStr(proj.startDate || proj.start_date);
+      const end = cleanDateStr(proj.endDate || proj.end_date || proj.startDate || proj.start_date);
+      if (!start) return false;
+      return dateString >= start && dateString <= end;
+    });
+  };
+
+  const selectedDateProjects = React.useMemo(() => {
+    return getProjectsForDate(selectedDate);
+  }, [selectedDate, projects, isAdmin, currentUser]);
 
   // Fetch All Users in Company
   useEffect(() => {
@@ -467,14 +508,7 @@ export default function ProjectCalendar() {
                   return today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
                 })();
 
-                const cellProjects = activity?.dateStr ? projects.filter(proj => {
-                  if (!isAdmin) {
-                    const isInvolved = proj.managerId === currentUser.uid || proj.teamMembers?.includes(currentUser.uid) || (currentUser?.projects || []).includes(proj.name);
-                    if (!isInvolved) return false;
-                  }
-                  return activity.dateStr >= proj.startDate && activity.dateStr <= proj.endDate;
-                }) : [];
-                
+                const cellProjects = activity?.dateStr ? getProjectsForDate(activity.dateStr) : [];
                 const hasProjectHighlight = cellProjects.length > 0;
 
                 return (
@@ -496,11 +530,14 @@ export default function ProjectCalendar() {
                       <span className="text-xs font-bold">{day}</span>
                       {hasProjectHighlight && !isSelected && (
                         <div className="flex flex-col gap-0.5 items-end max-w-[70%]">
-                          {cellProjects.map((cp, cIdx) => (
+                          {cellProjects.slice(0, 2).map((cp, cIdx) => (
                             <span key={cIdx} className="text-[7px] font-black uppercase text-brand-primary px-1 rounded bg-brand-primary/10 truncate max-w-full" title={cp.name}>
                               {cp.name}
                             </span>
                           ))}
+                          {cellProjects.length > 2 && (
+                            <span className="text-[7px] font-bold text-text-mut">+{cellProjects.length - 2}</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -529,6 +566,83 @@ export default function ProjectCalendar() {
               <span className="text-xl font-black text-text-main">
                 {selectedDate ? new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : "No Date Selected"}
               </span>
+            </div>
+
+            {/* Active Projects section for selected date */}
+            <div className="bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl space-y-4">
+              <div className="flex justify-between items-center border-b border-border-card pb-3">
+                <h4 className="font-extrabold text-base text-text-main flex items-center gap-2">
+                  <Briefcase size={18} className="text-brand-primary" />
+                  Active Projects ({selectedDateProjects.length})
+                </h4>
+                <span className="text-[10px] font-bold text-text-mut uppercase">Timeline Deliverables</span>
+              </div>
+
+              {selectedDateProjects.length === 0 ? (
+                <div className="p-8 text-center text-text-mut border border-dashed border-border-card rounded-[16px] bg-bg-base/20">
+                  <AlertCircle size={28} className="mx-auto mb-2 text-text-mut/50" />
+                  <p className="text-xs font-bold">No active projects scheduled for this date.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar text-left">
+                  {selectedDateProjects.map((proj) => {
+                    const manager = allUsers.find(u => u.uid === proj.managerId || u.id === proj.managerId);
+                    const managerName = proj.managerName || manager?.name || "Unassigned";
+                    const pStatus = proj.status || "Ongoing";
+                    const isCompleted = pStatus.toLowerCase() === "completed";
+
+                    return (
+                      <div 
+                        key={proj.id} 
+                        onClick={() => {
+                          setSelectedProjectForDetails(proj);
+                          setShowProjectDetailsModal(true);
+                        }}
+                        className="p-4 bg-bg-base/40 border border-border-card rounded-[16px] space-y-2.5 hover:border-brand-primary/40 transition-all cursor-pointer group shadow-sm"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <h5 className="text-xs font-black text-text-main group-hover:text-brand-primary transition-colors flex items-center gap-1.5">
+                            {proj.name}
+                          </h5>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                            isCompleted ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" :
+                            "bg-brand-primary/10 text-brand-primary border border-brand-primary/20"
+                          }`}>
+                            {pStatus}
+                          </span>
+                        </div>
+
+                        <div className="text-[10px] text-text-mut font-semibold flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Clock size={11} />
+                            {cleanDateStr(proj.startDate || proj.start_date)} — {cleanDateStr(proj.endDate || proj.end_date)}
+                          </span>
+                          <span className="text-brand-primary font-bold">
+                            Manager: {managerName}
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="space-y-1 pt-1 border-t border-border-card/40">
+                          <div className="flex justify-between text-[9px] font-bold text-text-mut">
+                            <span>{proj.taskCount ? `${proj.completedTaskCount || 0}/${proj.taskCount} tasks` : `${proj.teamMembers?.length || 0} members`}</span>
+                            <span>{proj.progress ?? 0}% completed</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-bg-base rounded-full overflow-hidden border border-border-card/30">
+                            <div 
+                              className={`h-full rounded-full transition-all ${
+                                (proj.progress ?? 0) === 100 ? "bg-emerald-500" :
+                                (proj.progress ?? 0) > 0 ? "bg-brand-primary" : "bg-transparent"
+                              }`}
+                              style={{ width: `${proj.progress ?? 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Daily logs section — visible to Admin & Project Managers only */}
@@ -661,7 +775,7 @@ export default function ProjectCalendar() {
       )}
 
       {/* Project Manager Team setup panel & Team progress table */}
-      {isProjectManager && (
+      {(isAdmin || isProjectManager) && (
         <div className="mt-8 space-y-6 text-left">
           
           {/* Action buttons bar */}
@@ -1181,6 +1295,152 @@ export default function ProjectCalendar() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Project Details Modal */}
+      {showProjectDetailsModal && selectedProjectForDetails && createPortal(
+        <div className="fixed inset-0 bg-slate-950/50 dark:bg-black/75 backdrop-blur-[12px] flex items-center justify-center z-[99999] p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-xl bg-bg-card border border-border-card rounded-[24px] shadow-2xl animate-scale-up flex flex-col overflow-hidden relative max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border-card bg-bg-base/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center border border-brand-primary/20 shadow-sm">
+                  <Briefcase size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-base text-text-main tracking-tight">
+                      {selectedProjectForDetails.name}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      (selectedProjectForDetails.status || "Ongoing").toLowerCase() === "completed" 
+                        ? "bg-green-500/10 text-green-500 border border-green-500/20" 
+                        : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                    }`}>
+                      {selectedProjectForDetails.status || "Ongoing"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-mut mt-0.5">PostgreSQL Database-Driven Project Record</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowProjectDetailsModal(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-mut hover:text-text-main hover:bg-bg-base transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar text-left">
+              
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-bg-base/40 border border-border-card/60 rounded-[14px] space-y-1">
+                  <span className="text-[10px] font-bold text-text-mut uppercase flex items-center gap-1.5">
+                    <Clock size={12} className="text-brand-primary" /> Timeline
+                  </span>
+                  <div className="text-xs font-bold text-text-main">
+                    {selectedProjectForDetails.startDate || selectedProjectForDetails.start_date || "-"} 
+                    <span className="text-text-mut font-normal mx-1.5">to</span>
+                    {selectedProjectForDetails.endDate || selectedProjectForDetails.end_date || "-"}
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-bg-base/40 border border-border-card/60 rounded-[14px] space-y-1">
+                  <span className="text-[10px] font-bold text-text-mut uppercase flex items-center gap-1.5">
+                    <User size={12} className="text-brand-primary" /> Assigned Manager
+                  </span>
+                  <div className="text-xs font-bold text-brand-primary flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-brand-primary/15 text-brand-primary text-[10px] font-bold flex items-center justify-center">
+                      {(selectedProjectForDetails.managerName || "M").charAt(0).toUpperCase()}
+                    </div>
+                    <span>{selectedProjectForDetails.managerName || "Unassigned"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress & Task Metrics */}
+              <div className="p-4 bg-bg-base/30 border border-border-card/60 rounded-[16px] space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-text-main">Deliverables & Tasks</span>
+                  <span className="font-bold text-brand-primary">
+                    {selectedProjectForDetails.completedTaskCount || 0} / {selectedProjectForDetails.taskCount || 0} Completed ({selectedProjectForDetails.progress ?? 0}%)
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-bg-card rounded-full overflow-hidden border border-border-card/50">
+                  <div 
+                    className={`h-full rounded-full transition-all ${
+                      (selectedProjectForDetails.progress ?? 0) === 100 ? "bg-emerald-500" :
+                      (selectedProjectForDetails.progress ?? 0) > 0 ? "bg-brand-primary" : "bg-transparent"
+                    }`}
+                    style={{ width: `${selectedProjectForDetails.progress ?? 0}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Description if present */}
+              {selectedProjectForDetails.description && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-text-mut uppercase">Description</label>
+                  <p className="text-xs text-text-sec bg-bg-base/30 p-3 rounded-[12px] border border-border-card/50 leading-relaxed whitespace-pre-wrap">
+                    {selectedProjectForDetails.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Team Members List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-text-mut uppercase flex items-center gap-1.5">
+                    <UserPlus size={12} className="text-brand-primary" />
+                    Team Members ({selectedProjectForDetails.teamMembers?.length || 0})
+                  </label>
+                </div>
+
+                {(!selectedProjectForDetails.teamMembers || selectedProjectForDetails.teamMembers.length === 0) ? (
+                  <p className="text-xs text-text-mut italic p-3 bg-bg-base/20 rounded-[12px] border border-dashed border-border-card">
+                    No team members assigned yet.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                    {selectedProjectForDetails.teamMembers.map((memberId) => {
+                      const member = allUsers.find(u => u.uid === memberId || u.id === memberId);
+                      return (
+                        <div key={memberId} className="flex items-center gap-2.5 p-2 bg-bg-base/40 border border-border-card/50 rounded-[12px]">
+                          <div className="w-7 h-7 rounded-full bg-brand-primary/10 text-brand-primary font-bold flex items-center justify-center text-xs flex-shrink-0">
+                            {member?.avatar ? (
+                              <img src={member.avatar} alt={member.name} className="w-full h-full rounded-full object-cover" />
+                            ) : (
+                              (member?.name || "?").charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-text-main truncate">{member?.name || "Unknown Member"}</p>
+                            <p className="text-[10px] text-text-mut truncate">{member?.designation || member?.department || member?.email || "Team Member"}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-border-card bg-bg-base/40 flex justify-end gap-2">
+              <button
+                onClick={() => setShowProjectDetailsModal(false)}
+                className="px-4 py-2 border border-border-card rounded-[10px] text-xs font-bold text-text-sec hover:bg-bg-base transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>,
         document.body

@@ -1,10 +1,15 @@
-import { query } from "../config/db.js";
+import pool, { query } from "../config/db.js";
 import { sendTaskAssignmentEmail } from "../services/emailService.js";
 
 const formatDateStr = (val) => {
   if (!val) return "";
   if (typeof val === "string") return val.split("T")[0];
-  if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString().split("T")[0];
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const d = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
   return String(val);
 };
 
@@ -12,6 +17,9 @@ const formatProjectRow = (row) => {
   const startDate = formatDateStr(row.start_date || row.startDate);
   const endDate = formatDateStr(row.end_date || row.endDate);
   const teamMembers = Array.isArray(row.team_members) ? row.team_members : (Array.isArray(row.teamMembers) ? row.teamMembers : []);
+  const taskCount = parseInt(row.task_count ?? row.taskCount ?? 0, 10);
+  const completedTaskCount = parseInt(row.completed_task_count ?? row.completedTaskCount ?? 0, 10);
+  const progress = taskCount > 0 ? Math.min(100, Math.round((completedTaskCount / taskCount) * 100)) : 0;
 
   return {
     ...row,
@@ -32,6 +40,11 @@ const formatProjectRow = (row) => {
     status: row.status || "Ongoing",
     teamMembers,
     team_members: teamMembers,
+    taskCount,
+    task_count: taskCount,
+    completedTaskCount,
+    completed_task_count: completedTaskCount,
+    progress,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -40,17 +53,39 @@ const formatProjectRow = (row) => {
 // --- PROJECTS ---
 export const getProjects = async (req, res) => {
   try {
-    const { companyId } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role === "superadmin";
+    const targetCompanyId = (isSuperAdmin && req.query.companyId) ? req.query.companyId : req.user?.companyId;
 
     let sql = `
       SELECT p.*,
              u.name as manager_name,
              u.email as manager_email,
              COALESCE(
-               (SELECT json_agg(pm.user_id) FROM project_members pm WHERE pm.project_id = p.id),
+               (
+                 SELECT json_agg(DISTINCT uid) FROM (
+                   SELECT pm.user_id as uid FROM project_members pm WHERE pm.project_id = p.id
+                   UNION
+                   SELECT u2.id as uid FROM users u2 WHERE u2.company_id = p.company_id AND (p.name = ANY(u2.projects) OR p.name = u2.project)
+                 ) sub
+               ),
                '[]'::json
-             ) as team_members
+             ) as team_members,
+             (
+               SELECT count(*) FROM (
+                 SELECT t.id FROM tasks t WHERE t.project_id = p.id
+                 UNION ALL
+                 SELECT elem->>'id' FROM users u_t, jsonb_array_elements(COALESCE(u_t.metadata->'tasks', '[]'::jsonb)) elem
+                 WHERE u_t.company_id = p.company_id AND elem->>'project' = p.name
+               ) sub_tasks
+             ) as task_count,
+             (
+               SELECT count(*) FROM (
+                 SELECT t.id FROM tasks t WHERE t.project_id = p.id AND (t.status = 'completed' OR t.status = 'Completed')
+                 UNION ALL
+                 SELECT elem->>'id' FROM users u_t, jsonb_array_elements(COALESCE(u_t.metadata->'tasks', '[]'::jsonb)) elem
+                 WHERE u_t.company_id = p.company_id AND elem->>'project' = p.name AND (elem->>'completed')::boolean = true
+               ) sub_tasks_comp
+             ) as completed_task_count
       FROM projects p
       LEFT JOIN users u ON p.manager_id = u.id
       WHERE 1=1
@@ -74,7 +109,8 @@ export const getProjects = async (req, res) => {
 export const createProject = async (req, res) => {
   try {
     const { name, description, startDate, endDate, managerId, companyId, teamMembers = [], status = "Ongoing" } = req.body;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     if (!name) {
       return res.status(400).json({ error: "Project name is required." });
@@ -92,6 +128,18 @@ export const createProject = async (req, res) => {
     );
 
     const project = result.rows[0];
+
+    // Ensure manager is in project_members
+    if (managerId) {
+      await query(
+        `INSERT INTO project_members (project_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [id, managerId]
+      ).catch(() => {});
+      await query(
+        `UPDATE users SET is_project_manager = true WHERE id = $1`,
+        [managerId]
+      ).catch(() => {});
+    }
 
     // Insert team members if provided
     if (Array.isArray(teamMembers) && teamMembers.length > 0) {
@@ -116,6 +164,17 @@ export const updateProject = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, startDate, endDate, managerId, status, teamMembers } = req.body;
+    const isSuperAdmin = req.user?.role === "superadmin";
+
+    // Tenant check: project must belong to caller's company
+    const checkRes = await query("SELECT id, company_id, name FROM projects WHERE id = $1", [id]);
+    if (checkRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+    const targetProj = checkRes.rows[0];
+    if (!isSuperAdmin && req.user?.companyId && targetProj.company_id && targetProj.company_id !== req.user.companyId) {
+      return res.status(403).json({ error: "Access denied. Cannot modify project from another organization." });
+    }
 
     const fields = [];
     const values = [];
@@ -140,6 +199,9 @@ export const updateProject = async (req, res) => {
     if (managerId !== undefined) {
       fields.push(`manager_id = $${idx++}`);
       values.push(managerId);
+      if (managerId) {
+        await query(`UPDATE users SET is_project_manager = true WHERE id = $1`, [managerId]).catch(() => {});
+      }
     }
     if (status !== undefined) {
       fields.push(`status = $${idx++}`);
@@ -165,15 +227,37 @@ export const updateProject = async (req, res) => {
       }
     }
 
-    // Fetch updated project
+    // Fetch updated project with unified team and task stats
     const fetchRes = await query(
       `SELECT p.*,
               u.name as manager_name,
               u.email as manager_email,
               COALESCE(
-                (SELECT json_agg(pm.user_id) FROM project_members pm WHERE pm.project_id = p.id),
+                (
+                  SELECT json_agg(DISTINCT uid) FROM (
+                    SELECT pm.user_id as uid FROM project_members pm WHERE pm.project_id = p.id
+                    UNION
+                    SELECT u2.id as uid FROM users u2 WHERE u2.company_id = p.company_id AND (p.name = ANY(u2.projects) OR p.name = u2.project)
+                  ) sub
+                ),
                 '[]'::json
-              ) as team_members
+              ) as team_members,
+              (
+                SELECT count(*) FROM (
+                  SELECT t.id FROM tasks t WHERE t.project_id = p.id
+                  UNION ALL
+                  SELECT elem->>'id' FROM users u_t, jsonb_array_elements(COALESCE(u_t.metadata->'tasks', '[]'::jsonb)) elem
+                  WHERE u_t.company_id = p.company_id AND elem->>'project' = p.name
+                ) sub_tasks
+              ) as task_count,
+              (
+                SELECT count(*) FROM (
+                  SELECT t.id FROM tasks t WHERE t.project_id = p.id AND (t.status = 'completed' OR t.status = 'Completed')
+                  UNION ALL
+                  SELECT elem->>'id' FROM users u_t, jsonb_array_elements(COALESCE(u_t.metadata->'tasks', '[]'::jsonb)) elem
+                  WHERE u_t.company_id = p.company_id AND elem->>'project' = p.name AND (elem->>'completed')::boolean = true
+                ) sub_tasks_comp
+              ) as completed_task_count
        FROM projects p
        LEFT JOIN users u ON p.manager_id = u.id
        WHERE p.id = $1`,
@@ -192,17 +276,37 @@ export const updateProject = async (req, res) => {
 };
 
 export const deleteProject = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    await query("DELETE FROM project_members WHERE project_id = $1", [id]);
-    const result = await query("DELETE FROM projects WHERE id = $1 RETURNING id", [id]);
-    if (result.rows.length === 0) {
+    const isSuperAdmin = req.user?.role === "superadmin";
+
+    // Verify project exists and belongs to company
+    const checkRes = await client.query("SELECT id, company_id FROM projects WHERE id = $1", [id]);
+    if (checkRes.rows.length === 0) {
+      client.release();
       return res.status(404).json({ error: "Project not found." });
     }
-    res.json({ message: "Project deleted successfully.", id });
+
+    const project = checkRes.rows[0];
+    if (!isSuperAdmin && req.user?.companyId && project.company_id && project.company_id !== req.user.companyId) {
+      client.release();
+      return res.status(403).json({ error: "Access denied. Cannot delete project from another organization." });
+    }
+
+    await client.query("BEGIN");
+    await client.query("DELETE FROM project_members WHERE project_id = $1", [id]);
+    await client.query("DELETE FROM tasks WHERE project_id = $1", [id]);
+    const result = await client.query("DELETE FROM projects WHERE id = $1 RETURNING id", [id]);
+    await client.query("COMMIT");
+
+    res.json({ message: "Project deleted successfully.", id: result.rows[0]?.id || id });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("deleteProject error:", err);
     res.status(500).json({ error: "Failed to delete project." });
+  } finally {
+    client.release();
   }
 };
 
@@ -211,6 +315,15 @@ export const addProjectMember = async (req, res) => {
     const { id } = req.params;
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: "userId is required." });
+
+    const isSuperAdmin = req.user?.role === "superadmin";
+    const checkRes = await query("SELECT company_id FROM projects WHERE id = $1", [id]);
+    if (checkRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+    if (!isSuperAdmin && req.user?.companyId && checkRes.rows[0].company_id && checkRes.rows[0].company_id !== req.user.companyId) {
+      return res.status(403).json({ error: "Access denied. Cannot modify project from another organization." });
+    }
 
     await query(
       `INSERT INTO project_members (project_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -226,8 +339,9 @@ export const addProjectMember = async (req, res) => {
 // --- TASKS ---
 export const getTasks = async (req, res) => {
   try {
-    const { companyId, projectId, assignedTo } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const { projectId, assignedTo } = req.query;
+    const isSuperAdmin = req.user?.role === "superadmin";
+    const targetCompanyId = (isSuperAdmin && req.query.companyId) ? req.query.companyId : req.user?.companyId;
 
     let sql = "SELECT * FROM tasks WHERE 1=1";
     const params = [];

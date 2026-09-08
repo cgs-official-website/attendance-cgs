@@ -80,7 +80,8 @@ const formatRegRow = (row) => {
 export const getRegularizationRequests = async (req, res) => {
   try {
     const { companyId, userId, status } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     let sql = `
       SELECT r.*, u.name as user_name, u.email as user_email, u.department
@@ -108,7 +109,7 @@ export const getRegularizationRequests = async (req, res) => {
       sql += ` AND r.status = $${params.length}`;
     }
 
-    sql += " ORDER BY r.created_at DESC NULLS LAST LIMIT 500";
+    sql += " ORDER BY r.created_at DESC LIMIT 500";
     const result = await query(sql, params);
     res.json(result.rows.map(formatRegRow));
   } catch (err) {
@@ -119,12 +120,15 @@ export const getRegularizationRequests = async (req, res) => {
 
 export const createRegularizationRequest = async (req, res) => {
   try {
-    const { date, checkIn, checkOut, reason } = req.body;
+    const { date, attendanceDate, checkIn, checkOut, reason } = req.body;
     const userId = req.user?.id || req.body.userId;
     const companyId = req.user?.companyId || req.body.companyId;
 
-    if (!date || !reason) {
-      return res.status(400).json({ error: "Date and reason are required." });
+    const rawDate = attendanceDate || date || new Date();
+    const cleanDate = formatDateYYYYMMDD(rawDate);
+
+    if (!cleanDate || !reason) {
+      return res.status(400).json({ error: "Attendance date and reason are required." });
     }
 
     const id = "reg_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -132,7 +136,6 @@ export const createRegularizationRequest = async (req, res) => {
     // Parse timestamps for requested_check_in and requested_check_out
     let checkInTimestamp = null;
     let checkOutTimestamp = null;
-    const cleanDate = formatDateYYYYMMDD(date);
 
     if (checkIn) {
       const mIn = String(checkIn).match(/(\d{1,2}):(\d{2})/);
@@ -177,6 +180,12 @@ export const updateRegularizationStatus = async (req, res) => {
     const { id } = req.params;
     const { status, managerComment, rejectionReason } = req.body;
     const reviewerId = req.user?.id || null;
+    const callerRole = req.user?.role?.toLowerCase();
+    const isAllowed = callerRole === "admin" || callerRole === "superadmin" || callerRole === "manager" || callerRole === "system admin";
+
+    if (!isAllowed) {
+      return res.status(403).json({ error: "Access forbidden. Manager or Admin role required to review regularization requests." });
+    }
 
     if (!["approved", "rejected", "pending"].includes(status)) {
       return res.status(400).json({ error: "Invalid status." });
@@ -209,14 +218,15 @@ export const updateRegularizationStatus = async (req, res) => {
           const checkOutVal = updated.requested_check_out || new Date(`${attDate}T19:00:00Z`);
 
           await query(`
-            INSERT INTO attendance (id, user_id, company_id, date, check_in, check_out, status, total_working_minutes)
-            VALUES ($1, $2, $3, $4, $5, $6, 'present', 480)
+            INSERT INTO attendance (id, user_id, company_id, date, check_in, check_out, status, duration_minutes, is_regularized)
+            VALUES ($1, $2, $3, $4, $5, $6, 'present', 480, true)
             ON CONFLICT (user_id, date)
             DO UPDATE SET
               check_in = COALESCE(EXCLUDED.check_in, attendance.check_in),
               check_out = COALESCE(EXCLUDED.check_out, attendance.check_out),
               status = 'present',
-              total_working_minutes = GREATEST(attendance.total_working_minutes, 480),
+              duration_minutes = GREATEST(COALESCE(attendance.duration_minutes, 0), 480),
+              is_regularized = true,
               updated_at = CURRENT_TIMESTAMP
           `, [attId, updated.user_id, updated.company_id, attDate, checkInVal, checkOutVal]);
         }

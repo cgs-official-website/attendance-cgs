@@ -13,9 +13,10 @@ const router = express.Router();
 router.get("/token/:token", getExternalLinkByToken);
 
 // Admin/PM endpoints
-router.get("/", optionalAuth, getExternalLinks);
-router.post("/", optionalAuth, createExternalLink);
-router.patch("/:id/revoke", optionalAuth, revokeExternalLink);
-router.delete("/:id", optionalAuth, revokeExternalLink);
+router.get("/", authenticateToken, getExternalLinks);
+router.post("/", authenticateToken, createExternalLink);
+router.patch("/:id/revoke", authenticateToken, revokeExternalLink);
+router.delete("/:id", authenticateToken, revokeExternalLink);
 
 export default router;
+

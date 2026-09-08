@@ -9,16 +9,16 @@ import {
   createTask,
   updateTask
 } from "../controllers/projectController.js";
-import { authenticateToken } from "../middlewares/auth.js";
+import { authenticateToken, requireManagerOrAdmin } from "../middlewares/auth.js";
 
 const router = express.Router();
 
 router.use(authenticateToken);
 router.get("/", getProjects);
-router.post("/", createProject);
-router.patch("/:id", updateProject);
-router.delete("/:id", deleteProject);
-router.post("/:id/members", addProjectMember);
+router.post("/", requireManagerOrAdmin, createProject);
+router.patch("/:id", requireManagerOrAdmin, updateProject);
+router.delete("/:id", requireManagerOrAdmin, deleteProject);
+router.post("/:id/members", requireManagerOrAdmin, addProjectMember);
 
 router.get("/tasks", getTasks);
 router.post("/tasks", createTask);

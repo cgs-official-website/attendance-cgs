@@ -4,7 +4,8 @@ import { query } from "../config/db.js";
 export const getChannels = async (req, res) => {
   try {
     const { companyId } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     let sql = "SELECT *, name as \"displayName\" FROM channels WHERE 1=1";
     const params = [];
@@ -24,8 +25,9 @@ export const getChannels = async (req, res) => {
 export const createChannel = async (req, res) => {
   try {
     const { name, displayName, description, isPrivate = false, companyId } = req.body;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
     const creatorId = req.user?.id || null;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     const id = "ch_" + (name || "channel").toLowerCase().replace(/[^a-z0-9]/g, "-") + "_" + Math.random().toString(36).substr(2, 6);
     const result = await query(
@@ -41,6 +43,7 @@ export const createChannel = async (req, res) => {
     res.status(500).json({ error: "Failed to create channel." });
   }
 };
+
 
 const formatMessageRow = (row) => {
   if (!row) return null;
@@ -166,6 +169,9 @@ export const deleteMessage = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { channelId, companyId } = req.query;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+
     let sql = `
       SELECT m.*, u.name as real_user_name, u.avatar_url as real_user_avatar
       FROM messages m
@@ -178,8 +184,8 @@ export const getMessages = async (req, res) => {
       params.push(channelId);
       sql += ` AND m.channel_id = $${params.length}`;
     }
-    if (companyId || req.user?.companyId) {
-      params.push(companyId || req.user?.companyId);
+    if (targetCompanyId) {
+      params.push(targetCompanyId);
       sql += ` AND m.company_id = $${params.length}`;
     }
 
@@ -200,10 +206,15 @@ export const getMessages = async (req, res) => {
 export const sendMessage = async (req, res) => {
   try {
     const { channelId, content, attachments = [], replyToId = null, companyId } = req.body;
-    const senderId = req.user?.id || req.body.senderId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const senderId = req.user?.id;
     let senderName = req.body.senderName || req.user?.name;
     let userAvatar = req.body.userAvatar || req.body.avatar || req.user?.avatarUrl;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+
+    if (!senderId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
 
     if (!senderName || senderName === "User") {
       const uRes = await query("SELECT name, avatar_url FROM users WHERE id = $1", [senderId]);
@@ -238,9 +249,10 @@ export const sendMessage = async (req, res) => {
     res.status(201).json(formatted);
   } catch (err) {
     console.error("sendMessage error:", err);
-    res.status(500).json({ error: "Failed to send message: " + err.message });
+    res.status(500).json({ error: "Failed to send message." });
   }
 };
+
 
 export const pinMessage = async (req, res) => {
   try {
@@ -290,8 +302,10 @@ export const pinMessage = async (req, res) => {
 export const getDmThreads = async (req, res) => {
   try {
     const { userId, companyId } = req.query;
-    const targetUserId = userId || req.user?.id;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    // Security: Only superadmins can inspect another user's DM threads
+    const targetUserId = (isSuperAdmin && userId) ? userId : req.user?.id;
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     let sql = "SELECT * FROM dm_threads WHERE 1=1";
     const params = [];
@@ -382,6 +396,21 @@ export const createDmThread = async (req, res) => {
 export const getDirectMessages = async (req, res) => {
   try {
     const { threadId } = req.params;
+    const callerId = req.user?.id;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+
+    // Participant verification to prevent cross-user eavesdropping
+    if (!isSuperAdmin) {
+      const threadRes = await query("SELECT participants FROM dm_threads WHERE id = $1", [threadId]);
+      if (threadRes.rows.length === 0) {
+        return res.status(404).json({ error: "Conversation not found." });
+      }
+      const participants = threadRes.rows[0].participants || [];
+      if (!participants.includes(callerId)) {
+        return res.status(403).json({ error: "Access denied. You are not a participant in this conversation." });
+      }
+    }
+
     const result = await query(
       "SELECT *, sender_id as \"senderId\", created_at as timestamp FROM direct_messages WHERE thread_id = $1 ORDER BY created_at ASC LIMIT 1000",
       [threadId]
@@ -396,7 +425,25 @@ export const getDirectMessages = async (req, res) => {
 export const sendDirectMessage = async (req, res) => {
   try {
     const { threadId, content, attachments = [] } = req.body;
-    const senderId = req.user?.id || req.body.senderId;
+    const senderId = req.user?.id;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+
+    if (!senderId) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    // Verify sender is participant in thread
+    if (!isSuperAdmin) {
+      const threadRes = await query("SELECT participants FROM dm_threads WHERE id = $1", [threadId]);
+      if (threadRes.rows.length === 0) {
+        return res.status(404).json({ error: "Conversation not found." });
+      }
+      const participants = threadRes.rows[0].participants || [];
+      if (!participants.includes(senderId)) {
+        return res.status(403).json({ error: "Access denied. You are not a participant in this conversation." });
+      }
+    }
+
     const fileUrl = attachments[0]?.url || attachments[0]?.fileUrl || null;
 
     const id = "dm_msg_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
@@ -426,3 +473,4 @@ export const sendDirectMessage = async (req, res) => {
     res.status(500).json({ error: "Failed to send direct message." });
   }
 };
+

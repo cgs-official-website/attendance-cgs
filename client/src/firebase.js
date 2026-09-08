@@ -598,9 +598,9 @@ export const subscribeToProjects = (companyId, callback) => {
   let isMounted = true;
   const fetchProjects = () => {
     apiFetch(`/projects?companyId=${companyId || ""}`).then(data => {
-      if (isMounted) callback(Array.isArray(data) ? data : []);
-    }).catch(() => {
-      if (isMounted) callback([]);
+      if (isMounted) callback(Array.isArray(data) ? data : [], null);
+    }).catch((err) => {
+      if (isMounted) callback([], err);
     });
   };
   fetchProjects();

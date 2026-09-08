@@ -5,16 +5,17 @@ import {
   deletePayroll,
   wipeAllPayrolls
 } from "../controllers/payrollController.js";
-import { authenticateToken } from "../middlewares/auth.js";
+import { authenticateToken, requireAdmin } from "../middlewares/auth.js";
 
 const router = express.Router();
 
 router.use(authenticateToken);
 router.get("/", getPayroll);
-router.post("/", savePayroll);
-router.delete("/all", wipeAllPayrolls);
-router.delete("/:id", deletePayroll);
-router.delete("/", deletePayroll);
+router.post("/", requireAdmin, savePayroll);
+router.delete("/all", requireAdmin, wipeAllPayrolls);
+router.delete("/:id", requireAdmin, deletePayroll);
+router.delete("/", requireAdmin, deletePayroll);
 
 export default router;
+
 

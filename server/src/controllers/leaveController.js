@@ -4,7 +4,8 @@ import { sendLeaveRequestNotification, sendLeaveStatusEmail } from "../services/
 export const getLeaveRequests = async (req, res) => {
   try {
     const { companyId, userId, status } = req.query;
-    const targetCompanyId = companyId || req.user?.companyId;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     let sql = `
       SELECT l.*, l.id as "_id", u.name as user_name, u.name as "userName", u.email as user_email, u.department as "userDept", u.department
@@ -33,6 +34,7 @@ export const getLeaveRequests = async (req, res) => {
     }
 
     sql += " ORDER BY l.applied_at DESC NULLS LAST LIMIT 500";
+
     const result = await query(sql, params);
     
     // Camelcase and comprehensive mapping for frontend
@@ -184,9 +186,16 @@ export const updateLeaveStatus = async (req, res) => {
     const { id } = req.params;
     const { status, rejectionReason, managerComment } = req.body;
     const reviewerId = req.user?.id || null;
+    const callerRole = req.user?.role?.toLowerCase();
+    const isManagerOrAdmin = callerRole === "admin" || callerRole === "superadmin" || callerRole === "manager" || callerRole === "system admin";
 
     if (!["approved", "rejected", "cancelled", "pending"].includes(status)) {
       return res.status(400).json({ error: "Invalid status." });
+    }
+
+    // Only managers/admins can approve or reject leaves
+    if ((status === "approved" || status === "rejected") && !isManagerOrAdmin) {
+      return res.status(403).json({ error: "Access forbidden. Manager or Admin role required to approve/reject leaves." });
     }
 
     const result = await query(
@@ -200,6 +209,7 @@ export const updateLeaveStatus = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Leave request not found." });
     }
+
 
     const updatedLeave = result.rows[0];
 

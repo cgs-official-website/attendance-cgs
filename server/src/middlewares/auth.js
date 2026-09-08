@@ -7,29 +7,11 @@ export const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    // If query contains companyId or userId, allow fallback
-    if (req.query?.companyId || req.body?.companyId) {
-      req.user = {
-        id: req.query?.userId || req.body?.userId || "user",
-        companyId: req.query?.companyId || req.body?.companyId,
-        role: "admin"
-      };
-      return next();
-    }
     return res.status(401).json({ error: "Access denied. No token provided." });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      // In non-strict mode, if companyId exists, continue
-      if (req.query?.companyId || req.body?.companyId) {
-        req.user = {
-          id: req.query?.userId || req.body?.userId || "user",
-          companyId: req.query?.companyId || req.body?.companyId,
-          role: "admin"
-        };
-        return next();
-      }
       return res.status(403).json({ error: "Invalid or expired token." });
     }
     req.user = user;
@@ -66,6 +48,35 @@ export const requireAdmin = (req, res, next) => {
   next();
 };
 
+export const requireManagerOrAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Authentication required." });
+  }
+
+  const role = req.user.role?.toLowerCase();
+  const isAllowed = role === "admin" || role === "superadmin" || role === "system admin" || role === "manager";
+
+  if (!isAllowed) {
+    return res.status(403).json({ error: "Access forbidden. Manager or Admin role required." });
+  }
+
+  next();
+};
+
+export const requireSuperAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Authentication required." });
+  }
+
+  const role = req.user.role?.toLowerCase();
+  if (role !== "superadmin") {
+    return res.status(403).json({ error: "Access forbidden. Superadmin role required." });
+  }
+
+  next();
+};
+
 export const generateToken = (payload) => {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" });
 };
+

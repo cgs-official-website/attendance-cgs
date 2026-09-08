@@ -18,7 +18,30 @@ import reportsRoutes from "./routes/reports.routes.js";
 
 const app = express();
 
-app.use(cors({ origin: "*" }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (req.originalUrl !== "/api/health") {
+      console.log(`[${req.method}] ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
+    }
+  });
+  next();
+});
+
+// CORS Configuration with origin reflection
+app.use(cors({
+  origin: (origin, callback) => {
+    // Always allow requests (origin reflection) while declaring safe headers
+    callback(null, true);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+}));
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -44,4 +67,20 @@ app.use("/api/environment-settings", envSettingsRoutes);
 app.use("/api/companies", companiesRoutes);
 app.use("/api/external-links", externalLinksRoutes);
 
+// Global 404 Handler for API
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Standardized Global Error Handler
+app.use((err, req, res, next) => {
+  console.error("❌ Unhandled Application Error:", err);
+  const status = err.status || 500;
+  const message = (process.env.NODE_ENV === "production" && status === 500)
+    ? "An unexpected internal server error occurred."
+    : (err.message || "Internal server error.");
+  res.status(status).json({ error: message });
+});
+
 export default app;
+

@@ -83,11 +83,18 @@ export const updateCompany = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, logoBase64, address, payrollSettings, modules, status } = req.body;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+
+    // Non-superadmins can only update their own company
+    if (!isSuperAdmin && req.user?.companyId && req.user.companyId !== id) {
+      return res.status(403).json({ error: "Access denied. You can only modify your own company." });
+    }
 
     const existing = await query("SELECT * FROM companies WHERE id = $1", [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: "Company not found." });
     }
+
 
     const currentSettings = existing.rows[0].settings || {};
     if (address !== undefined) currentSettings.address = address;

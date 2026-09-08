@@ -12,5 +12,7 @@ router.use(authenticateToken);
 router.get("/", getRegularizationRequests);
 router.post("/", createRegularizationRequest);
 router.patch("/:id", updateRegularizationStatus);
+router.patch("/:id/status", updateRegularizationStatus);
 
 export default router;
+

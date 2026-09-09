@@ -222,21 +222,34 @@ export default function UserDashboard() {
 
   const toastShownRef = useRef(false);
 
+  const isCheckedIn = !!(todayLog && (
+    todayLog.status === "checked-in" || 
+    todayLog.status === "in-progress" || 
+    todayLog.status === "present" || 
+    (todayLog.check_in && !todayLog.check_out)
+  ));
+  const isCheckedOut = !!(todayLog && (
+    todayLog.status === "checked-out" || 
+    todayLog.status === "completed" || 
+    !!todayLog.check_out
+  ));
+  const isOnBreak = !!(todayLog && todayLog.status === "on-break");
+
   const getElapsedWorkingMs = () => {
     if (!todayLog) return 0;
     
     // If today is checked out and totalWorkingMinutes is calculated
-    if (todayLog.status === "checked-out" && todayLog.totalWorkingMinutes !== undefined) {
+    if (isCheckedOut && todayLog.totalWorkingMinutes !== undefined) {
       return (todayLog.totalWorkingMinutes || 0) * 60 * 1000;
     }
 
     const accumulatedMs = (todayLog.accumulatedWorkingMinutes || 0) * 60 * 1000;
 
-    const activeCheckIn = todayLog.lastCheckInTime || todayLog.checkInTime;
+    const activeCheckIn = todayLog.lastCheckInTime || todayLog.checkInTime || todayLog.check_in;
     if (!activeCheckIn) return accumulatedMs;
 
     const checkInDate = new Date(activeCheckIn);
-    const checkOutDate = todayLog.checkOutTime ? new Date(todayLog.checkOutTime) : currentTime;
+    const checkOutDate = (todayLog.checkOutTime || todayLog.check_out) ? new Date(todayLog.checkOutTime || todayLog.check_out) : currentTime;
     
     const sessionElapsedMs = checkOutDate.getTime() - checkInDate.getTime();
     
@@ -249,7 +262,7 @@ export default function UserDashboard() {
       activeBreaks.forEach(b => {
         if (b.startTime) {
           const start = new Date(b.startTime);
-          const resume = b.resumeTime ? new Date(b.resumeTime) : (todayLog.checkOutTime ? new Date(todayLog.checkOutTime) : currentTime);
+          const resume = b.resumeTime ? new Date(b.resumeTime) : ((todayLog.checkOutTime || todayLog.check_out) ? new Date(todayLog.checkOutTime || todayLog.check_out) : currentTime);
           breakMs += (resume.getTime() - start.getTime());
         }
       });
@@ -275,6 +288,7 @@ export default function UserDashboard() {
   };
 
   const isWithinShiftHours = () => {
+    if (!envConfig?.enforceShiftTiming) return true;
     if (!currentUser.shiftStart || !currentUser.shiftEnd) return true;
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -297,7 +311,7 @@ export default function UserDashboard() {
   const isForgotToCheckIn = (() => {
     if (loading) return false;
     if (currentUser.role === "admin") return false;
-    if (todayLog) return false;
+    if (todayLog || isCheckedIn || isCheckedOut) return false;
     
     // Check if today is a weekday
     const day = currentTime.getDay();
@@ -370,7 +384,14 @@ export default function UserDashboard() {
     const unsubscribe = subscribeToUserLogs(currentUser.uid, (logs) => {
       setUserLogs(logs);
       const todayStr = getLocalDateString();
-      const today = logs.find(log => log.date === todayStr);
+      const today = logs.find(log => {
+        if (!log) return false;
+        const logDateStr = typeof log.date === "string" ? log.date.split("T")[0] : "";
+        if (logDateStr === todayStr) return true;
+        if (log.id && log.id === `${currentUser.uid}_${todayStr}`) return true;
+        if (log.check_in && new Date(log.check_in).toDateString() === new Date().toDateString()) return true;
+        return false;
+      });
       setTodayLog(today || null);
       setLoading(false);
     });
@@ -533,7 +554,10 @@ export default function UserDashboard() {
         const lon = position.coords.longitude;
         let locationName = "";
         try {
-          locationName = await resolveLocationName(lat, lon);
+          locationName = await Promise.race([
+            resolveLocationName(lat, lon),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("reverse geocode timeout")), 2000))
+          ]);
         } catch (e) {
           locationName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
         }
@@ -556,7 +580,7 @@ export default function UserDashboard() {
               (err2) => {
                 reject(new Error("Could not fetch GPS coordinates. Please ensure location is enabled."));
               },
-              { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+              { enableHighAccuracy: false, timeout: 6000, maximumAge: 0 }
             );
           } else {
             let msg = "Could not fetch active GPS coordinates. Please ensure location is enabled.";
@@ -566,7 +590,7 @@ export default function UserDashboard() {
             reject(new Error(msg));
           }
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
       );
     });
   };
@@ -598,10 +622,24 @@ export default function UserDashboard() {
         }
       }
 
-      showToast("Fetching precise GPS location...", "info", 1500);
-      const location = await getFreshLocation();
+      showToast("Fetching location...", "info", 1500);
+      let location = null;
+      try {
+        location = await getFreshLocation();
+      } catch (locErr) {
+        console.warn("GPS fetch error:", locErr);
+        if (geoConfig?.enabled && !currentUser?.allowManualCheckIn) {
+          throw locErr;
+        }
+        location = {
+          latitude: null,
+          longitude: null,
+          accuracy: null,
+          locationName: "Office / Remote (Location unavailable)"
+        };
+      }
 
-      if (geoConfig?.enabled && !currentUser?.allowManualCheckIn) {
+      if (geoConfig?.enabled && !currentUser?.allowManualCheckIn && location.latitude && location.longitude) {
         if (geoConfig.type === "polygon" && Array.isArray(geoConfig.polygonCoords) && geoConfig.polygonCoords.length > 2) {
           const inside = isPointInPolygon(location, geoConfig.polygonCoords);
           if (!inside) {
@@ -618,7 +656,10 @@ export default function UserDashboard() {
         }
       }
 
-      await checkIn(currentUser, location);
+      const res = await checkIn(currentUser, location);
+      if (res) {
+        setTodayLog(res);
+      }
       showToast("Checked in successfully! Have a great workday.", "success");
     } catch (err) {
       showToast(err.message || "Failed to check in.", "error");
@@ -635,9 +676,17 @@ export default function UserDashboard() {
     setShowCheckoutConfirm(false);
     setActionLoading(true);
     try {
-      showToast("Fetching precise GPS location...", "info", 1500);
-      const location = await getFreshLocation();
-      await checkOut(currentUser.uid, location);
+      showToast("Fetching location...", "info", 1500);
+      let location = null;
+      try {
+        location = await getFreshLocation();
+      } catch (locErr) {
+        location = { latitude: null, longitude: null, locationName: "Office / Remote" };
+      }
+      const res = await checkOut(currentUser.uid, location);
+      if (res) {
+        setTodayLog(res);
+      }
       showToast("Checked out successfully! See you tomorrow.", "success");
     } catch (err) {
       showToast(err.message || "Failed to check out.", "error");
@@ -1979,7 +2028,7 @@ export default function UserDashboard() {
           </div>
 
           {/* Top check in Shortcut */}
-          {!todayLog ? (
+          {!isCheckedIn && !isCheckedOut && !isOnBreak ? (
             isWithinShiftHours() ? (
               <button
                 onClick={handleCheckIn}
@@ -1990,7 +2039,7 @@ export default function UserDashboard() {
                 <span>check in</span>
               </button>
             ) : null
-          ) : todayLog.status === "checked-in" ? (
+          ) : isCheckedIn ? (
             <div className="flex items-center gap-3">
               <span className="text-xs font-mono font-bold text-brand-primary bg-brand-primary/10 px-2.5 py-1.5 rounded-[8px] animate-pulse">
                 {formatDuration(getElapsedWorkingMs())}
@@ -2006,7 +2055,7 @@ export default function UserDashboard() {
             </div>
           ) : (
             <span className="text-xs font-bold text-text-mut px-3 py-2 bg-bg-base rounded-[10px] flex items-center gap-2">
-              <span>{todayLog.status === "on-break" ? "On Break" : "Shift Ended"}</span>
+              <span>{isOnBreak ? "On Break" : "Shift Ended"}</span>
               <span className="text-[10px] font-mono text-text-sec bg-bg-card border border-border-card px-2 py-0.5 rounded">
                 {formatDuration(getElapsedWorkingMs())}
               </span>
@@ -2020,35 +2069,29 @@ export default function UserDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
             <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-              !todayLog ? "bg-slate-400" :
-              todayLog.status === "checked-in" ? "bg-brand-success animate-pulse" :
-              todayLog.status === "on-break" ? "bg-brand-warning animate-pulse" :
+              !isCheckedIn && !isCheckedOut && !isOnBreak ? "bg-slate-400" :
+              isCheckedIn ? "bg-brand-success animate-pulse" :
+              isOnBreak ? "bg-brand-warning animate-pulse" :
               "bg-brand-primary"
             }`} />
             <span className="text-sm font-extrabold text-text-main">
-              {!todayLog ? "Not Checked In" :
-               todayLog.status === "checked-in" ? "Currently Working" :
-               todayLog.status === "on-break" ? "On Break" :
-               "Shift Completed"}
+              {!isCheckedIn && !isCheckedOut && !isOnBreak ? "Not Checked In" :
+               isCheckedIn ? "Active Shift" :
+               isOnBreak ? "On Break" : "Shift Completed"}
             </span>
-            <span className="text-[10px] font-bold text-text-mut bg-bg-base border border-border-card px-2 py-0.5 rounded-full ml-1">
-              {shiftProgressPercent}% of shift
+            <span className="text-xs text-text-mut font-semibold">
+              ({shiftProgressPercent}% of shift)
             </span>
           </div>
-          <div className="flex items-center gap-4 text-xs font-semibold text-text-sec">
-            <span className="flex items-center gap-1">
-              <Clock size={12} className="text-brand-primary" />
-              <span className="font-bold text-text-main">{getActiveHoursText()}</span>
-              <span>/ {(getShiftDurationMinutes() / 60).toFixed(1)} hrs target</span>
-            </span>
+          <div className="flex items-center gap-3 text-xs font-mono font-bold text-text-sec">
             {todayLog?.checkInTime && (
-              <span className="hidden sm:flex items-center gap-1">
+              <span className="flex items-center gap-1">
                 <Play size={10} className="text-brand-success" fill="currentColor" />
                 In: {new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
             {todayLog?.checkOutTime && (
-              <span className="hidden sm:flex items-center gap-1">
+              <span className="flex items-center gap-1">
                 <Square size={10} className="text-brand-danger" fill="currentColor" />
                 Out: {new Date(todayLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -2061,14 +2104,14 @@ export default function UserDashboard() {
           <div
             className={`h-full rounded-full transition-all duration-700 ease-in-out relative overflow-hidden ${
               shiftProgressPercent >= 100 ? "bg-brand-success" :
-              todayLog?.status === "on-break" ? "bg-brand-warning" :
-              todayLog?.status === "checked-in" ? "bg-brand-primary" :
+              isOnBreak ? "bg-brand-warning" :
+              isCheckedIn ? "bg-brand-primary" :
               "bg-slate-400"
             }`}
             style={{ width: `${Math.max(shiftProgressPercent > 0 ? 2 : 0, shiftProgressPercent)}%` }}
           >
             {/* Shimmer animation for active shift */}
-            {todayLog?.status === "checked-in" && (
+            {isCheckedIn && (
               <span
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                 style={{ animation: "shimmer 2s infinite" }}
@@ -2094,7 +2137,7 @@ export default function UserDashboard() {
           {/* Card 1: Shift Control / Active Action Panel */}
           <div className="bg-bg-card border border-border-card rounded-[24px] p-6 lg:p-8 shadow-sm flex flex-col justify-center items-center min-h-[280px]">
             {/* Action State: 1. NOT CHECKED IN AND SHIFT NOT ACTIVE */}
-            {!todayLog && !isWithinShiftHours() && (
+            {!isCheckedIn && !isCheckedOut && !isOnBreak && !isWithinShiftHours() && (
               <div className="text-center max-w-md p-4">
                 <div className="w-16 h-16 rounded-full bg-brand-warning/10 text-brand-warning flex items-center justify-center mx-auto mb-5">
                   <Clock size={28} />
@@ -2110,7 +2153,7 @@ export default function UserDashboard() {
             )}
 
             {/* Action State: 2. NOT CHECKED IN AND SHIFT IS ACTIVE */}
-            {!todayLog && isWithinShiftHours() && (
+            {!isCheckedIn && !isCheckedOut && !isOnBreak && isWithinShiftHours() && (
               <div className="text-center max-w-md p-4">
                 <div className="w-16 h-16 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center mx-auto mb-5 animate-pulse">
                   <Play size={24} fill="currentColor" className="ml-1" />
@@ -2121,7 +2164,7 @@ export default function UserDashboard() {
                 </p>
                 <button
                   onClick={handleCheckIn}
-                  disabled={actionLoading || fetchingGps || !!gpsError}
+                  disabled={actionLoading || fetchingGps}
                   className="px-8 py-3.5 bg-brand-primary hover:bg-brand-hover text-white font-extrabold text-sm rounded-[14px] flex items-center gap-2 mx-auto shadow-md shadow-brand-primary/15 transition-all cursor-pointer"
                 >
                   <Play size={16} fill="#fff" />
@@ -2131,12 +2174,11 @@ export default function UserDashboard() {
             )}
 
             {/* Action State: 3. WORKING / CHECKED-IN */}
-            {todayLog && todayLog.status === "checked-in" && (() => {
+            {isCheckedIn && (() => {
               const shortBalMin = Math.max(0, Math.round(shortBreakBalance / 60));
               const longBalMin = Math.max(0, Math.round(longBreakBalance / 60));
               const bioBalMin = Math.max(0, Math.round(bioBreakBalance / 60));
 
-              
   const handleDownloadPayslip = () => {
     const element = document.getElementById('payslip-content');
     const opt = {
@@ -2215,7 +2257,7 @@ export default function UserDashboard() {
             })()}
 
             {/* Action State: 4. ON BREAK */}
-            {todayLog && todayLog.status === "on-break" && (
+            {isOnBreak && (
               <div className="w-full text-center p-2">
                 <div className="w-16 h-16 rounded-full bg-brand-warning/10 text-brand-warning flex items-center justify-center mx-auto mb-5 animate-spin duration-[4000ms]">
                   <Coffee size={28} />
@@ -2259,14 +2301,14 @@ export default function UserDashboard() {
             )}
 
             {/* Action State: 5. CHECKED OUT */}
-            {todayLog && todayLog.status === "checked-out" && (
+            {isCheckedOut && (
               <div className="text-center p-4 w-full">
                 <div className="w-16 h-16 rounded-full bg-brand-success/10 text-brand-success flex items-center justify-center mx-auto mb-5">
                   <CheckCircle size={28} />
                 </div>
                 <h3 className="text-xl font-bold text-text-main mb-1.5">Shift Completed / Checked Out</h3>
                 <p className="text-sm text-text-sec mb-4">
-                  You checked out today at <strong className="text-text-main">{new Date(todayLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
+                  You checked out today at <strong className="text-text-main">{new Date(todayLog?.checkOutTime || todayLog?.check_out || currentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
                 </p>
 
                 {/* Frozen Digital Clock Shift Duration */}
@@ -2281,7 +2323,7 @@ export default function UserDashboard() {
 
                 <div className="inline-flex py-2 px-4 bg-brand-success/5 border border-brand-success/20 rounded-[12px] text-xs font-bold text-brand-success gap-1.5 uppercase tracking-wide mb-5">
                   <span>Logged:</span>
-                  <strong>{((todayLog.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs</strong>
+                  <strong>{((todayLog?.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs</strong>
                 </div>
 
                 {/* Re-check-in CTA */}
@@ -2289,7 +2331,7 @@ export default function UserDashboard() {
                   <p className="text-xs text-text-sec mb-3">Need to continue working today? You can check in again anytime.</p>
                   <button
                     onClick={handleCheckIn}
-                    disabled={actionLoading || fetchingGps || !!gpsError}
+                    disabled={actionLoading || fetchingGps}
                     className="px-8 py-3 bg-brand-primary hover:bg-brand-hover text-white font-extrabold text-xs rounded-[14px] flex items-center justify-center gap-2 mx-auto shadow-md shadow-brand-primary/15 transition-all cursor-pointer"
                   >
                     <Play size={14} fill="#fff" />

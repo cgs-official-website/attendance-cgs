@@ -543,7 +543,10 @@ export default function DashboardLayout({ children }) {
           const lon = pos.coords.longitude;
           let locationName = "";
           try {
-            locationName = await resolveLocationName(lat, lon);
+            locationName = await Promise.race([
+              resolveLocationName(lat, lon),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000))
+            ]);
           } catch (e) {
             locationName = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
           }
@@ -554,8 +557,15 @@ export default function DashboardLayout({ children }) {
             locationName: locationName || `${lat.toFixed(4)}, ${lon.toFixed(4)}`
           });
         },
-        (err) => reject(new Error("Failed to fetch GPS coordinates. Please enable location services.")),
-        { enableHighAccuracy: true, timeout: 8000 }
+        (err) => {
+          resolve({
+            latitude: null,
+            longitude: null,
+            accuracy: null,
+            locationName: "Office / Remote (Location unavailable)"
+          });
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
       );
     });
   };

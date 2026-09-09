@@ -19,19 +19,20 @@ export const apiFetch = async (endpoint, options = {}) => {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
-  // Determine candidate URLs
+  // Determine candidate URLs (prioritize direct production backend over static origins)
   const candidateUrls = [];
   if (isLocal) {
     candidateUrls.push(`http://localhost:5005/api${cleanEndpoint}`);
     candidateUrls.push(`${LOCAL_API_URL}${cleanEndpoint}`);
-  } else if (typeof window !== "undefined" && window.location.origin) {
-    candidateUrls.push(`${window.location.origin}/api${cleanEndpoint}`);
   }
   if (import.meta.env.VITE_API_URL) {
     const envBase = import.meta.env.VITE_API_URL.replace(/\/+$/, "");
     candidateUrls.push(`${envBase}${cleanEndpoint}`);
   }
   candidateUrls.push(`${PRODUCTION_API_URL}${cleanEndpoint}`);
+  if (!isLocal && typeof window !== "undefined" && window.location.origin) {
+    candidateUrls.push(`${window.location.origin}/api${cleanEndpoint}`);
+  }
 
   // Remove duplicates
   const uniqueUrls = [...new Set(candidateUrls)];
@@ -47,6 +48,14 @@ export const apiFetch = async (endpoint, options = {}) => {
           ...(options.headers || {})
         }
       });
+
+      const contentType = response.headers.get("content-type") || "";
+
+      // If server returned HTML (e.g. SPA fallback index.html for unhandled /api route) or 405 Method Not Allowed,
+      // this server doesn't host the real API; continue to the next candidate server.
+      if (response.status === 405 || (!contentType.includes("application/json") && response.ok)) {
+        continue;
+      }
 
       if (response.ok) {
         return await response.json();
@@ -303,16 +312,22 @@ export const deleteUserRecord = async (uid) => {
 // ----------------------------------------------------
 
 export const checkIn = async (userId, location = {}) => {
+  const uid = typeof userId === "object" && userId !== null ? (userId.uid || userId.id) : userId;
+  const companyId = typeof userId === "object" && userId !== null ? userId.companyId : undefined;
+  const date = getLocalDateString();
   return apiFetch("/attendance/check-in", {
     method: "POST",
-    body: JSON.stringify({ userId, location })
+    body: JSON.stringify({ userId: uid, companyId, date, location })
   });
 };
 
 export const checkOut = async (userId, location = {}) => {
+  const uid = typeof userId === "object" && userId !== null ? (userId.uid || userId.id) : userId;
+  const companyId = typeof userId === "object" && userId !== null ? userId.companyId : undefined;
+  const date = getLocalDateString();
   return apiFetch("/attendance/check-out", {
     method: "POST",
-    body: JSON.stringify({ userId, location })
+    body: JSON.stringify({ userId: uid, companyId, date, location })
   });
 };
 

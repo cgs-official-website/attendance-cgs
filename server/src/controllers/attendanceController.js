@@ -7,7 +7,7 @@ export const getAttendance = async (req, res) => {
     const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
     let sql = `
-      SELECT a.*, a.id as "_id", u.name as user_name, u.name as "userName",
+      SELECT a.*, a.date::text as date_str, a.id as "_id", u.name as user_name, u.name as "userName",
              u.email as user_email, u.department as "userDept", u.department
       FROM attendance a
       LEFT JOIN users u ON a.user_id = u.id
@@ -51,18 +51,31 @@ export const getAttendance = async (req, res) => {
       const formatTime = (d) => d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : "";
       
       const durationHours = row.duration_minutes ? (row.duration_minutes / 60).toFixed(1) : (row.check_out ? "0.0" : "Live");
+      const dateStr = row.date_str || (row.date instanceof Date ? row.date.toISOString().split("T")[0] : (row.date ? String(row.date).split("T")[0] : ""));
+
+      let frontendStatus = "not-checked-in";
+      if (row.check_out) {
+        frontendStatus = "checked-out";
+      } else if (Array.isArray(row.breaks) && row.breaks.some(b => !b.end)) {
+        frontendStatus = "on-break";
+      } else if (row.check_in) {
+        frontendStatus = "checked-in";
+      }
 
       return {
         ...row,
         id: row.id,
         userId: row.user_id,
         companyId: row.company_id,
+        date: dateStr,
         checkIn: formatTime(checkInDate),
         checkOut: formatTime(checkOutDate),
+        checkInTime: row.check_in,
+        checkOutTime: row.check_out,
         checkInLocation: row.check_in_location || row.location,
         checkOutLocation: row.check_out_location,
         totalHours: durationHours,
-        status: row.check_out ? "completed" : (row.check_in ? "in-progress" : row.status)
+        status: frontendStatus
       };
     });
 
@@ -75,9 +88,12 @@ export const getAttendance = async (req, res) => {
 
 export const checkIn = async (req, res) => {
   try {
-    const userId = req.user?.id || req.body.userId;
-    const companyId = req.user?.companyId || req.body.companyId;
-    const today = new Date().toISOString().split("T")[0];
+    let userId = req.user?.id || req.body.userId;
+    if (typeof userId === "object" && userId !== null) {
+      userId = userId.uid || userId.id;
+    }
+    const companyId = req.user?.companyId || req.body.companyId || req.body.userId?.companyId;
+    const today = req.body.date || new Date().toISOString().split("T")[0];
     const now = new Date().toISOString();
     const { location, workMode = "office" } = req.body;
 
@@ -93,7 +109,21 @@ export const checkIn = async (req, res) => {
       [recordId, userId, companyId, today, now, workMode, JSON.stringify(location || {})]
     );
 
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    const checkInDate = row.check_in ? new Date(row.check_in) : new Date();
+    const formatTime = (d) => d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : "";
+
+    res.json({
+      ...row,
+      id: row.id,
+      userId: row.user_id,
+      companyId: row.company_id,
+      date: today,
+      checkIn: formatTime(checkInDate),
+      checkInTime: row.check_in || now,
+      checkInLocation: row.check_in_location || row.location,
+      status: "checked-in"
+    });
   } catch (err) {
     console.error("checkIn error:", err);
     res.status(500).json({ error: "Check-in failed." });
@@ -102,8 +132,11 @@ export const checkIn = async (req, res) => {
 
 export const checkOut = async (req, res) => {
   try {
-    const userId = req.user?.id || req.body.userId;
-    const today = new Date().toISOString().split("T")[0];
+    let userId = req.user?.id || req.body.userId;
+    if (typeof userId === "object" && userId !== null) {
+      userId = userId.uid || userId.id;
+    }
+    const today = req.body.date || new Date().toISOString().split("T")[0];
     const now = new Date().toISOString();
     const { location } = req.body;
 
@@ -129,7 +162,21 @@ export const checkOut = async (req, res) => {
       return res.status(404).json({ error: "No check-in found for today." });
     }
 
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    const checkOutDate = row.check_out ? new Date(row.check_out) : new Date();
+    const formatTime = (d) => d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : "";
+
+    res.json({
+      ...row,
+      id: row.id,
+      userId: row.user_id,
+      companyId: row.company_id,
+      date: today,
+      checkOut: formatTime(checkOutDate),
+      checkOutTime: row.check_out || now,
+      totalWorkingMinutes: durationMinutes,
+      status: "checked-out"
+    });
   } catch (err) {
     console.error("checkOut error:", err);
     res.status(500).json({ error: "Check-out failed." });

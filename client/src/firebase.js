@@ -760,7 +760,7 @@ export const subscribeToTaskReports = (arg, callback) => {
     if (arg.userId) parts.push(`userId=${encodeURIComponent(arg.userId)}`);
     queryParam = parts.join("&");
   } else if (typeof arg === "string") {
-    if (arg.includes("carrezza") || arg.includes("comp_") || arg.length > 25) {
+    if (arg.includes("carrezza") || arg.startsWith("comp_")) {
       queryParam = `companyId=${encodeURIComponent(arg)}`;
     } else {
       queryParam = `taskId=${encodeURIComponent(arg)}`;

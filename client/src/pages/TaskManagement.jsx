@@ -214,6 +214,7 @@ export default function TaskManagement() {
   const handleMarkComplete = async (taskIdx, isComplete) => {
     let updatedTasks = [...tasks];
     updatedTasks[taskIdx].completed = isComplete;
+    setTasks(updatedTasks);
 
     try {
       await updateUserTasks(currentUser.uid, updatedTasks);

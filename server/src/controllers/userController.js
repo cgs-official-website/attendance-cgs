@@ -84,6 +84,40 @@ export const getUserById = async (req, res) => {
     const { password_hash, metadata = {}, ...u } = result.rows[0];
     const meta = metadata && typeof metadata === "object" ? metadata : {};
     const empId = u.employee_id || meta.employeeId || meta.employee_id || "";
+
+    // Merge tasks from metadata and tasks table
+    let tasksList = Array.isArray(meta.tasks) ? [...meta.tasks] : [];
+    const taskIds = new Set(tasksList.map(t => String(t.id)));
+
+    // Fetch tasks from tasks table assigned to this user
+    const dbTasks = await query(
+      "SELECT id, title, description, status, project_id, created_at, created_by FROM tasks WHERE assigned_to = $1",
+      [id]
+    ).catch(() => ({ rows: [] }));
+
+    for (const dbt of dbTasks.rows) {
+      const tid = String(dbt.id);
+      if (!taskIds.has(tid)) {
+        tasksList.push({
+          id: tid,
+          title: dbt.title,
+          description: dbt.description || "",
+          project: dbt.project_id || "",
+          completed: dbt.status === "completed" || dbt.status === "Completed",
+          status: dbt.status || "pending",
+          assignedAt: dbt.created_at,
+          assignedBy: dbt.created_by
+        });
+        taskIds.add(tid);
+      } else {
+        const existing = tasksList.find(t => String(t.id) === tid);
+        if (existing && dbt.status) {
+          if (dbt.status === "completed" || dbt.status === "Completed") existing.completed = true;
+          else if (dbt.status === "pending") existing.completed = false;
+        }
+      }
+    }
+
     res.json({
       ...u,
       ...meta,
@@ -94,7 +128,7 @@ export const getUserById = async (req, res) => {
       companyId: u.company_id,
       company_id: u.company_id,
       projects: Array.isArray(u.projects) && u.projects.length > 0 ? u.projects : (meta.projects || []),
-      tasks: Array.isArray(meta.tasks) ? meta.tasks : []
+      tasks: tasksList
     });
   } catch (err) {
     console.error("getUserById error:", err);
@@ -109,6 +143,7 @@ export const updateUser = async (req, res) => {
     const callerRole = req.user?.role?.toLowerCase();
     const isSuperAdmin = callerRole === "superadmin";
     const isAdmin = callerRole === "admin" || isSuperAdmin || callerRole === "system admin";
+    const isManager = isAdmin || callerRole === "manager" || callerRole === "project manager" || Boolean(req.user?.isProjectManager || req.user?.is_project_manager);
 
     // 1. Fetch target user to check tenant boundaries
     const targetCheck = await query("SELECT id, company_id, role FROM users WHERE id = $1", [id]);
@@ -122,8 +157,9 @@ export const updateUser = async (req, res) => {
       return res.status(403).json({ error: "Access denied. Cannot modify user from another organization." });
     }
 
-    // Non-admins can only update their own profile
-    if (!isAdmin && req.user?.id !== id) {
+    // Non-admins can only update their own profile, or managers can update tasks/projects for members in their company
+    const isTaskOrProjectUpdate = updates.tasks !== undefined || updates.projects !== undefined;
+    if (!isAdmin && req.user?.id !== id && !(isManager && isTaskOrProjectUpdate)) {
       return res.status(403).json({ error: "Access denied. You can only update your own profile." });
     }
 
@@ -173,6 +209,51 @@ export const updateUser = async (req, res) => {
       fields.push(`metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('tasks', $${idx}::jsonb)`);
       values.push(JSON.stringify(updates.tasks));
       idx++;
+
+      // Synchronize with PostgreSQL tasks table
+      try {
+        if (Array.isArray(updates.tasks)) {
+          const currentTaskIds = [];
+          for (const t of updates.tasks) {
+            if (!t || !t.id) continue;
+            const taskId = String(t.id);
+            currentTaskIds.push(taskId);
+            const status = t.completed ? "completed" : (t.status || "pending");
+            const title = t.title || "Untitled Task";
+            const desc = t.description || "";
+            const proj = t.project || t.projectId || null;
+            const targetCompany = targetUser.company_id || req.user?.companyId || "carrezza-global-solutions";
+            const assignedBy = t.assignedBy || req.user?.id || null;
+
+            await query(
+              `INSERT INTO tasks (id, company_id, title, description, assigned_to, project_id, status, created_by, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+               ON CONFLICT (id) DO UPDATE SET
+                 status = EXCLUDED.status,
+                 title = EXCLUDED.title,
+                 description = EXCLUDED.description,
+                 assigned_to = EXCLUDED.assigned_to,
+                 project_id = COALESCE(EXCLUDED.project_id, tasks.project_id),
+                 updated_at = CURRENT_TIMESTAMP`,
+              [taskId, targetCompany, title, desc, id, proj, status, assignedBy]
+            ).catch(() => {});
+          }
+
+          if (currentTaskIds.length > 0) {
+            await query(
+              "DELETE FROM tasks WHERE assigned_to = $1 AND NOT (id = ANY($2))",
+              [id, currentTaskIds]
+            ).catch(() => {});
+          } else {
+            await query(
+              "DELETE FROM tasks WHERE assigned_to = $1",
+              [id]
+            ).catch(() => {});
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Task table sync warning:", syncErr.message);
+      }
     }
 
     // Password update: either user self-updating, or admin

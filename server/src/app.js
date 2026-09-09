@@ -17,7 +17,7 @@ import externalLinksRoutes from "./routes/externalLinks.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 
 const app = express();
-
+app.set("trust proxy", 1);
 
 // Request logging middleware
 app.use((req, res, next) => {

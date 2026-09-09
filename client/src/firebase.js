@@ -734,13 +734,73 @@ export const updateTaskWarningSent = async (userId, taskId) => {
 
 export const subscribeToUserTasks = (userId, callback) => {
   let isMounted = true;
-  const fetchUserTasks = () => {
+  let lastValidTasks = null;
+
+  // Immediate initialize from cached current user if matching
+  try {
+    const cached = JSON.parse(localStorage.getItem("att_current_user") || "null");
+    if (cached && (cached.uid === userId || cached.id === userId) && Array.isArray(cached.tasks) && cached.tasks.length > 0) {
+      lastValidTasks = cached.tasks;
+      callback(lastValidTasks);
+    }
+  } catch {}
+
+  const fetchUserTasks = async () => {
     if (!userId) return;
-    apiFetch(`/users/${userId}`).then(user => {
-      if (isMounted) callback(Array.isArray(user?.tasks) ? user.tasks : []);
-    }).catch(() => {
-      if (isMounted) callback([]);
-    });
+    try {
+      let tasks = null;
+      // 1. Direct user fetch
+      try {
+        const user = await apiFetch(`/users/${userId}`);
+        if (user && Array.isArray(user.tasks)) {
+          tasks = user.tasks;
+        }
+      } catch (err) {
+        // Direct route may 404 during rollouts
+      }
+
+      // 2. Direct tasks endpoint
+      if (tasks === null) {
+        try {
+          const directTasks = await apiFetch(`/tasks?assignedTo=${userId}`);
+          if (Array.isArray(directTasks) && directTasks.length > 0) {
+            tasks = directTasks.map(dbt => ({
+              id: String(dbt.id),
+              title: dbt.title,
+              description: dbt.description || "",
+              project: dbt.project_id || "",
+              completed: dbt.status === "completed" || dbt.status === "Completed",
+              status: dbt.status || "pending",
+              assignedAt: dbt.created_at,
+              assignedBy: dbt.created_by
+            }));
+          }
+        } catch {}
+      }
+
+      // 3. Cached current user fallback
+      if (tasks === null) {
+        const cached = JSON.parse(localStorage.getItem("att_current_user") || "null");
+        if (cached && (cached.uid === userId || cached.id === userId) && Array.isArray(cached.tasks) && cached.tasks.length > 0) {
+          tasks = cached.tasks;
+        }
+      }
+
+      if (tasks !== null) {
+        lastValidTasks = tasks;
+        if (isMounted) callback(tasks);
+      } else if (lastValidTasks !== null) {
+        if (isMounted) callback(lastValidTasks);
+      } else {
+        if (isMounted) callback([]);
+      }
+    } catch {
+      if (lastValidTasks !== null) {
+        if (isMounted) callback(lastValidTasks);
+      } else if (isMounted) {
+        callback([]);
+      }
+    }
   };
   fetchUserTasks();
   const interval = setInterval(fetchUserTasks, 3000);

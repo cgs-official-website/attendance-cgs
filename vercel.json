@@ -1,7 +1,11 @@
 {
-  "buildCommand": "npm install --workspace=client @tailwindcss/oxide-linux-x64-gnu@4.3.0 @rolldown/binding-linux-x64-gnu@1.0.2 lightningcss-linux-x64-gnu@1.32.0 && npm run build --workspace=client",
+  "buildCommand": "npm install --workspace=server && npm install --workspace=client @tailwindcss/oxide-linux-x64-gnu@4.3.0 @rolldown/binding-linux-x64-gnu@1.0.2 lightningcss-linux-x64-gnu@1.32.0 && npm run build --workspace=client",
   "outputDirectory": "client/dist",
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

@@ -24,6 +24,8 @@ export const apiFetch = async (endpoint, options = {}) => {
   if (isLocal) {
     candidateUrls.push(`http://localhost:5005/api${cleanEndpoint}`);
     candidateUrls.push(`${LOCAL_API_URL}${cleanEndpoint}`);
+  } else if (typeof window !== "undefined" && window.location.origin) {
+    candidateUrls.push(`${window.location.origin}/api${cleanEndpoint}`);
   }
   if (import.meta.env.VITE_API_URL) {
     const envBase = import.meta.env.VITE_API_URL.replace(/\/+$/, "");
@@ -50,17 +52,18 @@ export const apiFetch = async (endpoint, options = {}) => {
         return await response.json();
       }
 
-      const err = await response.json().catch(() => ({ error: response.statusText }));
-      const errorMsg = err.error || err.message || `Request failed with status ${response.status}`;
-
-      // If it is an authoritative response (400, 401, 403, 404, 409, 500 from active local server), throw immediately
-      if (response.status < 500 || isLocal) {
-        throw new Error(errorMsg);
+      // If unauthorized (401) or forbidden (403), throw immediately - user needs login/permissions
+      if (response.status === 401 || response.status === 403) {
+        const err = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(err.error || err.message || `Access denied (${response.status})`);
       }
 
+      // If 404 (route missing on this candidate server) or 5xx, capture error and try next candidate server
+      const err = await response.json().catch(() => ({ error: response.statusText }));
+      const errorMsg = err.error || err.message || `Request failed with status ${response.status}`;
       lastError = new Error(errorMsg);
     } catch (err) {
-      if (err.message && !err.message.includes("Failed to fetch") && !err.message.includes("NetworkError") && !err.message.includes("fetch failed")) {
+      if (err.message && (err.message.includes("Access denied") || err.message.includes("Invalid credentials") || err.message.includes("Invalid password"))) {
         throw err;
       }
       lastError = err;

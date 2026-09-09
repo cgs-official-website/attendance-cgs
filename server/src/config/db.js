@@ -10,11 +10,12 @@ dotenv.config();
 
 const { Pool } = pg;
 
+const DEFAULT_DB_URL = "postgresql://postgres:wbmoHIZoKMKVvFhmAHgDYLUdVhZCcTzq@kodama.proxy.rlwy.net:52896/railway";
+const activeDbUrl = process.env.DATABASE_URL || DEFAULT_DB_URL;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" || process.env.DATABASE_URL?.includes("railway.app") 
-    ? { rejectUnauthorized: false } 
-    : false
+  connectionString: activeDbUrl,
+  ssl: { rejectUnauthorized: false }
 });
 
 pool.on("connect", () => {

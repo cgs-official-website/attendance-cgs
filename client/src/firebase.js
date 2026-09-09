@@ -1026,7 +1026,43 @@ export const unpinChatMessage = async (messageId) => {
 
 export const pinChatThread = async () => true;
 export const unpinChatThread = async () => true;
-export const markThreadAsRead = async () => true;
+export const markThreadAsRead = async (userId, threadId) => {
+  if (!userId || !threadId) return true;
+  const now = new Date().toISOString();
+
+  // 1. Update local storage immediately for instant UI badge disappearance
+  try {
+    const raw = localStorage.getItem("att_current_user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      if (!u.teamHubReadReceipts) u.teamHubReadReceipts = {};
+      u.teamHubReadReceipts[threadId] = now;
+      localStorage.setItem("att_current_user", JSON.stringify(u));
+    }
+
+    const dedicatedKey = `teamhub_read_receipts_${userId}`;
+    const dedicatedMap = JSON.parse(localStorage.getItem(dedicatedKey) || "{}");
+    dedicatedMap[threadId] = now;
+    localStorage.setItem(dedicatedKey, JSON.stringify(dedicatedMap));
+
+    // Notify listeners (DashboardLayout, TeamHub) to recalculate unread counts
+    window.dispatchEvent(new Event("local-auth-updated"));
+  } catch (e) {
+    console.error("Local read receipt update error:", e);
+  }
+
+  // 2. Persist to server
+  try {
+    await apiFetch("/chat/read-receipt", {
+      method: "POST",
+      body: JSON.stringify({ userId, threadId, readAt: now })
+    }).catch(() => {});
+  } catch (err) {
+    // Non-blocking
+  }
+
+  return true;
+};
 export const deleteChatMessageForMe = async (messageId, userId) => {
   return apiFetch(`/chat/messages/${messageId}`, {
     method: "DELETE",

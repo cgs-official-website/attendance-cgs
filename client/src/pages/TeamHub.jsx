@@ -1538,6 +1538,19 @@ export default function TeamHub() {
   const [showViewMembers, setShowViewMembers] = useState(false);
   const [showChatSearch, setShowChatSearch] = useState(false);
   const [allMessages, setAllMessages]     = useState([]);
+  const [readReceiptsVersion, setReadReceiptsVersion] = useState(0);
+
+  useEffect(() => {
+    const handleReceiptUpdate = () => setReadReceiptsVersion(v => v + 1);
+    window.addEventListener("local-auth-updated", handleReceiptUpdate);
+    return () => window.removeEventListener("local-auth-updated", handleReceiptUpdate);
+  }, []);
+
+  useEffect(() => {
+    if (activeThread?.id && currentUser?.uid) {
+      markThreadAsRead(currentUser.uid, activeThread.id);
+    }
+  }, [activeThread?.id, currentUser?.uid]);
 
   // Helper to check if a thread is pinned for the current user
   const isThreadPinned = useCallback((threadId) => {
@@ -1594,13 +1607,21 @@ export default function TeamHub() {
 
   // Compute unread count helper
   const getUnreadCount = useCallback((threadId) => {
-    const receipts = currentUser?.teamHubReadReceipts || {};
+    if (!threadId || activeThread?.id === threadId) return 0;
+    let receipts = currentUser?.teamHubReadReceipts || {};
+    try {
+      const dedicated = JSON.parse(localStorage.getItem(`teamhub_read_receipts_${currentUser?.uid}`) || "{}");
+      receipts = { ...receipts, ...dedicated };
+    } catch (e) {}
+
     const lastRead = receipts[threadId] || "1970-01-01T00:00:00.000Z";
     
     return allMessages.filter(
-      m => m.threadId === threadId && m.senderId !== currentUser?.uid && new Date(m.timestamp) > new Date(lastRead)
+      m => (m.threadId === threadId || m.channelId === threadId) && 
+           m.senderId !== currentUser?.uid && 
+           new Date(m.timestamp) > new Date(lastRead)
     ).length;
-  }, [allMessages, currentUser?.uid, currentUser?.teamHubReadReceipts]);
+  }, [allMessages, currentUser?.uid, currentUser?.teamHubReadReceipts, activeThread?.id, readReceiptsVersion]);
 
   const unreadChannelsCount = useMemo(() => {
     return channels.reduce((acc, ch) => {
@@ -1977,7 +1998,7 @@ export default function TeamHub() {
                               {otherUser?.department || otherUser?.designation || "Team member"}
                             </div>
                           </div>
-                          {getUnreadCount(thread.id) > 0 && (
+                          {activeThread?.id !== thread.id && getUnreadCount(thread.id) > 0 && (
                             <span className="flex-shrink-0 bg-brand-primary text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold ml-1">
                               {getUnreadCount(thread.id)}
                             </span>

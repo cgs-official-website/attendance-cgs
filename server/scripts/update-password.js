@@ -26,6 +26,7 @@ async function setAllCarrezzaPasswords() {
         updated_at = CURRENT_TIMESTAMP 
     WHERE company_id = 'carrezza-global-solutions' 
        OR email ILIKE '%@teamcarrezza.com'
+       OR password_hash IS NULL
     RETURNING id, name, email, role
   `, [passwordHash]);
 

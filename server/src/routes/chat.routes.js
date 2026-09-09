@@ -9,7 +9,8 @@ import {
   createDmThread,
   getDirectMessages,
   sendDirectMessage,
-  deleteMessage
+  deleteMessage,
+  updateReadReceipt
 } from "../controllers/chatController.js";
 import { authenticateToken } from "../middlewares/auth.js";
 
@@ -26,5 +27,6 @@ router.get("/dm-threads", getDmThreads);
 router.post("/dm-threads", createDmThread);
 router.get("/dm-threads/:threadId/messages", getDirectMessages);
 router.post("/dm-messages", sendDirectMessage);
+router.post("/read-receipt", updateReadReceipt);
 
 export default router;

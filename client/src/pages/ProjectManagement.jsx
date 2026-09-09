@@ -1477,16 +1477,23 @@ export default function ProjectManagement() {
   const paginatedTeam = filteredTeam.slice(startIndex, startIndex + itemsPerPage);
 
   const syntheticProjects = uniqueProjects
-    .filter(name => !projects.some(p => p.name === name))
-    .map((name, idx) => ({
-      id: `synth-${idx}`,
-      name: name,
-      startDate: "-",
-      endDate: "-",
-      managerId: null,
-      status: "Ongoing",
-      teamMembers: allUsers.filter(u => (u.projects || []).includes(name) || u.project === name).map(u => u.uid)
-    }));
+    .filter(name => !projects.some(p => p.name?.toLowerCase() === name?.toLowerCase()))
+    .map((name, idx) => {
+      const team = allUsers.filter(u => (u.projects || []).some(p => p?.toLowerCase() === name?.toLowerCase()) || u.project?.toLowerCase() === name?.toLowerCase());
+      const pm = team.find(u => u.isProjectManager || u.role?.toLowerCase()?.includes("manager"))
+        || allUsers.find(u => u.name === "Mohamed Asfaque A")
+        || allUsers.find(u => u.isProjectManager);
+      return {
+        id: `synth-${idx}`,
+        name: name,
+        startDate: "-",
+        endDate: "-",
+        managerId: pm?.uid || pm?.id || "h3MgS48nNlbN5GfPxsxkMLut6gc2",
+        managerName: pm?.name || "Mohamed Asfaque A",
+        status: "Ongoing",
+        teamMembers: team.map(u => u.uid || u.id)
+      };
+    });
 
   const allCombinedProjects = [...projects, ...syntheticProjects];
 
@@ -1841,8 +1848,8 @@ export default function ProjectManagement() {
                   </tr>
                 ) : (
                   visibleProjects.map((proj, idx) => {
-                    const manager = allUsers.find(u => u.uid === proj.managerId || u.id === proj.managerId);
-                    const managerName = proj.managerName || manager?.name || "Unassigned";
+                    const manager = allUsers.find(u => u.uid === proj.managerId || u.id === proj.managerId || (proj.managerName && u.name === proj.managerName));
+                    const managerName = proj.managerName || manager?.name || (proj.name ? "Mohamed Asfaque A" : "Unassigned");
                     const pStatus = proj.status || "Ongoing";
                     const isCompleted = pStatus.toLowerCase() === "completed";
                     const isInProgress = pStatus.toLowerCase().includes("progress") || pStatus.toLowerCase() === "ongoing";
@@ -3464,10 +3471,18 @@ export default function ProjectManagement() {
                     <Users size={12} className="text-brand-primary" /> Assigned Manager
                   </span>
                   <div className="text-xs font-bold text-brand-primary flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-brand-primary/15 text-brand-primary text-[10px] font-bold flex items-center justify-center">
-                      {(selectedProjectForDetails.managerName || "M").charAt(0).toUpperCase()}
-                    </div>
-                    <span>{selectedProjectForDetails.managerName || "Unassigned"}</span>
+                    {(() => {
+                      const dMgr = allUsers.find(u => u.uid === selectedProjectForDetails.managerId || u.id === selectedProjectForDetails.managerId || (selectedProjectForDetails.managerName && u.name === selectedProjectForDetails.managerName));
+                      const dMgrName = selectedProjectForDetails.managerName || dMgr?.name || "Mohamed Asfaque A";
+                      return (
+                        <>
+                          <div className="w-5 h-5 rounded-full bg-brand-primary/15 text-brand-primary text-[10px] font-bold flex items-center justify-center">
+                            {dMgrName.charAt(0).toUpperCase()}
+                          </div>
+                          <span>{dMgrName}</span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

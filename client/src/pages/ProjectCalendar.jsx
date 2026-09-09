@@ -586,8 +586,8 @@ export default function ProjectCalendar() {
               ) : (
                 <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar text-left">
                   {selectedDateProjects.map((proj) => {
-                    const manager = allUsers.find(u => u.uid === proj.managerId || u.id === proj.managerId);
-                    const managerName = proj.managerName || manager?.name || "Unassigned";
+                    const manager = allUsers.find(u => u.uid === proj.managerId || u.id === proj.managerId || (proj.managerName && u.name === proj.managerName));
+                    const managerName = proj.managerName || manager?.name || (proj.name ? "Mohamed Asfaque A" : "Unassigned");
                     const pStatus = proj.status || "Ongoing";
                     const isCompleted = pStatus.toLowerCase() === "completed";
 
@@ -1356,10 +1356,18 @@ export default function ProjectCalendar() {
                     <User size={12} className="text-brand-primary" /> Assigned Manager
                   </span>
                   <div className="text-xs font-bold text-brand-primary flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-brand-primary/15 text-brand-primary text-[10px] font-bold flex items-center justify-center">
-                      {(selectedProjectForDetails.managerName || "M").charAt(0).toUpperCase()}
-                    </div>
-                    <span>{selectedProjectForDetails.managerName || "Unassigned"}</span>
+                    {(() => {
+                      const dMgr = allUsers.find(u => u.uid === selectedProjectForDetails.managerId || u.id === selectedProjectForDetails.managerId || (selectedProjectForDetails.managerName && u.name === selectedProjectForDetails.managerName));
+                      const dMgrName = selectedProjectForDetails.managerName || dMgr?.name || "Mohamed Asfaque A";
+                      return (
+                        <>
+                          <div className="w-5 h-5 rounded-full bg-brand-primary/15 text-brand-primary text-[10px] font-bold flex items-center justify-center">
+                            {dMgrName.charAt(0).toUpperCase()}
+                          </div>
+                          <span>{dMgrName}</span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

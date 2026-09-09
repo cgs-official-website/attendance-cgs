@@ -350,6 +350,13 @@ export default function DashboardLayout({ children }) {
 
   const activeProjects = currentUser?.projects || (currentUser?.project ? [currentUser.project] : []);
   const activeTasks = (currentUser?.tasks || []).filter(t => !t.completed);
+  const [readReceiptsVersion, setReadReceiptsVersion] = useState(0);
+
+  useEffect(() => {
+    const handleReceiptUpdate = () => setReadReceiptsVersion(v => v + 1);
+    window.addEventListener("local-auth-updated", handleReceiptUpdate);
+    return () => window.removeEventListener("local-auth-updated", handleReceiptUpdate);
+  }, []);
 
   // Clear badges when visiting the respective routes
   useEffect(() => {
@@ -605,16 +612,21 @@ export default function DashboardLayout({ children }) {
       relevantThreadIds.add(dm.id);
     });
     
+    let receipts = currentUser.teamHubReadReceipts || {};
+    try {
+      const dedicated = JSON.parse(localStorage.getItem(`teamhub_read_receipts_${currentUser.uid}`) || "{}");
+      receipts = { ...receipts, ...dedicated };
+    } catch (e) {}
+
     const otherMsgs = unreadMessagesData.allMsgs.filter(m => m.senderId !== currentUser.uid && relevantThreadIds.has(m.threadId));
-    const receipts = currentUser.teamHubReadReceipts || {};
     
     return otherMsgs.filter(m => {
-      const threadReadTime = receipts[m.threadId] || "1970-01-01T00:00:00.000Z";
+      const threadReadTime = receipts[m.threadId] || receipts[m.channelId] || "1970-01-01T00:00:00.000Z";
       return new Date(m.timestamp) > new Date(threadReadTime);
     }).length;
-  }, [unreadMessagesData.allMsgs, channels, dmThreads, currentUser]);
+  }, [unreadMessagesData.allMsgs, channels, dmThreads, currentUser, readReceiptsVersion]);
   
-  const showTeamHubBadge = realUnreadMessagesCount > 0;
+  const showTeamHubBadge = location.pathname !== "/team-hub" && realUnreadMessagesCount > 0;
   
   const showTasksBadge = activeTasks.length > 0 && clearedItems.tasks !== activeTasks.map(t => t.id).sort().join(",");
   const showProjectsBadge = activeProjects.length > 0 && clearedItems.projects !== activeProjects.sort().join(",");

@@ -168,7 +168,8 @@ export const deleteMessage = async (req, res) => {
 // Messages
 export const getMessages = async (req, res) => {
   try {
-    const { channelId, companyId } = req.query;
+    const channelId = req.query.channelId || req.query.threadId;
+    const { companyId } = req.query;
     const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
     const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
 
@@ -181,12 +182,26 @@ export const getMessages = async (req, res) => {
     const params = [];
 
     if (channelId) {
-      params.push(channelId);
-      sql += ` AND m.channel_id = $${params.length}`;
+      if (channelId.includes("_dm_")) {
+        const parts = channelId.split("_dm_");
+        if (parts.length === 2) {
+          const revId = `${parts[1]}_dm_${parts[0]}`;
+          params.push(channelId);
+          params.push(revId);
+          sql += ` AND (m.channel_id = $${params.length - 1} OR m.channel_id = $${params.length})`;
+        } else {
+          params.push(channelId);
+          sql += ` AND m.channel_id = $${params.length}`;
+        }
+      } else {
+        params.push(channelId);
+        sql += ` AND m.channel_id = $${params.length}`;
+      }
     }
+
     if (targetCompanyId) {
       params.push(targetCompanyId);
-      sql += ` AND m.company_id = $${params.length}`;
+      sql += ` AND (m.company_id = $${params.length} OR m.company_id IS NULL)`;
     }
 
     sql += " ORDER BY m.created_at ASC LIMIT 1000";
@@ -205,24 +220,42 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { channelId, content, attachments = [], replyToId = null, companyId } = req.body;
+    const { channelId, threadId, content, attachments = [], replyToId = null, companyId } = req.body;
+    const targetChannelId = channelId || threadId || "general";
     const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
-    const senderId = req.user?.id;
-    let senderName = req.body.senderName || req.user?.name;
-    let userAvatar = req.body.userAvatar || req.body.avatar || req.user?.avatarUrl;
-    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+    const senderId = req.user?.id || req.body.senderId;
+    let senderName = req.body.senderName || req.user?.name || "Team Member";
+    let userAvatar = req.body.userAvatar || req.body.avatar || req.user?.avatarUrl || null;
+    let targetCompanyId = (isSuperAdmin && companyId) ? companyId : (req.user?.companyId || companyId || "carrezza-global-solutions");
 
     if (!senderId) {
       return res.status(401).json({ error: "Authentication required." });
     }
 
     if (!senderName || senderName === "User") {
-      const uRes = await query("SELECT name, avatar_url FROM users WHERE id = $1", [senderId]);
+      const uRes = await query("SELECT name, avatar_url, company_id FROM users WHERE id = $1", [senderId]);
       if (uRes.rows.length > 0) {
         senderName = uRes.rows[0].name || "Team Member";
-        userAvatar = userAvatar || uRes.rows[0].avatar_url;
+        userAvatar = userAvatar || uRes.rows[0].avatar_url || null;
+        if (!targetCompanyId) targetCompanyId = uRes.rows[0].company_id;
       }
     }
+
+    // Ensure sender exists in users table to prevent FK constraint failure
+    await query(
+      `INSERT INTO users (id, email, name, avatar_url, company_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [senderId, `${senderId}@system.local`, senderName, userAvatar, targetCompanyId || null]
+    ).catch(() => {});
+
+    // Ensure channel or thread exists in channels table
+    await query(
+      `INSERT INTO channels (id, company_id, name, description)
+       VALUES ($1, $2, $3, 'Discussion Channel')
+       ON CONFLICT (id) DO NOTHING`,
+      [targetChannelId, targetCompanyId || null, targetChannelId]
+    ).catch(() => {});
 
     const fileUrl = attachments[0]?.url || attachments[0]?.fileUrl || null;
     const fileName = attachments[0]?.name || attachments[0]?.fileName || null;
@@ -233,23 +266,34 @@ export const sendMessage = async (req, res) => {
       `INSERT INTO messages (id, channel_id, company_id, user_id, user_name, user_avatar, content, file_url, file_name, file_type)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [id, channelId, targetCompanyId, senderId, senderName, userAvatar, content, fileUrl, fileName, fileType]
+      [id, targetChannelId, targetCompanyId || null, senderId, senderName, userAvatar, content || "", fileUrl, fileName, fileType]
     );
 
-    // If channelId is a DM thread, also update dm_threads last_message
-    if (channelId) {
+    // If targetChannelId is a DM thread, update or insert into dm_threads
+    if (targetChannelId && targetChannelId.includes("_dm_")) {
+      const parts = targetChannelId.split("_dm_");
       await query(
-        `UPDATE dm_threads SET last_message = $1, last_message_at = CURRENT_TIMESTAMP WHERE id = $2`,
-        [content || (fileName ? `Attachment: ${fileName}` : "Sent a file"), channelId]
+        `INSERT INTO dm_threads (id, company_id, participants, last_message, last_message_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO UPDATE SET last_message = EXCLUDED.last_message, last_message_at = CURRENT_TIMESTAMP`,
+        [targetChannelId, targetCompanyId || null, parts, content || (fileName ? `Attachment: ${fileName}` : "Sent a file")]
       ).catch(() => {});
     }
 
     const formatted = formatMessageRow(result.rows[0]);
     formatted.senderName = senderName;
+
+    // Real-time broadcast if socket is connected
+    const io = req.app?.get("io");
+    if (io) {
+      if (targetCompanyId) io.to(`company_${targetCompanyId}`).emit("new_message", formatted);
+      io.to(`channel_${targetChannelId}`).emit("new_message", formatted);
+    }
+
     res.status(201).json(formatted);
   } catch (err) {
     console.error("sendMessage error:", err);
-    res.status(500).json({ error: "Failed to send message." });
+    res.status(500).json({ error: "Failed to send message: " + (err.message || "") });
   }
 };
 
@@ -473,4 +517,32 @@ export const sendDirectMessage = async (req, res) => {
     res.status(500).json({ error: "Failed to send direct message." });
   }
 };
+
+export const updateReadReceipt = async (req, res) => {
+  try {
+    const { threadId, readAt } = req.body;
+    const userId = req.user?.id || req.body.userId;
+    if (!userId || !threadId) {
+      return res.status(400).json({ error: "userId and threadId are required." });
+    }
+
+    const timestamp = readAt || new Date().toISOString();
+    await query(
+      `UPDATE users 
+       SET metadata = jsonb_set(
+         COALESCE(metadata, '{}'::jsonb),
+         '{teamHubReadReceipts}',
+         COALESCE(metadata->'teamHubReadReceipts', '{}'::jsonb) || jsonb_build_object($1::text, $2::text)
+       )
+       WHERE id = $3`,
+      [threadId, timestamp, userId]
+    );
+
+    res.json({ success: true, threadId, readAt: timestamp });
+  } catch (err) {
+    console.error("updateReadReceipt error:", err);
+    res.status(500).json({ error: "Failed to update read receipt." });
+  }
+};
+
 

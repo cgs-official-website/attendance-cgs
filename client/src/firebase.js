@@ -827,15 +827,27 @@ export const subscribeToTaskReports = (arg, callback) => {
     }
   }
 
+  let lastReports = null;
   const fetchReports = () => {
     apiFetch(`/reports/tasks?${queryParam}`).then(data => {
-      if (isMounted) callback(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        lastReports = data;
+        if (isMounted) callback(data);
+      } else if (lastReports !== null) {
+        if (isMounted) callback(lastReports);
+      } else if (isMounted) {
+        callback([]);
+      }
     }).catch(() => {
-      if (isMounted) callback([]);
+      if (lastReports !== null) {
+        if (isMounted) callback(lastReports);
+      } else if (isMounted) {
+        callback([]);
+      }
     });
   };
   fetchReports();
-  const interval = setInterval(fetchReports, 3000);
+  const interval = setInterval(fetchReports, 4000);
   return () => {
     isMounted = false;
     clearInterval(interval);

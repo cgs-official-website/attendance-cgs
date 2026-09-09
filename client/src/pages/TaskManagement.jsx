@@ -249,6 +249,23 @@ export default function TaskManagement() {
     try {
       await addTaskReport(selectedTask.id, currentUser.uid, selectedTask.assignedBy, reportText);
       
+      const newReport = {
+        id: "rep_" + Date.now(),
+        taskId: selectedTask.id,
+        userId: currentUser.uid,
+        userName: currentUser.name || "You",
+        reportText: reportText,
+        content: reportText,
+        timeSpentMinutes: 0,
+        createdAt: new Date().toISOString(),
+        submittedAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      };
+      setTaskReports(prev => ({
+        ...prev,
+        [selectedTask.id]: [newReport, ...(prev[selectedTask.id] || [])]
+      }));
+
       if (selectedTask.assignedBy) {
         await createNotification(
           selectedTask.assignedBy,
@@ -600,7 +617,14 @@ export default function TaskManagement() {
                           <div className="flex gap-2">
                             {!task.timerStartedAt ? (
                               <button 
-                                onClick={() => startTaskTimer(currentUser.uid, task.id)}
+                                onClick={async () => {
+                                  const updated = tasks.map(t => ({
+                                    ...t,
+                                    timerStartedAt: t.id === task.id ? new Date().toISOString() : null
+                                  }));
+                                  setTasks(updated);
+                                  await startTaskTimer(currentUser.uid, task.id);
+                                }}
                                 className="py-1.5 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
                               >
                                 <Play size={12} />
@@ -608,7 +632,14 @@ export default function TaskManagement() {
                               </button>
                             ) : (
                               <button 
-                                onClick={() => stopTaskTimer(currentUser.uid, task.id, task.assignedBy)}
+                                onClick={async () => {
+                                  const updated = tasks.map(t => {
+                                    if (t.id === task.id) return { ...t, timerStartedAt: null };
+                                    return t;
+                                  });
+                                  setTasks(updated);
+                                  await stopTaskTimer(currentUser.uid, task.id, task.assignedBy);
+                                }}
                                 className="py-1.5 px-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-[8px] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
                               >
                                 <Square size={12} fill="currentColor" />

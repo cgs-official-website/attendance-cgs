@@ -651,13 +651,30 @@ export const subscribeToTasks = (companyId, callback) => {
 
 export const startTaskTimer = async (userId, taskId) => {
   try {
-    const user = await apiFetch(`/users/${userId}`);
-    const tasks = user?.tasks || [];
+    let cur = null;
+    try {
+      cur = JSON.parse(localStorage.getItem("att_current_user") || "null");
+    } catch {}
+
+    let tasks = Array.isArray(cur?.tasks) && cur.tasks.length > 0 ? [...cur.tasks] : [];
+    if (!tasks.length) {
+      try {
+        const user = await apiFetch(`/users/${userId}`);
+        tasks = user?.tasks || [];
+      } catch {}
+    }
+
     const updatedTasks = tasks.map(t => ({
       ...t,
       timerStartedAt: t.id === taskId ? new Date().toISOString() : null
     }));
-    await updateUserTasks(userId, updatedTasks);
+
+    if (cur) {
+      cur.tasks = updatedTasks;
+      localStorage.setItem("att_current_user", JSON.stringify(cur));
+    }
+
+    await updateUserTasks(userId, updatedTasks).catch(() => {});
     return true;
   } catch (err) {
     console.error("startTaskTimer error:", err);
@@ -667,15 +684,32 @@ export const startTaskTimer = async (userId, taskId) => {
 
 export const stopTaskTimer = async (userId, taskId) => {
   try {
-    const user = await apiFetch(`/users/${userId}`);
-    const tasks = user?.tasks || [];
+    let cur = null;
+    try {
+      cur = JSON.parse(localStorage.getItem("att_current_user") || "null");
+    } catch {}
+
+    let tasks = Array.isArray(cur?.tasks) && cur.tasks.length > 0 ? [...cur.tasks] : [];
+    if (!tasks.length) {
+      try {
+        const user = await apiFetch(`/users/${userId}`);
+        tasks = user?.tasks || [];
+      } catch {}
+    }
+
     const updatedTasks = tasks.map(t => {
       if (t.id === taskId) {
         return { ...t, timerStartedAt: null };
       }
       return t;
     });
-    await updateUserTasks(userId, updatedTasks);
+
+    if (cur) {
+      cur.tasks = updatedTasks;
+      localStorage.setItem("att_current_user", JSON.stringify(cur));
+    }
+
+    await updateUserTasks(userId, updatedTasks).catch(() => {});
     return true;
   } catch (err) {
     console.error("stopTaskTimer error:", err);
@@ -685,15 +719,23 @@ export const stopTaskTimer = async (userId, taskId) => {
 
 export const stopAllTaskTimers = async (userId) => {
   try {
-    if (!userId) {
-      const cur = JSON.parse(localStorage.getItem("att_current_user") || "null");
-      userId = cur?.uid;
-    }
-    if (!userId) return true;
-    const user = await apiFetch(`/users/${userId}`);
-    const tasks = user?.tasks || [];
+    let cur = null;
+    try {
+      cur = JSON.parse(localStorage.getItem("att_current_user") || "null");
+    } catch {}
+
+    const targetId = userId || cur?.uid || cur?.id;
+    if (!targetId) return true;
+
+    let tasks = Array.isArray(cur?.tasks) && cur.tasks.length > 0 ? [...cur.tasks] : [];
     const updatedTasks = tasks.map(t => ({ ...t, timerStartedAt: null }));
-    await updateUserTasks(userId, updatedTasks);
+
+    if (cur) {
+      cur.tasks = updatedTasks;
+      localStorage.setItem("att_current_user", JSON.stringify(cur));
+    }
+
+    await updateUserTasks(targetId, updatedTasks).catch(() => {});
     return true;
   } catch {
     return true;

@@ -189,7 +189,7 @@ export const forgotPassword = async (req, res) => {
 
     // Determine client base URL dynamically
     const origin = req.headers.origin || req.headers.referer;
-    let baseUrl = process.env.APP_URL || "https://attendance-cgs.vercel.app";
+    let baseUrl = process.env.APP_URL || "https://hrms.teamzuna.in";
     if (origin) {
       try {
         const parsed = new URL(origin);
@@ -201,18 +201,24 @@ export const forgotPassword = async (req, res) => {
 
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
-    const emailResult = await sendPasswordResetEmail({
+    // Dispatch email with prompt response protection (returns within 4s while background finishes)
+    const emailPromise = sendPasswordResetEmail({
       email: user.email,
       name: user.name,
       resetToken,
       resetUrl
     });
 
+    const emailResult = await Promise.race([
+      emailPromise,
+      new Promise((resolve) => setTimeout(() => resolve({ success: true, pending: true }), 4000))
+    ]);
+
     if (!emailResult.success && emailResult.reason === "SMTP_NOT_CONFIGURED") {
       return res.status(500).json({ error: "Email service is not configured on the server." });
     }
 
-    if (!emailResult.success) {
+    if (!emailResult.success && !emailResult.pending) {
       return res.status(500).json({ error: emailResult.error || "Failed to deliver reset email." });
     }
 

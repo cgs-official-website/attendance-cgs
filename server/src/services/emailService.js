@@ -11,25 +11,38 @@ const getTransporter = () => {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const user = process.env.SMTP_USER || "carrezzaglobalsolutions@gmail.com";
   const pass = (process.env.SMTP_PASS || "cpho bpmz hplc fstb").replace(/\s+/g, "");
-  const port = parseInt(process.env.SMTP_PORT || "465", 10);
+  const port = parseInt(process.env.SMTP_PORT || "587", 10);
 
-  if (!host || !user || !pass) {
+  if (!user || !pass) {
     return null;
+  }
+
+  // Use service: "gmail" with explicit IPv4 and connection timeouts to prevent cloud networking stalls
+  if (!process.env.SMTP_HOST || process.env.SMTP_HOST === "smtp.gmail.com") {
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
+      family: 4, // Force IPv4 to prevent cloud container IPv6 routing stalls
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000
+    });
   }
 
   return nodemailer.createTransport({
     host,
     port,
-    secure: port === 465, // true for 465 SSL, false for 587 TLS
-    auth: {
-      user,
-      pass
-    }
+    secure: port === 465,
+    auth: { user, pass },
+    family: 4,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000
   });
 };
 
 const getSender = () => {
-  return process.env.SMTP_FROM || `"Carrezza HRMS" <${process.env.SMTP_USER || "carrezzaglobalsolutions@gmail.com"}>`;
+  return process.env.SMTP_FROM || `"Zuna HRMS" <${process.env.SMTP_USER || "carrezzaglobalsolutions@gmail.com"}>`;
 };
 
 /**
@@ -62,14 +75,14 @@ const baseEmailTemplate = (title, contentHtml) => `
 <body>
   <div class="container">
     <div class="header">
-      <h1>Carrezza HRMS</h1>
+      <h1>Zuna HRMS</h1>
       <p>Workplace & Attendance Management Portal</p>
     </div>
     <div class="content">
       ${contentHtml}
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} Carrezza HRMS. All rights reserved.</p>
+      <p>© ${new Date().getFullYear()} Zuna HRMS. All rights reserved.</p>
       <p>This is an automated notification, please do not reply directly to this email.</p>
     </div>
   </div>
@@ -78,29 +91,61 @@ const baseEmailTemplate = (title, contentHtml) => `
 `;
 
 /**
- * Generic Mail Dispatcher
+ * Generic Mail Dispatcher with fallback and timeout
  */
 export const sendEmail = async ({ to, subject, html, text }) => {
   try {
     const transporter = getTransporter();
     if (!transporter) {
-      console.log(`ℹ️ [EmailService] SMTP credentials not set or placeholder detected. Email to <${to}> with subject "${subject}" was skipped.`);
+      console.log(`ℹ️ [EmailService] SMTP credentials not set. Email to <${to}> with subject "${subject}" was skipped.`);
       return { success: false, reason: "SMTP_NOT_CONFIGURED" };
     }
 
-    const info = await transporter.sendMail({
+    const mailOptions = {
       from: getSender(),
       to,
       subject,
       text: text || "",
       html
-    });
+    };
+
+    const info = await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("SMTP connection timed out")), 9000))
+    ]);
 
     console.log(`📧 [EmailService] Email sent successfully to ${to}. Message ID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error(`❌ [EmailService] Failed to send email to ${to}:`, error.message);
-    return { success: false, error: error.message };
+    console.warn(`⚠️ [EmailService] Primary send attempt failed (${error.message}). Retrying via port 587 fallback...`);
+    try {
+      const user = process.env.SMTP_USER || "carrezzaglobalsolutions@gmail.com";
+      const pass = (process.env.SMTP_PASS || "cpho bpmz hplc fstb").replace(/\s+/g, "");
+      const fallbackTransporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false,
+        family: 4,
+        auth: { user, pass },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 8000
+      });
+
+      const info = await fallbackTransporter.sendMail({
+        from: getSender(),
+        to,
+        subject,
+        text: text || "",
+        html
+      });
+
+      console.log(`📧 [EmailService] Email sent via port 587 fallback to ${to}. Message ID: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } catch (fallbackError) {
+      console.error(`❌ [EmailService] All email delivery attempts failed to ${to}:`, fallbackError.message);
+      return { success: false, error: fallbackError.message };
+    }
   }
 };
 

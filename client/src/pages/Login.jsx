@@ -108,7 +108,10 @@ export default function Login() {
     
     setResetLoading(true);
     try {
-      await sendPasswordReset(resetEmail);
+      await Promise.race([
+        sendPasswordReset(resetEmail),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out. Please check your inbox shortly or try again.")), 8000))
+      ]);
       showToast("Password reset email sent! Please check your inbox.", "success");
       setIsResetModalOpen(false);
       setResetEmail("");

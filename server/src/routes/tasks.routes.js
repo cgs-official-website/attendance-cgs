@@ -3,7 +3,9 @@ import {
   getTasks,
   createTask,
   updateTask,
-  deleteTask
+  deleteTask,
+  startTaskTimer,
+  stopTaskTimer
 } from "../controllers/taskController.js";
 import { authenticateToken } from "../middlewares/auth.js";
 
@@ -14,5 +16,7 @@ router.get("/", getTasks);
 router.post("/", createTask);
 router.patch("/:id", updateTask);
 router.delete("/:id", deleteTask);
+router.post("/:id/start-timer", startTaskTimer);
+router.post("/:id/stop-timer", stopTaskTimer);
 
 export default router;

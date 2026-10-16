@@ -77,7 +77,15 @@ export const createTask = async (req, res) => {
       [id, targetCompanyId, projectId || null, title, description || "", targetAssignee, creatorId, priority, dueDate || null]
     );
 
-    res.status(201).json(result.rows[0]);
+    const taskRow = result.rows[0];
+    const io = req.app?.get("io");
+    if (io) {
+      if (targetCompanyId) io.to(`company_${targetCompanyId}`).emit("task_created", taskRow);
+      if (targetAssignee) io.to(`user_${targetAssignee}`).emit("task_created", taskRow);
+      io.emit("task_created", taskRow);
+    }
+
+    res.status(201).json(taskRow);
   } catch (err) {
     console.error("createTask error:", err);
     res.status(500).json({ error: "Failed to create task." });
@@ -125,7 +133,15 @@ export const updateTask = async (req, res) => {
       return res.status(404).json({ error: "Task not found." });
     }
 
-    res.json(result.rows[0]);
+    const updatedTask = result.rows[0];
+    const io = req.app?.get("io");
+    if (io) {
+      if (updatedTask.company_id) io.to(`company_${updatedTask.company_id}`).emit("task_updated", updatedTask);
+      if (updatedTask.assigned_to) io.to(`user_${updatedTask.assigned_to}`).emit("task_updated", updatedTask);
+      io.emit("task_updated", updatedTask);
+    }
+
+    res.json(updatedTask);
   } catch (err) {
     console.error("updateTask error:", err);
     res.status(500).json({ error: "Failed to update task." });
@@ -139,9 +155,119 @@ export const deleteTask = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Task not found." });
     }
+
+    const io = req.app?.get("io");
+    if (io) {
+      io.emit("task_deleted", { id });
+    }
+
     res.json({ message: "Task deleted successfully.", id });
   } catch (err) {
     console.error("deleteTask error:", err);
     res.status(500).json({ error: "Failed to delete task." });
+  }
+};
+
+export const startTaskTimer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const now = new Date().toISOString();
+
+    const existing = await query("SELECT * FROM tasks WHERE id = $1", [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found." });
+    }
+
+    const task = existing.rows[0];
+    const meta = (task.metadata && typeof task.metadata === "object") ? task.metadata : {};
+    meta.timerStartedAt = now;
+
+    const result = await query(
+      `UPDATE tasks
+       SET metadata = $1, status = 'in-progress', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [JSON.stringify(meta), id]
+    );
+
+    const timerPayload = {
+      ...result.rows[0],
+      timerStartedAt: now,
+      status: "in-progress"
+    };
+
+    const io = req.app?.get("io");
+    if (io) {
+      if (task.company_id) io.to(`company_${task.company_id}`).emit("task_timer_started", timerPayload);
+      if (task.assigned_to) io.to(`user_${task.assigned_to}`).emit("task_timer_started", timerPayload);
+      io.emit("task_timer_started", timerPayload);
+    }
+
+    res.json(timerPayload);
+  } catch (err) {
+    console.error("startTaskTimer error:", err);
+    res.status(500).json({ error: "Failed to start task timer." });
+  }
+};
+
+export const stopTaskTimer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reportText = "", content = "", timeSpentMinutes = 0 } = req.body || {};
+    const userId = req.user?.id || req.body?.userId;
+
+    const existing = await query("SELECT * FROM tasks WHERE id = $1", [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found." });
+    }
+
+    const task = existing.rows[0];
+    const meta = (task.metadata && typeof task.metadata === "object") ? task.metadata : {};
+    
+    let computedMinutes = Number(timeSpentMinutes || 0);
+    if (!computedMinutes && meta.timerStartedAt) {
+      const startMs = new Date(meta.timerStartedAt).getTime();
+      computedMinutes = Math.max(1, Math.round((Date.now() - startMs) / 60000));
+    }
+    meta.timerStartedAt = null;
+
+    const result = await query(
+      `UPDATE tasks
+       SET metadata = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [JSON.stringify(meta), id]
+    );
+
+    const text = reportText || content;
+    let savedReport = null;
+    if (text || computedMinutes > 0) {
+      const repId = "tr_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      const repRes = await query(
+        `INSERT INTO task_reports (id, task_id, user_id, company_id, content, time_spent_minutes)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [repId, id, userId || task.assigned_to, task.company_id, text || "Timer session completed", computedMinutes]
+      );
+      savedReport = repRes.rows[0];
+    }
+
+    const stopPayload = {
+      ...result.rows[0],
+      timerStartedAt: null,
+      report: savedReport
+    };
+
+    const io = req.app?.get("io");
+    if (io) {
+      if (task.company_id) io.to(`company_${task.company_id}`).emit("task_timer_stopped", stopPayload);
+      if (task.assigned_to) io.to(`user_${task.assigned_to}`).emit("task_timer_stopped", stopPayload);
+      io.emit("task_timer_stopped", stopPayload);
+    }
+
+    res.json(stopPayload);
+  } catch (err) {
+    console.error("stopTaskTimer error:", err);
+    res.status(500).json({ error: "Failed to stop task timer." });
   }
 };

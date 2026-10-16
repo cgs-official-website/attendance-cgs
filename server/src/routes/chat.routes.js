@@ -12,15 +12,17 @@ import {
   deleteMessage,
   updateReadReceipt
 } from "../controllers/chatController.js";
-import { authenticateToken } from "../middlewares/auth.js";
+import { authenticateToken, authenticateTokenOrExternalLink } from "../middlewares/auth.js";
 
 const router = express.Router();
+
+// Message endpoints allow either JWT auth or verified external link token
+router.get("/messages", authenticateTokenOrExternalLink, getMessages);
+router.post("/messages", authenticateTokenOrExternalLink, sendMessage);
 
 router.use(authenticateToken);
 router.get("/channels", getChannels);
 router.post("/channels", createChannel);
-router.get("/messages", getMessages);
-router.post("/messages", sendMessage);
 router.delete("/messages/:id", deleteMessage);
 router.patch("/messages/:id/pin", pinMessage);
 router.get("/dm-threads", getDmThreads);

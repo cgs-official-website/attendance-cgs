@@ -43,10 +43,10 @@ export default function ClientChat() {
     if (linkData && linkData.channelId) {
       const unsub = subscribeToMessages(linkData.channelId, linkData.companyId, (fetchedMessages) => {
         setMessages(fetchedMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
-      });
+      }, linkToken);
       return () => unsub();
     }
-  }, [linkData]);
+  }, [linkData, linkToken]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -96,7 +96,8 @@ export default function ClientChat() {
         "",
         null,
         filePayload ? [filePayload] : [],
-        linkData.companyId
+        linkData.companyId,
+        linkToken
       );
     } catch (err) {
       showToast("Failed to send message", "error");

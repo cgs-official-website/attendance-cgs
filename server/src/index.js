@@ -24,6 +24,18 @@ io.on("connection", (socket) => {
     socket.join(`company_${companyId}`);
   });
 
+  socket.on("join_user", (userId) => {
+    socket.join(`user_${userId}`);
+  });
+
+  socket.on("typing_start", ({ threadId, userId, userName }) => {
+    socket.to(`channel_${threadId}`).emit("user_typing", { threadId, userId, userName });
+  });
+
+  socket.on("typing_stop", ({ threadId, userId }) => {
+    socket.to(`channel_${threadId}`).emit("user_stopped_typing", { threadId, userId });
+  });
+
   socket.on("disconnect", () => {
     console.log(`🔌 Socket client disconnected: ${socket.id}`);
   });

@@ -15,6 +15,7 @@ import envSettingsRoutes from "./routes/envSettings.routes.js";
 import companiesRoutes from "./routes/companies.routes.js";
 import externalLinksRoutes from "./routes/externalLinks.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
+import notificationsRoutes from "./routes/notifications.routes.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -59,6 +60,7 @@ app.use("/api/regularization", regularizationRoutes);
 app.use("/api/projects", projectsRoutes);
 app.use("/api/tasks", tasksRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/notifications", notificationsRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/payroll", payrollRoutes);

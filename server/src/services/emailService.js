@@ -295,6 +295,69 @@ export const sendPasswordResetEmail = async ({ email, name, resetToken, resetUrl
 };
 
 /**
+ * 6. Regularization Status Decision Notification
+ */
+export const sendRegularizationNotif = async ({ email, name, date, requestedCheckIn, requestedCheckOut, status, managerComment }) => {
+  const isApproved = String(status).toLowerCase() === "approved";
+  const badgeColor = isApproved ? "#16a34a" : "#dc2626";
+
+  const content = `
+    <h2>Attendance Regularization ${String(status).toUpperCase()} ⏰</h2>
+    <p>Hello ${name},</p>
+    <p>Your attendance regularization request for <strong>${date}</strong> has been reviewed:</p>
+    
+    <div style="text-align: center; margin: 16px 0;">
+      <span style="background-color: ${badgeColor}; color: white; font-weight: 700; padding: 6px 16px; border-radius: 9999px; text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px;">
+        ${status}
+      </span>
+    </div>
+
+    <div class="card">
+      <div class="card-row"><span class="label">Attendance Date:</span> <span class="value">${date}</span></div>
+      ${requestedCheckIn ? `<div class="card-row"><span class="label">Requested Check-In:</span> <span class="value">${requestedCheckIn}</span></div>` : ""}
+      ${requestedCheckOut ? `<div class="card-row"><span class="label">Requested Check-Out:</span> <span class="value">${requestedCheckOut}</span></div>` : ""}
+      ${managerComment ? `<div class="card-row"><span class="label">Manager Note:</span> <span class="value">${managerComment}</span></div>` : ""}
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Attendance Regularization ${String(status).toUpperCase()} - Zuna HRMS`,
+    html: baseEmailTemplate("Regularization Status Update", content)
+  });
+};
+
+/**
+ * 7. Payslip Release Notification
+ */
+export const sendPayslipNotification = async ({ email, name, month, year, netSalary, grossSalary, totalDeductions, paidDays }) => {
+  const portalUrl = `${process.env.APP_URL || "https://attendance-cgs.vercel.app"}/dashboard?tab=payroll`;
+  const content = `
+    <h2>Salary Payslip Released 💼</h2>
+    <p>Hello ${name},</p>
+    <p>Your salary payslip for <strong>${month} ${year}</strong> has been approved and processed:</p>
+
+    <div class="card">
+      <div class="card-row"><span class="label">Pay Period:</span> <span class="value">${month} ${year}</span></div>
+      <div class="card-row"><span class="label">Paid Days:</span> <span class="value">${paidDays} days</span></div>
+      <div class="card-row"><span class="label">Gross Earnings:</span> <span class="value">₹${Number(grossSalary || 0).toLocaleString("en-IN")}</span></div>
+      <div class="card-row"><span class="label">Total Deductions:</span> <span class="value">₹${Number(totalDeductions || 0).toLocaleString("en-IN")}</span></div>
+      <div class="card-row" style="border-top: 1px solid #cbd5e1; padding-top: 8px; margin-top: 8px;"><span class="label" style="font-size: 15px; color: #16a34a;">Net Payable Salary:</span> <span class="value" style="font-size: 15px; color: #16a34a; font-weight: 700;">₹${Number(netSalary || 0).toLocaleString("en-IN")}</span></div>
+    </div>
+
+    <div class="btn-container">
+      <a href="${portalUrl}" class="btn">View & Download Payslip</a>
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Salary Payslip for ${month} ${year} - Zuna HRMS`,
+    html: baseEmailTemplate("Salary Payslip Released", content)
+  });
+};
+
+/**
  * Test SMTP Connection Utility
  */
 export const verifySmtpConnection = async () => {

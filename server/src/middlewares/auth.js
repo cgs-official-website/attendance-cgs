@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { query } from "../config/db.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "hrms_jwt_super_secret_railway_2026";
 
@@ -17,6 +18,45 @@ export const authenticateToken = (req, res, next) => {
     req.user = user;
     next();
   });
+};
+
+export const authenticateTokenOrExternalLink = async (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (token) {
+    return jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) {
+        return res.status(403).json({ error: "Invalid or expired token." });
+      }
+      req.user = user;
+      next();
+    });
+  }
+
+  const linkToken = req.headers["x-external-link-token"] || req.query.linkToken;
+  if (linkToken) {
+    try {
+      const linkRes = await query("SELECT * FROM external_links WHERE link_token = $1 AND status != 'revoked'", [linkToken]);
+      if (linkRes.rows.length > 0) {
+        const link = linkRes.rows[0];
+        req.externalLink = link;
+        req.user = {
+          id: `client_${link.id}`,
+          name: link.client_name || "Client",
+          email: link.client_email || "client@external.portal",
+          role: "client",
+          companyId: link.company_id,
+          channelId: link.channel_id
+        };
+        return next();
+      }
+    } catch (e) {
+      console.error("External link auth error:", e);
+    }
+  }
+
+  return res.status(401).json({ error: "Access denied. Valid auth token or external link token required." });
 };
 
 export const optionalAuth = (req, res, next) => {

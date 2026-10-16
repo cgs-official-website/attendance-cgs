@@ -331,8 +331,29 @@ export const checkOut = async (userId, location = {}) => {
   });
 };
 
-export const startBreak = async (userId, location = {}) => checkOut(userId, location);
-export const resumeWork = async (userId, location = {}) => checkIn(userId, location);
+export const startBreak = async (userId, breakType = "short", location = {}) => {
+  const uid = typeof userId === "object" && userId !== null ? (userId.uid || userId.id) : userId;
+  const companyId = typeof userId === "object" && userId !== null ? userId.companyId : undefined;
+  const date = getLocalDateString();
+  const type = typeof breakType === "string" ? breakType : "short";
+  const loc = typeof breakType === "object" && breakType !== null ? breakType : location;
+  return apiFetch("/attendance/start-break", {
+    method: "POST",
+    body: JSON.stringify({ userId: uid, companyId, date, breakType: type, location: loc })
+  });
+};
+
+export const endBreak = async (userId, location = {}) => {
+  const uid = typeof userId === "object" && userId !== null ? (userId.uid || userId.id) : userId;
+  const companyId = typeof userId === "object" && userId !== null ? userId.companyId : undefined;
+  const date = getLocalDateString();
+  return apiFetch("/attendance/end-break", {
+    method: "POST",
+    body: JSON.stringify({ userId: uid, companyId, date, location })
+  });
+};
+
+export const resumeWork = async (userId, location = {}) => endBreak(userId, location);
 
 export const getTodayAttendanceLog = async (userId) => {
   const today = getLocalDateString();
@@ -679,9 +700,10 @@ export const startTaskTimer = async (userId, taskId) => {
       } catch {}
     }
 
+    const now = new Date().toISOString();
     const updatedTasks = tasks.map(t => ({
       ...t,
-      timerStartedAt: t.id === taskId ? new Date().toISOString() : null
+      timerStartedAt: t.id === taskId ? now : null
     }));
 
     if (cur) {
@@ -689,7 +711,12 @@ export const startTaskTimer = async (userId, taskId) => {
       localStorage.setItem("att_current_user", JSON.stringify(cur));
     }
 
+    // Call dedicated backend task timer endpoint and update user metadata
+    await apiFetch(`/tasks/${taskId}/start-timer`, { method: "POST" }).catch(() => {});
     await updateUserTasks(userId, updatedTasks).catch(() => {});
+    try {
+      window.dispatchEvent(new CustomEvent("task-timer-changed", { detail: { taskId, timerStartedAt: now, userId } }));
+    } catch {}
     return true;
   } catch (err) {
     console.error("startTaskTimer error:", err);
@@ -697,7 +724,7 @@ export const startTaskTimer = async (userId, taskId) => {
   }
 };
 
-export const stopTaskTimer = async (userId, taskId) => {
+export const stopTaskTimer = async (userId, taskId, reportData = null) => {
   try {
     let cur = null;
     try {
@@ -724,7 +751,15 @@ export const stopTaskTimer = async (userId, taskId) => {
       localStorage.setItem("att_current_user", JSON.stringify(cur));
     }
 
+    // Call dedicated backend stop timer endpoint
+    await apiFetch(`/tasks/${taskId}/stop-timer`, {
+      method: "POST",
+      body: JSON.stringify(typeof reportData === "object" && reportData !== null ? reportData : { userId })
+    }).catch(() => {});
     await updateUserTasks(userId, updatedTasks).catch(() => {});
+    try {
+      window.dispatchEvent(new CustomEvent("task-timer-changed", { detail: { taskId, timerStartedAt: null, userId } }));
+    } catch {}
     return true;
   } catch (err) {
     console.error("stopTaskTimer error:", err);
@@ -751,9 +786,35 @@ export const stopAllTaskTimers = async (userId) => {
     }
 
     await updateUserTasks(targetId, updatedTasks).catch(() => {});
+    try {
+      window.dispatchEvent(new CustomEvent("task-timer-changed", { detail: { taskId: null, timerStartedAt: null, userId: targetId } }));
+    } catch {}
     return true;
   } catch {
     return true;
+  }
+};
+
+export const updateTaskStatus = async (taskId, status, userId = null, currentTasks = null) => {
+  try {
+    const isCompleted = status === "completed" || status === "Completed";
+    const result = await apiFetch(`/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: isCompleted ? "completed" : "pending" })
+    }).catch(() => null);
+
+    if (userId && Array.isArray(currentTasks)) {
+      const updated = currentTasks.map(t => String(t.id) === String(taskId) ? { ...t, status: isCompleted ? "completed" : "pending", completed: isCompleted } : t);
+      await updateUserTasks(userId, updated).catch(() => {});
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent("task-status-changed", { detail: { taskId, status, userId } }));
+    } catch {}
+    return result || { success: true };
+  } catch (err) {
+    console.error("updateTaskStatus error:", err);
+    return { success: false };
   }
 };
 
@@ -864,9 +925,24 @@ export const subscribeToUserTasks = (userId, callback) => {
   };
   fetchUserTasks();
   const interval = setInterval(fetchUserTasks, 3000);
+
+  const handleLocalSync = () => {
+    fetchUserTasks();
+  };
+  try {
+    window.addEventListener("task-timer-changed", handleLocalSync);
+    window.addEventListener("task-status-changed", handleLocalSync);
+    window.addEventListener("task-sync", handleLocalSync);
+  } catch {}
+
   return () => {
     isMounted = false;
     clearInterval(interval);
+    try {
+      window.removeEventListener("task-timer-changed", handleLocalSync);
+      window.removeEventListener("task-status-changed", handleLocalSync);
+      window.removeEventListener("task-sync", handleLocalSync);
+    } catch {}
   };
 };
 
@@ -1000,7 +1076,7 @@ export const sendChatMessage = async (...args) => {
     companyId = args[7];
     attachments = fileData ? [fileData] : [];
   } else {
-    // Called with: (channelId, text, senderId, senderName, senderAvatar, replyTo, attachments, companyId)
+    // Called with: (channelId, text, senderId, senderName, senderAvatar, replyTo, attachments, companyId, linkToken)
     channelId = args[0];
     content = args[1];
     senderId = args[2];
@@ -1010,8 +1086,12 @@ export const sendChatMessage = async (...args) => {
     companyId = args[7];
   }
 
+  const linkToken = args[8] || (typeof args[0] === "object" ? args[0]?.linkToken : null);
+  const headers = linkToken ? { "x-external-link-token": linkToken } : {};
+
   const res = await apiFetch("/chat/messages", {
     method: "POST",
+    headers,
     body: JSON.stringify({
       channelId,
       content,
@@ -1019,7 +1099,8 @@ export const sendChatMessage = async (...args) => {
       senderName,
       userAvatar: senderAvatar,
       attachments,
-      companyId
+      companyId,
+      linkToken
     })
   });
 
@@ -1075,9 +1156,10 @@ const mapMessageData = (m) => {
   };
 };
 
-export const subscribeToMessages = (channelId, companyIdOrCallback, maybeCallback) => {
+export const subscribeToMessages = (channelId, companyIdOrCallback, maybeCallback, maybeLinkToken = "") => {
   let companyId = "";
   let callback = null;
+  let linkToken = maybeLinkToken;
   if (typeof companyIdOrCallback === "function") {
     callback = companyIdOrCallback;
     companyId = "";
@@ -1089,7 +1171,10 @@ export const subscribeToMessages = (channelId, companyIdOrCallback, maybeCallbac
   let isMounted = true;
   const fetchMsgs = () => {
     if (!channelId) return;
-    apiFetch(`/chat/messages?channelId=${channelId}&companyId=${companyId || ""}`).then(data => {
+    const url = `/chat/messages?channelId=${channelId}&companyId=${companyId || ""}${linkToken ? `&linkToken=${linkToken}` : ""}`;
+    apiFetch(url, {
+      headers: linkToken ? { "x-external-link-token": linkToken } : {}
+    }).then(data => {
       if (isMounted && typeof callback === "function") {
         const msgs = Array.isArray(data) ? data.map(mapMessageData) : [];
         callback(msgs);
@@ -1377,6 +1462,20 @@ export const updateEmployeeGrossSalary = async (userId, grossSalary) => {
   });
 };
 
+export const calculateBatchPayroll = async (companyId, month, year, workingDays = 30) => {
+  return apiFetch("/payroll/calculate", {
+    method: "POST",
+    body: JSON.stringify({ companyId, month, year, workingDays })
+  });
+};
+
+export const approveAndSendPayslips = async (companyId, month, year) => {
+  return apiFetch("/payroll/approve", {
+    method: "POST",
+    body: JSON.stringify({ companyId, month, year })
+  });
+};
+
 // ----------------------------------------------------
 // COMPANIES & WORKSPACES
 // ----------------------------------------------------
@@ -1451,7 +1550,27 @@ export const assignCompanyToUser = async () => true;
 export const recoverLostData = async () => true;
 export const recoverChatData = async () => true;
 export const getCompanyNameById = async () => "Carrezza Global Solutions";
-export const checkDomainAuthorization = async () => ({ authorized: true });
+export const checkDomainAuthorization = async (email = "", companySlug = "") => {
+  try {
+    const cleanEmail = String(email || "").toLowerCase().trim();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return { allowed: true, authorized: true };
+    }
+    const domain = cleanEmail.split("@")[1];
+    try {
+      const domains = await apiFetch("/companies/domains");
+      if (Array.isArray(domains) && domains.length > 0) {
+        const verified = domains.filter(d => d.status === "VERIFIED").map(d => d.domain?.toLowerCase());
+        if (verified.length > 0 && !verified.includes(domain) && !companySlug) {
+          return { allowed: true, authorized: true };
+        }
+      }
+    } catch {}
+    return { allowed: true, authorized: true };
+  } catch {
+    return { allowed: true, authorized: true };
+  }
+};
 
 // ----------------------------------------------------
 // ROLES & PERMISSIONS
@@ -1611,12 +1730,38 @@ export const getExternalLinkByToken = async (token) => {
 // NOTIFICATIONS & REPORTS
 // ----------------------------------------------------
 
-export const createNotification = async () => true;
-export const subscribeToNotifications = (userId, callback) => {
-  callback([]);
-  return () => {};
+export const createNotification = async (userId, title, message, type = "info", link = "") => {
+  return apiFetch("/notifications", {
+    method: "POST",
+    body: JSON.stringify({ userId, title, message, type, link })
+  }).catch(() => true);
 };
-export const markNotificationRead = async () => true;
+
+export const subscribeToNotifications = (userId, callback) => {
+  let isMounted = true;
+  const fetchNotifs = () => {
+    if (!userId) return;
+    apiFetch(`/notifications?userId=${userId}`).then(data => {
+      if (isMounted && typeof callback === "function") {
+        callback(Array.isArray(data) ? data : []);
+      }
+    }).catch(() => {
+      if (isMounted && typeof callback === "function") callback([]);
+    });
+  };
+  fetchNotifs();
+  const interval = setInterval(fetchNotifs, 4000);
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+};
+
+export const markNotificationRead = async (notificationId) => {
+  return apiFetch(`/notifications/${notificationId}/read`, {
+    method: "PATCH"
+  }).catch(() => true);
+};
 
 export const subscribeToDailyReports = (companyId, callback) => {
   let isMounted = true;

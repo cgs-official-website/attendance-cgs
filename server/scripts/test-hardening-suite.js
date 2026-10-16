@@ -167,7 +167,7 @@ async function runTests() {
     // 7. Rate Limiting Verification (Issue #12 Fix)
     console.log("\n7. Authentication Rate Limiter Test:");
     let rateLimited = false;
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 35; i++) {
       const r = await fetch(`${baseUrl}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

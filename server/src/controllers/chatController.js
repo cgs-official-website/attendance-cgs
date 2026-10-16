@@ -288,6 +288,37 @@ export const sendMessage = async (req, res) => {
     if (io) {
       if (targetCompanyId) io.to(`company_${targetCompanyId}`).emit("new_message", formatted);
       io.to(`channel_${targetChannelId}`).emit("new_message", formatted);
+      io.emit("new_message", formatted);
+    }
+
+    // Automatic in-app notification dispatch for DM recipient
+    let dmRecipientId = null;
+    if (targetChannelId && (targetChannelId.includes("_dm_") || targetChannelId.startsWith("dm_"))) {
+      const parts = targetChannelId.includes("_dm_") ? targetChannelId.split("_dm_") : targetChannelId.replace("dm_", "").split("_");
+      dmRecipientId = parts.find(p => p !== senderId);
+      if (dmRecipientId) {
+        const notifId = "notif_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+        const preview = content ? (content.length > 80 ? content.substring(0, 77) + "..." : content) : (fileName ? `Attachment: ${fileName}` : "Sent a file");
+        await query(
+          `INSERT INTO notifications (id, user_id, title, message, type, read, link)
+           VALUES ($1, $2, $3, $4, 'message', false, $5)
+           ON CONFLICT (id) DO NOTHING`,
+          [notifId, dmRecipientId, `New message from ${senderName}`, preview, `/team-hub?thread=${targetChannelId}`]
+        ).catch(() => {});
+
+        if (io) {
+          io.emit(`notification_${dmRecipientId}`, {
+            id: notifId,
+            userId: dmRecipientId,
+            title: `New message from ${senderName}`,
+            message: preview,
+            type: "message",
+            read: false,
+            link: `/team-hub?thread=${targetChannelId}`,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
     }
 
     res.status(201).json(formatted);
@@ -476,19 +507,18 @@ export const sendDirectMessage = async (req, res) => {
       return res.status(401).json({ error: "Authentication required." });
     }
 
-    // Verify sender is participant in thread
-    if (!isSuperAdmin) {
-      const threadRes = await query("SELECT participants FROM dm_threads WHERE id = $1", [threadId]);
-      if (threadRes.rows.length === 0) {
-        return res.status(404).json({ error: "Conversation not found." });
-      }
-      const participants = threadRes.rows[0].participants || [];
-      if (!participants.includes(senderId)) {
-        return res.status(403).json({ error: "Access denied. You are not a participant in this conversation." });
-      }
+    // Fetch thread participants
+    const threadRes = await query("SELECT participants FROM dm_threads WHERE id = $1", [threadId]);
+    if (threadRes.rows.length === 0) {
+      return res.status(404).json({ error: "Conversation not found." });
+    }
+    const participants = threadRes.rows[0].participants || [];
+    if (!isSuperAdmin && !participants.includes(senderId)) {
+      return res.status(403).json({ error: "Access denied. You are not a participant in this conversation." });
     }
 
     const fileUrl = attachments[0]?.url || attachments[0]?.fileUrl || null;
+    const fileName = attachments[0]?.name || attachments[0]?.fileName || null;
 
     const id = "dm_msg_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
     const result = await query(
@@ -503,15 +533,55 @@ export const sendDirectMessage = async (req, res) => {
       `UPDATE dm_threads
        SET last_message = $1, last_message_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
-      [content, threadId]
+      [content || (fileName ? `Attachment: ${fileName}` : "Sent a file"), threadId]
     );
 
     const row = result.rows[0];
-    res.status(201).json({
+    const formatted = {
       ...row,
       senderId: row.sender_id,
       timestamp: row.created_at
-    });
+    };
+
+    const recipientId = participants.find(p => p !== senderId);
+    let senderName = req.user?.name || req.body.userName;
+    if (!senderName && senderId) {
+      const uRes = await query("SELECT name FROM users WHERE id = $1", [senderId]).catch(() => ({ rows: [] }));
+      senderName = uRes.rows[0]?.name || "Colleague";
+    }
+    const io = req.app?.get("io");
+
+    if (recipientId) {
+      const notifId = "notif_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      const preview = content ? (content.length > 80 ? content.substring(0, 77) + "..." : content) : (fileName ? `Attachment: ${fileName}` : "Sent an attachment");
+      await query(
+        `INSERT INTO notifications (id, user_id, title, message, type, read, link)
+         VALUES ($1, $2, $3, $4, 'message', false, $5)
+         ON CONFLICT (id) DO NOTHING`,
+        [notifId, recipientId, `New message from ${senderName}`, preview, `/team-hub?thread=${threadId}`]
+      ).catch(() => {});
+
+      if (io) {
+        io.emit(`notification_${recipientId}`, {
+          id: notifId,
+          userId: recipientId,
+          title: `New message from ${senderName}`,
+          message: preview,
+          type: "message",
+          read: false,
+          link: `/team-hub?thread=${threadId}`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
+    if (io) {
+      io.to(`channel_${threadId}`).emit("new_direct_message", formatted);
+      if (recipientId) io.to(`user_${recipientId}`).emit("new_direct_message", formatted);
+      io.emit("new_direct_message", formatted);
+    }
+
+    res.status(201).json(formatted);
   } catch (err) {
     console.error("sendDirectMessage error:", err);
     res.status(500).json({ error: "Failed to send direct message." });
@@ -537,6 +607,12 @@ export const updateReadReceipt = async (req, res) => {
        WHERE id = $3`,
       [threadId, timestamp, userId]
     );
+
+    const io = req.app?.get("io");
+    if (io) {
+      io.to(`channel_${threadId}`).emit("read_receipt_updated", { threadId, userId, readAt: timestamp });
+      io.emit("read_receipt_updated", { threadId, userId, readAt: timestamp });
+    }
 
     res.json({ success: true, threadId, readAt: timestamp });
   } catch (err) {

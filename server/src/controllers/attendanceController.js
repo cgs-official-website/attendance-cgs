@@ -103,6 +103,8 @@ export const checkIn = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, 'present', $6, $7, $7)
        ON CONFLICT (id) DO UPDATE SET
          check_in = COALESCE(attendance.check_in, EXCLUDED.check_in),
+         check_out = NULL,
+         status = 'present',
          check_in_location = EXCLUDED.check_in_location,
          updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
@@ -142,25 +144,43 @@ export const checkOut = async (req, res) => {
 
     const recordId = `${userId}_${today}`;
     
-    // Fetch check_in to calculate duration
-    const existing = await query("SELECT check_in FROM attendance WHERE id = $1", [recordId]);
-    let durationMinutes = 0;
-    if (existing.rows.length > 0 && existing.rows[0].check_in) {
-      const checkInTime = new Date(existing.rows[0].check_in);
-      durationMinutes = Math.max(0, Math.floor((new Date(now) - checkInTime) / 60000));
+    // Fetch check_in to calculate duration and handle any open breaks
+    const existing = await query("SELECT * FROM attendance WHERE id = $1", [recordId]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "No check-in found for today." });
     }
+
+    const rowData = existing.rows[0];
+    let durationMinutes = 0;
+    const breaks = Array.isArray(rowData.breaks) ? [...rowData.breaks] : [];
+    let totalBreakMinutes = 0;
+
+    breaks.forEach(b => {
+      if (b.start && b.end) {
+        totalBreakMinutes += Math.max(0, Math.floor((new Date(b.end) - new Date(b.start)) / 60000));
+      } else if (b.start && !b.end) {
+        b.end = now;
+        const dur = Math.max(0, Math.floor((new Date(now) - new Date(b.start)) / 60000));
+        b.durationMinutes = dur;
+        totalBreakMinutes += dur;
+      }
+    });
+
+    if (rowData.check_in) {
+      const checkInTime = new Date(rowData.check_in);
+      const rawElapsed = Math.max(0, Math.floor((new Date(now) - checkInTime) / 60000));
+      durationMinutes = Math.max(0, rawElapsed - totalBreakMinutes);
+    }
+
+    const checkoutStatus = durationMinutes < 240 ? "half-day" : "present";
 
     const result = await query(
       `UPDATE attendance
-       SET check_out = $1, check_out_location = $2, duration_minutes = $3, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4
+       SET check_out = $1, check_out_location = $2, duration_minutes = $3, breaks = $4, status = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $6
        RETURNING *`,
-      [now, JSON.stringify(location || {}), durationMinutes, recordId]
+      [now, JSON.stringify(location || {}), durationMinutes, JSON.stringify(breaks), checkoutStatus, recordId]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "No check-in found for today." });
-    }
 
     const row = result.rows[0];
     const checkOutDate = row.check_out ? new Date(row.check_out) : new Date();
@@ -180,6 +200,116 @@ export const checkOut = async (req, res) => {
   } catch (err) {
     console.error("checkOut error:", err);
     res.status(500).json({ error: "Check-out failed." });
+  }
+};
+
+export const startBreak = async (req, res) => {
+  try {
+    let userId = req.user?.id || req.body.userId;
+    if (typeof userId === "object" && userId !== null) {
+      userId = userId.uid || userId.id;
+    }
+    const today = req.body.date || new Date().toISOString().split("T")[0];
+    const now = new Date().toISOString();
+    const { breakType = "short", reason = "break", location } = req.body;
+
+    const recordId = `${userId}_${today}`;
+    const existing = await query("SELECT * FROM attendance WHERE id = $1", [recordId]);
+    if (existing.rows.length === 0 || !existing.rows[0].check_in) {
+      return res.status(400).json({ error: "Cannot start a break without checking in first." });
+    }
+    if (existing.rows[0].check_out) {
+      return res.status(400).json({ error: "Cannot start a break after checking out." });
+    }
+
+    const row = existing.rows[0];
+    const breaks = Array.isArray(row.breaks) ? [...row.breaks] : [];
+    if (breaks.some(b => !b.end)) {
+      return res.status(400).json({ error: "A break is already in progress." });
+    }
+
+    breaks.push({
+      start: now,
+      end: null,
+      breakType,
+      reason,
+      location: location || null
+    });
+
+    const result = await query(
+      `UPDATE attendance
+       SET breaks = $1, status = 'on-break', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [JSON.stringify(breaks), recordId]
+    );
+
+    const updated = result.rows[0];
+    res.json({
+      ...updated,
+      id: updated.id,
+      userId: updated.user_id,
+      companyId: updated.company_id,
+      date: today,
+      status: "on-break",
+      breaks: updated.breaks
+    });
+  } catch (err) {
+    console.error("startBreak error:", err);
+    res.status(500).json({ error: "Failed to start break." });
+  }
+};
+
+export const endBreak = async (req, res) => {
+  try {
+    let userId = req.user?.id || req.body.userId;
+    if (typeof userId === "object" && userId !== null) {
+      userId = userId.uid || userId.id;
+    }
+    const today = req.body.date || new Date().toISOString().split("T")[0];
+    const now = new Date().toISOString();
+    const { location } = req.body;
+
+    const recordId = `${userId}_${today}`;
+    const existing = await query("SELECT * FROM attendance WHERE id = $1", [recordId]);
+    if (existing.rows.length === 0 || !existing.rows[0].check_in) {
+      return res.status(400).json({ error: "No attendance record found for today." });
+    }
+
+    const row = existing.rows[0];
+    const breaks = Array.isArray(row.breaks) ? [...row.breaks] : [];
+    const activeIdx = breaks.findIndex(b => !b.end);
+    if (activeIdx === -1) {
+      return res.status(400).json({ error: "No active break to resume from." });
+    }
+
+    const breakStart = new Date(breaks[activeIdx].start);
+    const breakDurationMinutes = Math.max(0, Math.floor((new Date(now) - breakStart) / 60000));
+    breaks[activeIdx].end = now;
+    breaks[activeIdx].durationMinutes = breakDurationMinutes;
+    if (location) breaks[activeIdx].endLocation = location;
+
+    const result = await query(
+      `UPDATE attendance
+       SET breaks = $1, status = 'present', updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [JSON.stringify(breaks), recordId]
+    );
+
+    const updated = result.rows[0];
+    res.json({
+      ...updated,
+      id: updated.id,
+      userId: updated.user_id,
+      companyId: updated.company_id,
+      date: today,
+      status: "checked-in",
+      breaks: updated.breaks
+    });
+  } catch (err) {
+    console.error("endBreak error:", err);
+    res.status(500).json({ error: "Failed to end break." });
   }
 };
 

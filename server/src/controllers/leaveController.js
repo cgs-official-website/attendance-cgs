@@ -198,6 +198,13 @@ export const updateLeaveStatus = async (req, res) => {
       return res.status(403).json({ error: "Access forbidden. Manager or Admin role required to approve/reject leaves." });
     }
 
+    const prevRes = await query("SELECT * FROM leave_requests WHERE id = $1", [id]);
+    if (prevRes.rows.length === 0) {
+      return res.status(404).json({ error: "Leave request not found." });
+    }
+    const prevLeave = prevRes.rows[0];
+    const prevStatus = prevLeave.status;
+
     const result = await query(
       `UPDATE leave_requests
        SET status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP, rejection_reason = $3, updated_at = CURRENT_TIMESTAMP
@@ -210,8 +217,71 @@ export const updateLeaveStatus = async (req, res) => {
       return res.status(404).json({ error: "Leave request not found." });
     }
 
-
     const updatedLeave = result.rows[0];
+    const totalDays = Number(updatedLeave.total_days || 1);
+    const leaveTypeLower = String(updatedLeave.leave_type || "").toLowerCase();
+
+    let quotaColumn = "casual_leave_quota";
+    if (leaveTypeLower.includes("sick")) quotaColumn = "sick_leave_quota";
+    else if (leaveTypeLower.includes("paid")) quotaColumn = "paid_leave_quota";
+
+    // 1. Quota & Attendance Synchronization
+    if (status === "approved" && prevStatus !== "approved") {
+      // Deduct from employee's quota
+      await query(
+        `UPDATE users
+         SET ${quotaColumn} = GREATEST(0, COALESCE(${quotaColumn}, 25) - $1),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [totalDays, updatedLeave.user_id]
+      ).catch(e => console.error("Error deducting leave quota:", e));
+
+      // Populate attendance records as 'on-leave'
+      try {
+        const start = new Date(updatedLeave.start_date);
+        const end = new Date(updatedLeave.end_date);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dayStr = d.toISOString().split("T")[0];
+          const attId = `${updatedLeave.user_id}_${dayStr}`;
+          await query(
+            `INSERT INTO attendance (id, user_id, company_id, date, status, notes)
+             VALUES ($1, $2, $3, $4, 'on-leave', $5)
+             ON CONFLICT (id) DO UPDATE SET
+               status = 'on-leave',
+               notes = EXCLUDED.notes,
+               updated_at = CURRENT_TIMESTAMP`,
+            [attId, updatedLeave.user_id, updatedLeave.company_id, dayStr, `Approved ${updatedLeave.leave_type || "Leave"}`]
+          );
+        }
+      } catch (attErr) {
+        console.error("Error populating on-leave attendance records:", attErr);
+      }
+    } else if ((status === "rejected" || status === "cancelled") && prevStatus === "approved") {
+      // Restore previously deducted quota
+      await query(
+        `UPDATE users
+         SET ${quotaColumn} = COALESCE(${quotaColumn}, 0) + $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [totalDays, updatedLeave.user_id]
+      ).catch(e => console.error("Error restoring leave quota:", e));
+
+      // Remove on-leave attendance entries
+      try {
+        const start = new Date(updatedLeave.start_date);
+        const end = new Date(updatedLeave.end_date);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dayStr = d.toISOString().split("T")[0];
+          const attId = `${updatedLeave.user_id}_${dayStr}`;
+          await query(
+            `DELETE FROM attendance WHERE id = $1 AND status = 'on-leave'`,
+            [attId]
+          );
+        }
+      } catch (attErr) {
+        console.error("Error cleaning on-leave attendance records:", attErr);
+      }
+    }
 
     // Asynchronously notify the employee about leave decision
     (async () => {
@@ -235,7 +305,6 @@ export const updateLeaveStatus = async (req, res) => {
       }
     })();
 
-    const totalDays = Number(updatedLeave.total_days || 1);
     const leaveType = updatedLeave.leave_type || "Casual Leave";
     const startDateStr = updatedLeave.start_date ? (typeof updatedLeave.start_date === "string" ? updatedLeave.start_date.split("T")[0] : new Date(updatedLeave.start_date).toISOString().split("T")[0]) : "";
     const endDateStr = updatedLeave.end_date ? (typeof updatedLeave.end_date === "string" ? updatedLeave.end_date.split("T")[0] : new Date(updatedLeave.end_date).toISOString().split("T")[0]) : "";

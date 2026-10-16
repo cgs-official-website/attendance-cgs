@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import { sendRegularizationNotif } from "../services/emailService.js";
 
 const formatTimeHHMM = (val, defaultVal = "10:00") => {
   if (!val) return defaultVal;
@@ -213,14 +214,20 @@ export const updateRegularizationStatus = async (req, res) => {
       try {
         const attDate = formatDateYYYYMMDD(updated.attendance_date);
         if (attDate && updated.user_id) {
-          const attId = `att_${updated.user_id}_${attDate}`;
           const checkInVal = updated.requested_check_in || new Date(`${attDate}T10:00:00Z`);
           const checkOutVal = updated.requested_check_out || new Date(`${attDate}T19:00:00Z`);
+
+          // Find if attendance row exists by (user_id, date) or determine default ID
+          const existingAtt = await query(
+            "SELECT id FROM attendance WHERE user_id = $1 AND date = $2 LIMIT 1",
+            [updated.user_id, attDate]
+          );
+          const targetAttId = existingAtt.rows.length > 0 ? existingAtt.rows[0].id : `${updated.user_id}_${attDate}`;
 
           await query(`
             INSERT INTO attendance (id, user_id, company_id, date, check_in, check_out, status, duration_minutes, is_regularized)
             VALUES ($1, $2, $3, $4, $5, $6, 'present', 480, true)
-            ON CONFLICT (user_id, date)
+            ON CONFLICT (id)
             DO UPDATE SET
               check_in = COALESCE(EXCLUDED.check_in, attendance.check_in),
               check_out = COALESCE(EXCLUDED.check_out, attendance.check_out),
@@ -228,7 +235,7 @@ export const updateRegularizationStatus = async (req, res) => {
               duration_minutes = GREATEST(COALESCE(attendance.duration_minutes, 0), 480),
               is_regularized = true,
               updated_at = CURRENT_TIMESTAMP
-          `, [attId, updated.user_id, updated.company_id, attDate, checkInVal, checkOutVal]);
+          `, [targetAttId, updated.user_id, updated.company_id, attDate, checkInVal, checkOutVal]);
         }
       } catch (attErr) {
         console.error("Error updating attendance on regularization approval:", attErr);
@@ -237,6 +244,19 @@ export const updateRegularizationStatus = async (req, res) => {
 
     const userRes = await query("SELECT name, email, department FROM users WHERE id = $1", [updated.user_id]);
     const user = userRes.rows[0] || {};
+
+    // Asynchronously dispatch regularization status notification email
+    if (user.email) {
+      sendRegularizationNotif({
+        email: user.email,
+        name: user.name || "Employee",
+        date: formatDateYYYYMMDD(updated.attendance_date),
+        requestedCheckIn: formatTimeHHMM(updated.requested_check_in, ""),
+        requestedCheckOut: formatTimeHHMM(updated.requested_check_out, ""),
+        status: updated.status,
+        managerComment: comment
+      }).catch(err => console.error("Error dispatching regularization email:", err));
+    }
 
     const fullRow = {
       ...updated,

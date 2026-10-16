@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import { sendPayslipNotification } from "../services/emailService.js";
 
 export const getPayroll = async (req, res) => {
   try {
@@ -319,4 +320,232 @@ export const wipeAllPayrolls = async (req, res) => {
     res.status(500).json({ error: "Failed to wipe payroll records." });
   }
 };
+
+export const calculatePayrollBatch = async (req, res) => {
+  try {
+    const { companyId, month, year, workingDays = 30 } = req.body;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+
+    if (!month || !year) {
+      return res.status(400).json({ error: "Month and Year are required for payroll calculation." });
+    }
+
+    // 1. Fetch all active employees in this company
+    let userSql = "SELECT id, name, email, gross_salary, metadata FROM users WHERE role != 'superadmin' AND (metadata->>'status' IS NULL OR metadata->>'status' != 'inactive')";
+    const userParams = [];
+    if (targetCompanyId) {
+      userParams.push(targetCompanyId);
+      userSql += ` AND company_id = $${userParams.length}`;
+    }
+    const employees = await query(userSql, userParams);
+
+    if (employees.rows.length === 0) {
+      return res.status(400).json({ error: "No active employees found for this company." });
+    }
+
+    const calculatedRecords = [];
+    const wDays = Number(workingDays) || 30;
+
+    for (const emp of employees.rows) {
+      const gross = Number(emp.gross_salary || 30000);
+
+      const monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+      let mIdx = monthNames.indexOf(String(month).toLowerCase());
+      let monthNumberStr = mIdx !== -1 ? String(mIdx + 1).padStart(2, '0') : String(month).padStart(2, '0');
+      const datePrefix = `${year}-${monthNumberStr}`;
+
+      const attRes = await query(
+        `SELECT COUNT(*) as count, status FROM attendance 
+         WHERE user_id = $1 AND date LIKE $2 
+         GROUP BY status`,
+        [emp.id, `${datePrefix}%`]
+      ).catch(() => ({ rows: [] }));
+
+      let presentCount = 0;
+      let onLeaveCount = 0;
+      attRes.rows.forEach(r => {
+        const count = Number(r.count || 0);
+        if (r.status === "present") presentCount += count;
+        else if (r.status === "half-day") presentCount += (count * 0.5);
+        else if (r.status === "on-leave") onLeaveCount += count;
+      });
+
+      const loggedDays = presentCount + onLeaveCount;
+      const paidDays = loggedDays > 0 ? Math.min(wDays, loggedDays) : wDays;
+      const lopsDays = Math.max(0, wDays - paidDays);
+
+      const actualGross = Math.round(((gross / wDays) * paidDays) * 100) / 100;
+      const lopAmount = Math.round((gross - actualGross) * 100) / 100;
+
+      const basic = Math.round((gross * 0.5) * 100) / 100;
+      const hra = Math.round((basic * 0.4) * 100) / 100;
+      const special = Math.round(Math.max(0, gross - basic - hra) * 100) / 100;
+
+      const actualBasic = Math.round((actualGross * 0.5) * 100) / 100;
+      const pf = Math.round((actualBasic * 0.12) * 100) / 100;
+      const esi = actualGross <= 21000 ? Math.round((actualGross * 0.0075) * 100) / 100 : 0;
+
+      let pt = 0;
+      if (actualGross > 75000) pt = 208.33;
+      else if (actualGross > 60000) pt = 170.83;
+      else if (actualGross > 45000) pt = 155;
+      else if (actualGross > 30000) pt = 70.83;
+      else if (actualGross > 21000) pt = 30;
+
+      const tds = actualGross > 50000 ? Math.round(((actualGross - pf - pt) * 0.05) * 100) / 100 : 0;
+      const totalDeductions = Math.round((pf + esi + pt + tds + lopAmount) * 100) / 100;
+      const netSalary = Math.round(Math.max(0, actualGross - (pf + esi + pt + tds)) * 100) / 100;
+
+      const metadata = {
+        workingDays: wDays,
+        lopAmount,
+        lopsDays,
+        tds,
+        special,
+        calculatedAt: new Date().toISOString()
+      };
+
+      const recordId = `payroll_${emp.id}_${month}_${year}`;
+      await query(
+        `INSERT INTO payroll (id, company_id, employee_id, month, year, basic_salary, hra, allowances, gross_salary, pf_deduction, esi_deduction, tax_deduction, total_deductions, net_salary, paid_days, present_days, status, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'draft', $17)
+         ON CONFLICT (id) DO UPDATE SET
+           company_id = EXCLUDED.company_id,
+           basic_salary = EXCLUDED.basic_salary,
+           hra = EXCLUDED.hra,
+           allowances = EXCLUDED.allowances,
+           gross_salary = EXCLUDED.gross_salary,
+           pf_deduction = EXCLUDED.pf_deduction,
+           esi_deduction = EXCLUDED.esi_deduction,
+           tax_deduction = EXCLUDED.tax_deduction,
+           total_deductions = EXCLUDED.total_deductions,
+           net_salary = EXCLUDED.net_salary,
+           paid_days = EXCLUDED.paid_days,
+           present_days = EXCLUDED.present_days,
+           status = 'draft',
+           metadata = EXCLUDED.metadata,
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          recordId, targetCompanyId, emp.id, month, Number(year),
+          basic, hra, special, gross, pf, esi, pt, totalDeductions, netSalary,
+          paidDays, presentCount || paidDays, JSON.stringify(metadata)
+        ]
+      );
+
+      calculatedRecords.push({
+        id: recordId,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        month,
+        year: Number(year),
+        grossSalary: gross,
+        netSalary,
+        basicSalary: basic,
+        totalDeductions,
+        paidDays,
+        status: "draft"
+      });
+    }
+
+    res.json({
+      message: `Calculated payroll for ${calculatedRecords.length} employees.`,
+      count: calculatedRecords.length,
+      payrolls: calculatedRecords
+    });
+  } catch (err) {
+    console.error("calculatePayrollBatch error:", err);
+    res.status(500).json({ error: "Failed to calculate payroll batch." });
+  }
+};
+
+export const approvePayrollBatch = async (req, res) => {
+  try {
+    const { companyId, month, year } = req.body;
+    const isSuperAdmin = req.user?.role?.toLowerCase() === "superadmin";
+    const targetCompanyId = (isSuperAdmin && companyId) ? companyId : req.user?.companyId;
+
+    if (!month || !year) {
+      return res.status(400).json({ error: "Month and Year are required to approve payroll." });
+    }
+
+    // 1. Fetch matching draft payroll records with employee details
+    let sql = `
+      SELECT p.*, u.name as employee_name, u.email as employee_email
+      FROM payroll p
+      LEFT JOIN users u ON p.employee_id = u.id
+      WHERE p.month = $1 AND p.year = $2
+    `;
+    const params = [month, Number(year)];
+    if (targetCompanyId) {
+      params.push(targetCompanyId);
+      sql += ` AND p.company_id = $${params.length}`;
+    }
+
+    const records = await query(sql, params);
+    if (records.rows.length === 0) {
+      return res.status(404).json({ error: "No payroll records found for the specified period." });
+    }
+
+    // 2. Update status to 'paid'
+    let updateSql = "UPDATE payroll SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE month = $1 AND year = $2";
+    const updateParams = [month, Number(year)];
+    if (targetCompanyId) {
+      updateParams.push(targetCompanyId);
+      updateSql += ` AND company_id = $${updateParams.length}`;
+    }
+    await query(updateSql, updateParams);
+
+    const io = req.app?.get("io");
+
+    // 3. For each employee, create in-app notification & dispatch email
+    for (const r of records.rows) {
+      const notifId = "notif_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      const title = `Payslip Available: ${r.month} ${r.year}`;
+      const message = `Your salary payslip for ${r.month} ${r.year} is approved. Net Pay: ₹${Number(r.net_salary).toLocaleString("en-IN")}.`;
+      
+      await query(
+        `INSERT INTO notifications (id, user_id, title, message, type, read, link)
+         VALUES ($1, $2, $3, $4, 'payroll', false, '/dashboard?tab=payroll')
+         ON CONFLICT (id) DO NOTHING`,
+        [notifId, r.employee_id, title, message]
+      ).catch(() => {});
+
+      if (io) {
+        io.emit(`notification_${r.employee_id}`, {
+          id: notifId,
+          userId: r.employee_id,
+          title,
+          message,
+          type: "payroll",
+          read: false,
+          link: "/dashboard?tab=payroll",
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      if (r.employee_email) {
+        sendPayslipNotification({
+          email: r.employee_email,
+          name: r.employee_name || "Employee",
+          month: r.month,
+          year: r.year,
+          netSalary: r.net_salary,
+          grossSalary: r.gross_salary,
+          totalDeductions: r.total_deductions,
+          paidDays: r.paid_days || 30
+        }).catch(emailErr => console.warn("Payslip email dispatch non-blocking error:", emailErr.message));
+      }
+    }
+
+    res.json({
+      message: `Approved and processed ${records.rows.length} payslips.`,
+      count: records.rows.length
+    });
+  } catch (err) {
+    console.error("approvePayrollBatch error:", err);
+    res.status(500).json({ error: "Failed to approve payroll batch." });
+  }
+};
+
 

@@ -434,7 +434,7 @@ export const createTaskReport = async (req, res) => {
 
     const row = result.rows[0];
     const submittedStr = row.submitted_at instanceof Date ? row.submitted_at.toISOString() : (row.submitted_at ? String(row.submitted_at) : new Date().toISOString());
-    res.status(201).json({
+    const reportPayload = {
       id: row.id,
       _id: row.id,
       taskId: row.task_id,
@@ -448,7 +448,15 @@ export const createTaskReport = async (req, res) => {
       createdAt: submittedStr,
       submittedAt: submittedStr,
       timestamp: submittedStr
-    });
+    };
+
+    const io = req.app?.get("io");
+    if (io) {
+      if (targetCompanyId) io.to(`company_${targetCompanyId}`).emit("task_report_created", reportPayload);
+      io.emit("task_report_created", reportPayload);
+    }
+
+    res.status(201).json(reportPayload);
   } catch (err) {
     console.error("createTaskReport error:", err);
     res.status(500).json({ error: "Failed to create task report." });

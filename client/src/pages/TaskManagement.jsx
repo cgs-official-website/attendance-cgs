@@ -13,7 +13,8 @@ import {
   deleteDailyReport,
   subscribeToProjects,
   subscribeToUserTasks,
-  updateUserTasks
+  updateUserTasks,
+  updateTaskStatus
 } from "../firebase";
 import { CheckCircle, Clock, Send, MessageSquare, Play, X, FileText, Download, Square, Activity, Plus, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
@@ -214,15 +215,17 @@ export default function TaskManagement() {
   const handleMarkComplete = async (taskIdx, isComplete) => {
     let updatedTasks = [...tasks];
     updatedTasks[taskIdx].completed = isComplete;
+    updatedTasks[taskIdx].status = isComplete ? "completed" : "pending";
     setTasks(updatedTasks);
 
     try {
-      await updateUserTasks(currentUser.uid, updatedTasks);
+      const taskId = updatedTasks[taskIdx].id;
+      await updateTaskStatus(taskId, isComplete ? "completed" : "pending", currentUser.uid, updatedTasks);
       showToast(isComplete ? "Task marked as completed!" : "Task marked as incomplete.", "success");
       
       // Notify PM if marked complete
       if (isComplete && updatedTasks[taskIdx].assignedBy) {
-        await createNotification(
+        await createNotification( 
           updatedTasks[taskIdx].assignedBy,
           "Task Completed",
           `${currentUser.name} completed the task: "${updatedTasks[taskIdx].title}".`,

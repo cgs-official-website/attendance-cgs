@@ -15,6 +15,9 @@ export const authenticateToken = (req, res, next) => {
     if (err) {
       return res.status(403).json({ error: "Invalid or expired token." });
     }
+    if (user.type === "mfa_pending" || user.pending) {
+      return res.status(401).json({ error: "Access denied. MFA verification required." });
+    }
     req.user = user;
     next();
   });
@@ -65,7 +68,7 @@ export const optionalAuth = (req, res, next) => {
 
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, user) => {
-      if (!err) req.user = user;
+      if (!err && user.type !== "mfa_pending" && !user.pending) req.user = user;
       next();
     });
   } else {

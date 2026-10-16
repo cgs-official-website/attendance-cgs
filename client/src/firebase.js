@@ -4,7 +4,7 @@
 // ============================================================================
 
 const PRODUCTION_API_URL = "https://attendance-cgs-production.up.railway.app/api";
-const LOCAL_API_URL = "http://localhost:5000/api";
+const LOCAL_API_URL = "http://localhost:5001/api";
 
 const getHeaders = () => {
   const token = localStorage.getItem("att_auth_token");
@@ -19,19 +19,22 @@ export const apiFetch = async (endpoint, options = {}) => {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
-  // Determine candidate URLs (prioritize direct production backend over static origins)
+  // Determine candidate URLs (prioritize local backend when developing locally)
   const candidateUrls = [];
-  if (isLocal) {
-    candidateUrls.push(`http://localhost:5005/api${cleanEndpoint}`);
-    candidateUrls.push(`${LOCAL_API_URL}${cleanEndpoint}`);
-  }
   if (import.meta.env.VITE_API_URL) {
     const envBase = import.meta.env.VITE_API_URL.replace(/\/+$/, "");
     candidateUrls.push(`${envBase}${cleanEndpoint}`);
   }
-  candidateUrls.push(`${PRODUCTION_API_URL}${cleanEndpoint}`);
-  if (!isLocal && typeof window !== "undefined" && window.location.origin) {
-    candidateUrls.push(`${window.location.origin}/api${cleanEndpoint}`);
+  if (isLocal) {
+    candidateUrls.push(`http://localhost:5001/api${cleanEndpoint}`);
+    candidateUrls.push(`${LOCAL_API_URL}${cleanEndpoint}`);
+    candidateUrls.push(`http://localhost:5000/api${cleanEndpoint}`);
+    candidateUrls.push(`http://localhost:5005/api${cleanEndpoint}`);
+  } else {
+    candidateUrls.push(`${PRODUCTION_API_URL}${cleanEndpoint}`);
+    if (typeof window !== "undefined" && window.location.origin) {
+      candidateUrls.push(`${window.location.origin}/api${cleanEndpoint}`);
+    }
   }
 
   // Remove duplicates
@@ -51,9 +54,9 @@ export const apiFetch = async (endpoint, options = {}) => {
 
       const contentType = response.headers.get("content-type") || "";
 
-      // If server returned HTML (e.g. SPA fallback index.html for unhandled /api route) or 405 Method Not Allowed,
+      // If server returned HTML (e.g. AirTunes 403 or SPA fallback index.html for unhandled /api route) or 405 Method Not Allowed,
       // this server doesn't host the real API; continue to the next candidate server.
-      if (response.status === 405 || (!contentType.includes("application/json") && response.ok)) {
+      if (response.status === 405 || (!contentType.includes("application/json") && response.ok) || (!contentType.includes("application/json") && response.status === 403)) {
         continue;
       }
 
@@ -61,18 +64,18 @@ export const apiFetch = async (endpoint, options = {}) => {
         return await response.json();
       }
 
-      // If unauthorized (401) or forbidden (403), throw immediately - user needs login/permissions
-      if (response.status === 401 || response.status === 403) {
+      // If the API server returned a structured JSON response (400, 401, 403, 429, 500, etc.),
+      // it is a real response from the HRMS backend - parse and throw immediately.
+      if (contentType.includes("application/json")) {
         const err = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(err.error || err.message || `Access denied (${response.status})`);
+        const apiError = new Error(err.error || err.message || `Request failed with status ${response.status}`);
+        apiError.isApiResponse = true;
+        throw apiError;
       }
 
-      // If 404 (route missing on this candidate server) or 5xx, capture error and try next candidate server
-      const err = await response.json().catch(() => ({ error: response.statusText }));
-      const errorMsg = err.error || err.message || `Request failed with status ${response.status}`;
-      lastError = new Error(errorMsg);
+      lastError = new Error(`Request failed with status ${response.status}`);
     } catch (err) {
-      if (err.message && (err.message.includes("Access denied") || err.message.includes("Invalid credentials") || err.message.includes("Invalid password"))) {
+      if (err.isApiResponse || (err.message && (err.message.includes("Access denied") || err.message.includes("Invalid credentials") || err.message.includes("Invalid password") || err.message.includes("verification") || err.message.includes("OTP") || err.message.includes("Too many") || err.message.includes("Please wait") || err.message.includes("expired")))) {
         throw err;
       }
       lastError = err;
@@ -103,6 +106,16 @@ export const loginUser = async (email, password) => {
     body: JSON.stringify({ email: cleanEmail, password })
   });
 
+  // If MFA is required (employee login flow), return MFA challenge state without setting auth tokens
+  if (res.mfaRequired) {
+    return {
+      mfaRequired: true,
+      pendingToken: res.pendingToken,
+      email: res.email || cleanEmail,
+      message: res.message
+    };
+  }
+
   if (res.token) {
     localStorage.setItem("att_auth_token", res.token);
   }
@@ -123,6 +136,41 @@ export const loginUser = async (email, password) => {
   localStorage.setItem("att_current_user", JSON.stringify(user));
   window.dispatchEvent(new Event("local-auth-updated"));
   return user;
+};
+
+export const verifyLoginOtp = async (pendingToken, otp) => {
+  const res = await apiFetch("/auth/verify-otp", {
+    method: "POST",
+    body: JSON.stringify({ pendingToken, otp: String(otp).trim() })
+  });
+
+  if (res.token) {
+    localStorage.setItem("att_auth_token", res.token);
+  }
+
+  const meta = res.user.metadata && typeof res.user.metadata === "object" ? res.user.metadata : {};
+  const empId = res.user.employeeId || res.user.employee_id || meta.employeeId || meta.employee_id || "";
+
+  const user = {
+    ...res.user,
+    ...meta,
+    uid: res.user.id || res.user.uid,
+    id: res.user.id || res.user.uid,
+    employeeId: empId,
+    employee_id: empId,
+    companyId: res.user.company_id || res.user.companyId || (res.user.email?.toLowerCase().endsWith("@teamcarrezza.com") ? "carrezza-global-solutions" : "")
+  };
+
+  localStorage.setItem("att_current_user", JSON.stringify(user));
+  window.dispatchEvent(new Event("local-auth-updated"));
+  return user;
+};
+
+export const resendLoginOtp = async (pendingToken) => {
+  return await apiFetch("/auth/resend-otp", {
+    method: "POST",
+    body: JSON.stringify({ pendingToken })
+  });
 };
 
 export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "", additionalData = {}) => {

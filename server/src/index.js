@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-let PORT = parseInt(process.env.PORT || "5000", 10);
+let PORT = parseInt(process.env.PORT || "5001", 10);
 const server = http.createServer(app);
 
 // Socket.io for live updates

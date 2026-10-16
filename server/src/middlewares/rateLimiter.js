@@ -45,7 +45,7 @@ const createRateLimiter = ({
 
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: process.env.NODE_ENV === "test" ? 1000 : 25,
   message: "Too many login attempts. Please wait 15 minutes before trying again."
 });
 

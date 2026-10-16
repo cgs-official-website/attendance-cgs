@@ -7,7 +7,9 @@ import {
   getDbType,
   sendPasswordReset,
   confirmPasswordReset,
-  changeUserPassword
+  changeUserPassword,
+  verifyLoginOtp as verifyOtpService,
+  resendLoginOtp as resendOtpService
 } from "../firebase";
 
 const AuthContext = createContext();
@@ -35,36 +37,35 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signup = async (name, department, programType, email, password, shiftStart, shiftEnd, employeeId = "", companySlug = "") => {
-    setLoading(true);
-    try {
-      await registerUser(name, department, programType, email, password, shiftStart, shiftEnd, 25, 10, 6, "", "", "", [], "Full-time", "", false, employeeId, companySlug);
-      const user = await loginUser(email, password);
+    await registerUser(name, department, programType, email, password, shiftStart, shiftEnd, 25, 10, 6, "", "", "", [], "Full-time", "", false, employeeId, companySlug);
+    const user = await loginUser(email, password);
+    if (!user.mfaRequired) {
       setCurrentUser(user);
-      return user;
-    } finally {
-      setLoading(false);
     }
+    return user;
   };
 
   const login = async (email, password) => {
-    setLoading(true);
-    try {
-      const user = await loginUser(email, password);
+    const user = await loginUser(email, password);
+    if (!user.mfaRequired) {
       setCurrentUser(user);
-      return user;
-    } finally {
-      setLoading(false);
     }
+    return user;
+  };
+
+  const verifyLoginOtp = async (pendingToken, otp) => {
+    const user = await verifyOtpService(pendingToken, otp);
+    setCurrentUser(user);
+    return user;
+  };
+
+  const resendLoginOtp = async (pendingToken) => {
+    return await resendOtpService(pendingToken);
   };
 
   const logout = async () => {
-    setLoading(true);
-    try {
-      await logoutUser();
-      setCurrentUser(null);
-    } finally {
-      setLoading(false);
-    }
+    await logoutUser();
+    setCurrentUser(null);
   };
 
   const updateCurrentUserState = (newData) => {
@@ -77,6 +78,8 @@ export const AuthProvider = ({ children }) => {
     dbMode,
     signup,
     login,
+    verifyLoginOtp,
+    resendLoginOtp,
     logout,
     updateCurrentUserState,
     sendPasswordReset,

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -372,3 +373,78 @@ export const verifySmtpConnection = async () => {
     return { ok: false, message: error.message };
   }
 };
+
+let customOtpDispatcher = null;
+export const setCustomOtpDispatcher = (fn) => {
+  customOtpDispatcher = fn;
+};
+
+/**
+ * Send Login Verification Code (MFA OTP) using official Resend SDK (with SMTP fallback)
+ */
+export const sendOtpEmail = async ({ email, otp }) => {
+  if (typeof customOtpDispatcher === "function") {
+    return await customOtpDispatcher({ email, otp });
+  }
+
+  // Log OTP clearly to backend console for easy local verification
+  console.log(`\n==================================================`);
+  console.log(`🔑 [HRMS MFA OTP] Verification code for <${email}>: ${otp}`);
+  console.log(`==================================================\n`);
+
+  const textBody = `Hello,\n\nYour OTP for HRMS login is ${otp}.\n\nThis code expires in 5 minutes. Please do not share it with anyone.\n\nIf you did not attempt to log in, please ignore this email and contact your administrator if necessary.\n\nRegards,\nHRMS Team`;
+
+  const htmlBody = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
+      <h2 style="color: #4f46e5; margin-top: 0;">HRMS Login Verification</h2>
+      <p>Hello,</p>
+      <p>Your OTP for HRMS login is:</p>
+      <div style="background-color: #f1f5f9; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #4f46e5; border: 1px dashed #cbd5e1;">
+        ${otp}
+      </div>
+      <p>This code expires in 5 minutes. Please do not share it with anyone.</p>
+      <p style="color: #64748b; font-size: 13px;">If you did not attempt to log in, please ignore this email and contact your administrator if necessary.</p>
+      <br/>
+      <p style="margin-bottom: 0;">Regards,<br/><strong>HRMS Team</strong></p>
+    </div>
+  `;
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (apiKey && apiKey !== "your_resend_api_key") {
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "HRMS Team <onboarding@resend.dev>";
+    const resend = new Resend(apiKey);
+
+    try {
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
+        to: email,
+        subject: "Your HRMS Login Verification Code",
+        text: textBody,
+        html: htmlBody
+      });
+
+      if (error) {
+        console.error(`❌ [EmailService] Resend API delivery error to <${email}>:`, error.message || error);
+        console.log(`ℹ️ [EmailService] Attempting delivery via backup SMTP...`);
+      } else {
+        console.log(`📧 [EmailService] Resend OTP email dispatched successfully to ${email}. ID: ${data?.id}`);
+        return { success: true, id: data?.id };
+      }
+    } catch (err) {
+      console.error(`❌ [EmailService] Resend exception to <${email}>:`, err.message);
+      console.log(`ℹ️ [EmailService] Attempting delivery via backup SMTP...`);
+    }
+  }
+
+  // Deliver via configured SMTP (Nodemailer)
+  console.log(`📧 [EmailService] Delivering OTP to <${email}> via SMTP...`);
+  const smtpResult = await sendEmail({
+    to: email,
+    subject: "Your HRMS Login Verification Code",
+    text: textBody,
+    html: htmlBody
+  });
+
+  return smtpResult;
+};
+

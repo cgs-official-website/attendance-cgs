@@ -39,17 +39,13 @@ export const AuthProvider = ({ children }) => {
   const signup = async (name, department, programType, email, password, shiftStart, shiftEnd, employeeId = "", companySlug = "") => {
     await registerUser(name, department, programType, email, password, shiftStart, shiftEnd, 25, 10, 6, "", "", "", [], "Full-time", "", false, employeeId, companySlug);
     const user = await loginUser(email, password);
-    if (!user.mfaRequired) {
-      setCurrentUser(user);
-    }
+    setCurrentUser(user);
     return user;
   };
 
   const login = async (email, password) => {
     const user = await loginUser(email, password);
-    if (!user.mfaRequired) {
-      setCurrentUser(user);
-    }
+    setCurrentUser(user);
     return user;
   };
 

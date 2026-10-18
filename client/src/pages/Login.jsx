@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { Lock, Mail, ShieldAlert, Eye, EyeOff, Globe, Sparkles, Clock, X, KeyRound, RefreshCw, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Lock, Mail, ShieldAlert, Eye, EyeOff, Globe, Sparkles, Clock, X } from "lucide-react";
 import Logo from "../components/Logo";
 
 export default function Login() {
@@ -15,14 +15,7 @@ export default function Login() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
-  const [showMfaScreen, setShowMfaScreen] = useState(false);
-  const [pendingToken, setPendingToken] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpError, setOtpError] = useState("");
-  const [cooldown, setCooldown] = useState(60);
-  const [expirySeconds, setExpirySeconds] = useState(300);
-  const { login, logout, currentUser, sendPasswordReset, verifyLoginOtp, resendLoginOtp } = useAuth();
+  const { login, logout, currentUser, sendPasswordReset } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { companySlug } = useParams();
@@ -73,20 +66,8 @@ export default function Login() {
     }
 
     setLoading(true);
-    setOtpError("");
     try {
       const result = await login(email, password);
-
-      // Multi-Factor Authentication requirement for all users
-      if (result.mfaRequired) {
-        setPendingToken(result.pendingToken);
-        setShowMfaScreen(true);
-        setCooldown(60);
-        setExpirySeconds(300);
-        setOtp("");
-        showToast("Verification code sent to your email address.", "info");
-        return;
-      }
 
       showToast(`Welcome back, ${result.name}!`, "success");
       
@@ -118,73 +99,6 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    if (!otp || otp.trim().length !== 6) {
-      setOtpError("Please enter the complete 6-digit verification code.");
-      return showToast("Please enter the complete 6-digit verification code.", "warning");
-    }
-
-    setOtpLoading(true);
-    setOtpError("");
-    try {
-      const user = await verifyLoginOtp(pendingToken, otp.trim());
-      showToast(`Welcome back, ${user.name}!`, "success");
-
-      const roleLower = (user.role || "").toLowerCase().trim();
-      if (roleLower === "superadmin" || roleLower === "super admin") {
-        navigate("/superadmin");
-      } else if (roleLower === "admin" || roleLower === "system admin" || roleLower === "systemadmin") {
-        navigate("/admin");
-      } else {
-        navigate("/dashboard");
-      }
-    } catch (error) {
-      const msg = error.message || "Invalid or expired verification code.";
-      setOtpError(msg);
-      showToast(msg, "error");
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  const handleResendOtp = async () => {
-    if (cooldown > 0 || otpLoading) return;
-    setOtpLoading(true);
-    setOtpError("");
-    try {
-      const res = await resendLoginOtp(pendingToken);
-      showToast(res.message || "A new verification code has been sent to your email.", "success");
-      setCooldown(60);
-      setExpirySeconds(300);
-      setOtp("");
-    } catch (error) {
-      const msg = error.message || "Failed to resend verification code.";
-      setOtpError(msg);
-      showToast(msg, "error");
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  // Cooldown and Expiry countdown timers
-  React.useEffect(() => {
-    if (!showMfaScreen) return;
-
-    const timer = setInterval(() => {
-      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-      setExpirySeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [showMfaScreen]);
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
   const handleSetAdminDemo = () => {
@@ -294,103 +208,22 @@ export default function Login() {
 
         {/* Center Card */}
         <div className="max-w-[460px] w-full mx-auto my-auto py-8">
-          {showMfaScreen ? (
-            <div>
-              <button 
-                type="button"
-                onClick={() => { setShowMfaScreen(false); setOtp(""); setOtpError(""); }}
-                className="flex items-center gap-1.5 text-xs font-semibold text-text-sec hover:text-brand-primary mb-6 transition-colors cursor-pointer"
-              >
-                <ArrowLeft size={14} />
-                <span>Back to Login</span>
-              </button>
+          {/* Tabs */}
+          <div className="flex border-b border-border-card mb-8">
+            <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
+              Sign In
+            </button>
+            <Link to={companySlug ? `/${companySlug}/register` : "/register"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
+              Sign Up
+            </Link>
+          </div>
 
-              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-brand-primary/10 text-brand-primary mb-4">
-                <ShieldCheck size={24} />
-              </div>
+          <div className="mb-6">
+            <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Welcome back</h2>
+            <p className="text-xs text-text-sec">Please enter your credentials to access your dashboard.</p>
+          </div>
 
-              <div className="mb-6">
-                <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Verify Your Email</h2>
-                <p className="text-xs text-text-sec leading-relaxed">
-                  Enter the 6-digit verification code sent to your registered email address (<strong className="text-text-main">{email}</strong>).
-                </p>
-                <div className="flex items-center gap-1.5 text-xs text-brand-primary font-medium mt-2">
-                  <Clock size={13} />
-                  <span>Code expires in: <strong>{formatTime(expirySeconds)}</strong></span>
-                </div>
-              </div>
-
-              {otpError && (
-                <div className="p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-[12px] text-xs text-red-500 font-medium">
-                  {otpError}
-                </div>
-              )}
-
-              <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-text-sec" htmlFor="otp-input">
-                    6-Digit Security Code
-                  </label>
-                  <input
-                    id="otp-input"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder="000000"
-                    className="w-full text-center tracking-[0.4em] font-mono text-2xl font-bold py-3 border border-border-card rounded-[12px] bg-bg-base/20 text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
-                    value={otp}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                      setOtp(val);
-                      if (otpError) setOtpError("");
-                    }}
-                    disabled={otpLoading || expirySeconds === 0}
-                    autoFocus
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={otpLoading || otp.length !== 6 || expirySeconds === 0}
-                  className="w-full py-3 bg-brand-primary hover:bg-brand-hover text-white font-bold rounded-[12px] hover:shadow-lg hover:shadow-brand-primary/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-1"
-                >
-                  {otpLoading ? "Verifying OTP..." : "Verify OTP"}
-                </button>
-
-                <div className="flex items-center justify-between pt-2 border-t border-border-card text-xs">
-                  <span className="text-text-mut">Didn't receive the code?</span>
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={cooldown > 0 || otpLoading}
-                    className="font-bold text-brand-primary hover:text-brand-hover disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
-                  >
-                    <RefreshCw size={12} className={otpLoading ? "animate-spin" : ""} />
-                    <span>{cooldown > 0 ? `Resend in ${cooldown}s` : "Resend OTP"}</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : (
-            <>
-              {/* Tabs */}
-              <div className="flex border-b border-border-card mb-8">
-                <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
-                  Sign In
-                </button>
-                <Link to={companySlug ? `/${companySlug}/register` : "/register"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
-                  Sign Up
-                </Link>
-              </div>
-
-              <div className="mb-6">
-                <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Welcome back</h2>
-                <p className="text-xs text-text-sec">Please enter your credentials to access your dashboard.</p>
-              </div>
-
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 {/* Email Address */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-text-sec" htmlFor="email-input">Email Address</label>
@@ -473,8 +306,6 @@ export default function Login() {
                   {loading ? "Signing In..." : "Sign In →"}
                 </button>
               </form>
-            </>
-          )}
 
           {/* SSO Options */}
           {/* <div className="relative flex py-5 items-center">

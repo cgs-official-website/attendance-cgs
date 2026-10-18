@@ -222,18 +222,21 @@ export default function UserDashboard() {
 
   const toastShownRef = useRef(false);
 
-  const isCheckedIn = !!(todayLog && (
+  const isOnBreak = !!(todayLog && (
+    todayLog.status === "on-break" || 
+    (Array.isArray(todayLog.breaks) && todayLog.breaks.some(b => !b.end && !b.resumeTime))
+  ));
+  const isCheckedOut = !isOnBreak && !!(todayLog && (
+    todayLog.status === "checked-out" || 
+    todayLog.status === "completed" || 
+    !!todayLog.check_out
+  ));
+  const isCheckedIn = !isOnBreak && !isCheckedOut && !!(todayLog && (
     todayLog.status === "checked-in" || 
     todayLog.status === "in-progress" || 
     todayLog.status === "present" || 
     (todayLog.check_in && !todayLog.check_out)
   ));
-  const isCheckedOut = !!(todayLog && (
-    todayLog.status === "checked-out" || 
-    todayLog.status === "completed" || 
-    !!todayLog.check_out
-  ));
-  const isOnBreak = !!(todayLog && todayLog.status === "on-break");
 
   const getElapsedWorkingMs = () => {
     if (!todayLog) return 0;
@@ -260,9 +263,11 @@ export default function UserDashboard() {
 
     if (activeBreaks && activeBreaks.length > 0) {
       activeBreaks.forEach(b => {
-        if (b.startTime) {
-          const start = new Date(b.startTime);
-          const resume = b.resumeTime ? new Date(b.resumeTime) : ((todayLog.checkOutTime || todayLog.check_out) ? new Date(todayLog.checkOutTime || todayLog.check_out) : currentTime);
+        const bStart = b.start || b.startTime;
+        const bEnd = b.end || b.resumeTime;
+        if (bStart) {
+          const start = new Date(bStart);
+          const resume = bEnd ? new Date(bEnd) : ((todayLog.checkOutTime || todayLog.check_out) ? new Date(todayLog.checkOutTime || todayLog.check_out) : currentTime);
           breakMs += (resume.getTime() - start.getTime());
         }
       });
@@ -468,14 +473,20 @@ export default function UserDashboard() {
 
   // Handle countdown timer when user is on break
   useEffect(() => {
-    if (todayLog && todayLog.status === "on-break" && todayLog.currentBreakTimerEnd) {
-      const endTime = new Date(todayLog.currentBreakTimerEnd).getTime();
+    const activeBreak = todayLog?.breaks?.find(b => !b.end && !b.resumeTime);
+    if (todayLog && (todayLog.status === "on-break" || activeBreak)) {
+      const bType = activeBreak?.breakType || activeBreak?.type || "short";
+      let totalSeconds = 1800; // default 30 min
+      if (bType === "bio") totalSeconds = 900; // 15 min
+      else if (bType === "short") totalSeconds = 1800; // 30 min
+      else if (bType === "long") totalSeconds = 1800; // 30 min
 
-      const activeBreak = todayLog.breaks?.find(b => !b.resumeTime);
-      if (activeBreak) {
-        const start = new Date(activeBreak.startTime).getTime();
-        setBreakTotalSeconds((endTime - start) / 1000);
-      }
+      setBreakTotalSeconds(totalSeconds);
+
+      const startTime = activeBreak ? new Date(activeBreak.start || activeBreak.startTime).getTime() : Date.now();
+      const endTime = todayLog.currentBreakTimerEnd 
+        ? new Date(todayLog.currentBreakTimerEnd).getTime() 
+        : (startTime + totalSeconds * 1000);
 
       const updateTimer = () => {
         const now = new Date().getTime();
@@ -698,10 +709,29 @@ export default function UserDashboard() {
   const handleStartBreak = async (breakType) => {
     setActionLoading(true);
     try {
-      showToast("Fetching location for break start...", "info", 1500);
-      const location = await getFreshLocation();
-      await startBreak(currentUser.uid, breakType, location);
-      showToast(`Started ${breakType} break. Timer is running.`, "success");
+      let totalSeconds = 1800; // default 30 mins (Break 1 & 2)
+      if (breakType === "bio" || breakType === "break3") totalSeconds = 900; // 15 mins (Break 3)
+      else if (breakType === "long" || breakType === "break2") totalSeconds = 1800; // 30 mins (Break 2)
+      else if (breakType === "short" || breakType === "break1") totalSeconds = 1800; // 30 mins (Break 1)
+
+      // Pre-set timer state so it displays immediately without 00:00 flash
+      setBreakTotalSeconds(totalSeconds);
+      setTimeLeft(totalSeconds);
+      setTimerExpired(false);
+
+      showToast("Fetching location for break start...", "info", 1200);
+      let location = null;
+      try {
+        location = await getFreshLocation();
+      } catch (e) {
+        location = { latitude: null, longitude: null, locationName: "Office / Remote" };
+      }
+      const res = await startBreak(currentUser.uid, breakType, location);
+      if (res) {
+        setTodayLog(res);
+      }
+      const breakLabel = (breakType === "bio" || breakType === "break3") ? "Break 3 (15 mins)" : ((breakType === "long" || breakType === "break2") ? "Break 2 (30 mins)" : "Break 1 (30 mins)");
+      showToast(`Started ${breakLabel}. Timer is running.`, "success");
     } catch (err) {
       showToast(err.message || "Failed to start break.", "error");
     } finally {
@@ -712,9 +742,17 @@ export default function UserDashboard() {
   const handleResumeWork = async () => {
     setActionLoading(true);
     try {
-      showToast("Fetching location to resume work...", "info", 1500);
-      const location = await getFreshLocation();
-      await resumeWork(currentUser.uid, location);
+      showToast("Fetching location to resume work...", "info", 1200);
+      let location = null;
+      try {
+        location = await getFreshLocation();
+      } catch (e) {
+        location = { latitude: null, longitude: null, locationName: "Office / Remote" };
+      }
+      const res = await resumeWork(currentUser.uid, location);
+      if (res) {
+        setTodayLog(res);
+      }
       showToast("Work resumed successfully! Good luck.", "success");
     } catch (err) {
       showToast(err.message || "Failed to resume work.", "error");
@@ -906,29 +944,35 @@ export default function UserDashboard() {
 
       const reversedBreaks = [...(todayLog.breaks || [])].reverse();
       reversedBreaks.forEach((brk) => {
-        if (brk.resumeTime) {
+        const bStart = brk.start || brk.startTime;
+        const bEnd = brk.end || brk.resumeTime;
+        const bType = brk.breakType || brk.type;
+
+        if (bEnd) {
           list.push({
             type: "work",
             title: "Work Resumed",
-            time: new Date(brk.resumeTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date(bEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             dateText: "Today",
             desc: "Office Worksite"
           });
         }
-        list.push({
-          type: "break",
-          title: brk.type === "short" ? "Break 1 Started" : (brk.type === "bio" ? "Bio Break Started" : "Break 2 Started"),
-          time: new Date(brk.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          dateText: "Today",
-          desc: brk.duration ? `${brk.duration} mins` : "In progress"
-        });
+        if (bStart) {
+          list.push({
+            type: "break",
+            title: bType === "short" ? "Break 1 Started" : (bType === "bio" ? "Bio Break Started" : "Break 2 Started"),
+            time: new Date(bStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            dateText: "Today",
+            desc: (brk.durationMinutes || brk.duration) ? `${brk.durationMinutes || brk.duration} mins` : "In progress"
+          });
+        }
       });
 
-      if (todayLog.checkInTime) {
+      if (todayLog.checkInTime || todayLog.check_in) {
         list.push({
           type: "in",
           title: "Checked In",
-          time: new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(todayLog.checkInTime || todayLog.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: "Today",
           desc: "Office Worksite"
         });
@@ -938,20 +982,20 @@ export default function UserDashboard() {
     const historyLogs = userLogs.filter(l => l.date !== new Date().toISOString().split("T")[0]).slice(0, 3);
     historyLogs.forEach(hLog => {
       const dateText = new Date(hLog.date).toLocaleDateString([], { month: 'short', day: 'numeric' });
-      if (hLog.checkOutTime) {
+      if (hLog.checkOutTime || hLog.check_out) {
         list.push({
           type: "out",
           title: "Checked Out",
-          time: new Date(hLog.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(hLog.checkOutTime || hLog.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: dateText,
           desc: `Total: ${((hLog.totalWorkingMinutes || 0) / 60).toFixed(2)} hrs`
         });
       }
-      if (hLog.checkInTime) {
+      if (hLog.checkInTime || hLog.check_in) {
         list.push({
           type: "in",
           title: "Checked In",
-          time: new Date(hLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(hLog.checkInTime || hLog.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           dateText: dateText,
           desc: "Office Worksite"
         });
@@ -970,10 +1014,35 @@ export default function UserDashboard() {
     return list;
   };
 
+  const calculateBreakBalances = () => {
+    let usedShortSec = 0;
+    let usedLongSec = 0;
+    let usedBioSec = 0;
+
+    const breaksList = Array.isArray(todayLog?.breaks) ? todayLog.breaks : [];
+    breaksList.forEach(b => {
+      const type = b.breakType || b.type || "short";
+      const start = b.start || b.startTime;
+      const end = b.end || b.resumeTime;
+      if (start) {
+        const startMs = new Date(start).getTime();
+        const endMs = end ? new Date(end).getTime() : currentTime.getTime();
+        const durSec = Math.max(0, Math.floor((endMs - startMs) / 1000));
+        if (type === "short") usedShortSec += durSec;
+        else if (type === "long") usedLongSec += durSec;
+        else if (type === "bio") usedBioSec += durSec;
+      }
+    });
+
+    const shortBal = todayLog?.shortBreakBalance !== undefined ? todayLog.shortBreakBalance : Math.max(0, 1800 - usedShortSec);
+    const longBal = todayLog?.longBreakBalance !== undefined ? Math.min(todayLog.longBreakBalance, 1800) : Math.max(0, 1800 - usedLongSec);
+    const bioBal = todayLog?.bioBreakBalance !== undefined ? todayLog.bioBreakBalance : Math.max(0, 900 - usedBioSec);
+
+    return { shortBal, longBal, bioBal };
+  };
+
+  const { shortBal: shortBreakBalance, longBal: longBreakBalance, bioBal: bioBreakBalance } = calculateBreakBalances();
   const shiftProgressPercent = getShiftProgress();
-  const shortBreakBalance = todayLog?.shortBreakBalance !== undefined ? todayLog.shortBreakBalance : 1800;
-  const longBreakBalance = todayLog?.longBreakBalance !== undefined ? Math.min(todayLog.longBreakBalance, 1800) : 1800;
-  const bioBreakBalance = todayLog?.bioBreakBalance !== undefined ? todayLog.bioBreakBalance : 900;
   const shortBreakPercent = (shortBreakBalance / 1800) * 100;
   const longBreakPercent = (longBreakBalance / 1800) * 100;
   const bioBreakPercent = (bioBreakBalance / 900) * 100;
@@ -2039,6 +2108,21 @@ export default function UserDashboard() {
                 <span>check in</span>
               </button>
             ) : null
+          ) : isOnBreak ? (
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-mono font-bold text-brand-warning bg-brand-warning/10 px-2.5 py-1.5 rounded-[8px] flex items-center gap-1.5">
+                <Coffee size={12} />
+                <span>On Break ({formatTime(timeLeft)})</span>
+              </span>
+              <button
+                onClick={handleResumeWork}
+                disabled={actionLoading}
+                className="py-2.5 px-4 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[10px] flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <RotateCcw size={11} />
+                <span>Resume Shift</span>
+              </button>
+            </div>
           ) : isCheckedIn ? (
             <div className="flex items-center gap-3">
               <span className="text-xs font-mono font-bold text-brand-primary bg-brand-primary/10 px-2.5 py-1.5 rounded-[8px] animate-pulse">
@@ -2055,7 +2139,7 @@ export default function UserDashboard() {
             </div>
           ) : (
             <span className="text-xs font-bold text-text-mut px-3 py-2 bg-bg-base rounded-[10px] flex items-center gap-2">
-              <span>{isOnBreak ? "On Break" : "Shift Ended"}</span>
+              <span>Shift Ended</span>
               <span className="text-[10px] font-mono text-text-sec bg-bg-card border border-border-card px-2 py-0.5 rounded">
                 {formatDuration(getElapsedWorkingMs())}
               </span>
@@ -2174,31 +2258,19 @@ export default function UserDashboard() {
             )}
 
             {/* Action State: 3. WORKING / CHECKED-IN */}
-            {isCheckedIn && (() => {
+            {isCheckedIn && !isOnBreak && (() => {
               const shortBalMin = Math.max(0, Math.round(shortBreakBalance / 60));
               const longBalMin = Math.max(0, Math.round(longBreakBalance / 60));
               const bioBalMin = Math.max(0, Math.round(bioBreakBalance / 60));
 
-  const handleDownloadPayslip = () => {
-    const element = document.getElementById('payslip-content');
-    const opt = {
-      margin:       0.5,
-      filename:     `Payslip_${currentUser?.name}_${selectedPayslip?.month}_${selectedPayslip?.year}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(element).save();
-  };
-
-  return (
+              return (
                 <div className="w-full text-center p-2">
                   <div className="w-16 h-16 rounded-full bg-brand-success/10 text-brand-success flex items-center justify-center mx-auto mb-5">
                     <CheckCircle size={28} />
                   </div>
                   <h3 className="text-xl font-bold text-text-main mb-1">Shift In Progress</h3>
                   <p className="text-sm text-text-sec mb-4">
-                    You checked in today at <strong className="text-text-main">{new Date(todayLog.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
+                    You checked in today at <strong className="text-text-main">{new Date(todayLog.checkInTime || todayLog.check_in || currentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
                   </p>
 
                   {/* Digital Clock Shift Duration Ticker */}
@@ -2212,36 +2284,30 @@ export default function UserDashboard() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-[600px] mx-auto mb-6">
-                    {envConfig.breaksPerDay >= 1 && (
-                      <button
-                        onClick={() => handleStartBreak("short")}
-                        disabled={actionLoading || shortBreakBalance <= 0}
-                        className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-                      >
-                        <Coffee size={15} />
-                        <span>Break 1 ({shortBalMin}m left)</span>
-                      </button>
-                    )}
-                    {envConfig.breaksPerDay >= 2 && (
-                      <button
-                        onClick={() => handleStartBreak("long")}
-                        disabled={actionLoading || longBreakBalance <= 0}
-                        className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-                      >
-                        <Coffee size={15} />
-                        <span>Break 2 ({longBalMin}m left)</span>
-                      </button>
-                    )}
-                    {envConfig.breaksPerDay >= 3 && (
-                      <button
-                        onClick={() => handleStartBreak("bio")}
-                        disabled={actionLoading || bioBreakBalance <= 0}
-                        className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-                      >
-                        <Coffee size={15} />
-                        <span>Break 3 ({bioBalMin}m left)</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleStartBreak("short")}
+                      disabled={actionLoading}
+                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Coffee size={15} />
+                      <span>Break 1 (30 mins)</span>
+                    </button>
+                    <button
+                      onClick={() => handleStartBreak("long")}
+                      disabled={actionLoading}
+                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Coffee size={15} />
+                      <span>Break 2 (30 mins)</span>
+                    </button>
+                    <button
+                      onClick={() => handleStartBreak("bio")}
+                      disabled={actionLoading}
+                      className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Coffee size={15} />
+                      <span>Break 3 (15 mins)</span>
+                    </button>
                   </div>
 
                   <button
@@ -2257,48 +2323,68 @@ export default function UserDashboard() {
             })()}
 
             {/* Action State: 4. ON BREAK */}
-            {isOnBreak && (
-              <div className="w-full text-center p-2">
-                <div className="w-16 h-16 rounded-full bg-brand-warning/10 text-brand-warning flex items-center justify-center mx-auto mb-5 animate-spin duration-[4000ms]">
-                  <Coffee size={28} />
-                </div>
-                <h3 className="text-xl font-bold text-text-main mb-1.5">Break in Progress</h3>
+            {isOnBreak && (() => {
+              const activeBreak = todayLog?.breaks?.find(b => !b.end && !b.resumeTime);
+              const rawType = (activeBreak?.breakType || activeBreak?.type || "").toLowerCase();
+              let breakName = "Break 1 (30 mins)";
+              let breakMaxMins = 30;
+              if (rawType === "bio" || rawType.includes("3")) {
+                breakName = "Break 3 (15 mins)";
+                breakMaxMins = 15;
+              } else if (rawType === "long" || rawType.includes("2")) {
+                breakName = "Break 2 (30 mins)";
+                breakMaxMins = 30;
+              } else {
+                breakName = "Break 1 (30 mins)";
+                breakMaxMins = 30;
+              }
 
-                <div className="relative w-full max-w-[400px] bg-bg-base/70 p-5 rounded-[20px] border border-dashed border-border-card flex flex-col items-center justify-center mx-auto my-5 overflow-hidden">
-                  <div className="text-4xl font-mono font-extrabold text-brand-primary tracking-wider drop-shadow-sm mb-1.5">
-                    {formatTime(timeLeft)}
+              return (
+                <div className="w-full text-center p-2">
+                  <div className="w-16 h-16 rounded-full bg-brand-warning/10 text-brand-warning flex items-center justify-center mx-auto mb-5 animate-spin duration-[4000ms]">
+                    <Coffee size={28} />
+                  </div>
+                  <h3 className="text-xl font-bold text-text-main mb-1.5">{breakName} in Progress</h3>
+                  <p className="text-xs text-text-sec mb-2">
+                    Total allocated time: <strong className="text-brand-primary">{breakMaxMins} minutes</strong>
+                  </p>
+
+                  <div className="relative w-full max-w-[400px] bg-bg-base/70 p-5 rounded-[20px] border border-dashed border-border-card flex flex-col items-center justify-center mx-auto my-5 overflow-hidden">
+                    <div className="text-4xl font-mono font-extrabold text-brand-primary tracking-wider drop-shadow-sm mb-1.5">
+                      {formatTime(timeLeft)}
+                    </div>
+
+                    {timeLeft > 0 ? (
+                      <span className="text-[10px] font-bold text-text-sec uppercase tracking-wide">
+                        Remaining Break Balance ({breakMaxMins}m limit)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-brand-danger flex items-center gap-1 animate-pulse">
+                        <AlertCircle size={12} /> {breakName} Expired! Please resume shift.
+                      </span>
+                    )}
+
+                    <div
+                      className={`absolute bottom-0 left-0 h-[3px] transition-all duration-1000 ${timerExpired ? "bg-brand-danger" : "bg-brand-warning"}`}
+                      style={{ width: `${timerPercentage}%` }}
+                    />
                   </div>
 
-                  {timeLeft > 0 ? (
-                    <span className="text-[10px] font-bold text-text-sec uppercase tracking-wide">
-                      Remaining Break Balance
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-brand-danger flex items-center gap-1 animate-pulse">
-                      <AlertCircle size={12} /> Balance Expired! Resume shift.
-                    </span>
-                  )}
+                  <div className="mb-5 text-xs text-text-sec font-semibold">
+                    Shift paused at: <strong className="text-text-main font-mono">{formatDuration(getElapsedWorkingMs())}</strong>
+                  </div>
 
-                  <div
-                    className={`absolute bottom-0 left-0 h-[3px] transition-all duration-1000 ${timerExpired ? "bg-brand-danger" : "bg-brand-warning"}`}
-                    style={{ width: `${timerPercentage}%` }}
-                  />
+                  <button
+                    onClick={handleResumeWork}
+                    disabled={actionLoading}
+                    className="py-3 px-10 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[14px] flex items-center justify-center gap-1.5 mx-auto shadow-md shadow-brand-primary/10 cursor-pointer"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Resume Shift</span>
+                  </button>
                 </div>
-
-                <div className="mb-5 text-xs text-text-sec font-semibold">
-                  Shift paused at: <strong className="text-text-main font-mono">{formatDuration(getElapsedWorkingMs())}</strong>
-                </div>
-
-                <button
-                  onClick={handleResumeWork}
-                  disabled={actionLoading}
-                  className="py-3 px-10 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[14px] flex items-center justify-center gap-1.5 mx-auto shadow-md shadow-brand-primary/10 cursor-pointer"
-                >
-                  <RotateCcw size={14} />
-                  <span>Resume Shift</span>
-                </button>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Action State: 5. CHECKED OUT */}
             {isCheckedOut && (

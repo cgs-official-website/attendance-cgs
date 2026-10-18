@@ -54,10 +54,18 @@ export const getAttendance = async (req, res) => {
       const dateStr = row.date_str || (row.date instanceof Date ? row.date.toISOString().split("T")[0] : (row.date ? String(row.date).split("T")[0] : ""));
 
       let frontendStatus = "not-checked-in";
+      let currentBreakTimerEnd = null;
       if (row.check_out) {
         frontendStatus = "checked-out";
-      } else if (Array.isArray(row.breaks) && row.breaks.some(b => !b.end)) {
+      } else if (Array.isArray(row.breaks) && row.breaks.some(b => !b.end && !b.resumeTime)) {
         frontendStatus = "on-break";
+        const activeB = row.breaks.find(b => !b.end && !b.resumeTime);
+        if (activeB) {
+          const bStart = new Date(activeB.start || activeB.startTime).getTime();
+          const bType = activeB.breakType || activeB.type || "short";
+          const durSec = bType === "bio" ? 900 : 1800;
+          currentBreakTimerEnd = new Date(bStart + durSec * 1000).toISOString();
+        }
       } else if (row.check_in) {
         frontendStatus = "checked-in";
       }
@@ -75,7 +83,8 @@ export const getAttendance = async (req, res) => {
         checkInLocation: row.check_in_location || row.location,
         checkOutLocation: row.check_out_location,
         totalHours: durationHours,
-        status: frontendStatus
+        status: frontendStatus,
+        currentBreakTimerEnd
       };
     });
 
@@ -224,14 +233,21 @@ export const startBreak = async (req, res) => {
 
     const row = existing.rows[0];
     const breaks = Array.isArray(row.breaks) ? [...row.breaks] : [];
-    if (breaks.some(b => !b.end)) {
+    if (breaks.some(b => !b.end && !b.resumeTime)) {
       return res.status(400).json({ error: "A break is already in progress." });
     }
 
+    let durationSeconds = 1800; // default 30 mins
+    if (breakType === "bio") durationSeconds = 900; // 15 mins
+    const timerEnd = new Date(Date.now() + durationSeconds * 1000).toISOString();
+
     breaks.push({
       start: now,
+      startTime: now,
       end: null,
+      resumeTime: null,
       breakType,
+      type: breakType,
       reason,
       location: location || null
     });
@@ -251,6 +267,9 @@ export const startBreak = async (req, res) => {
       userId: updated.user_id,
       companyId: updated.company_id,
       date: today,
+      checkInTime: updated.check_in,
+      checkOutTime: updated.check_out,
+      currentBreakTimerEnd: timerEnd,
       status: "on-break",
       breaks: updated.breaks
     });
@@ -278,15 +297,17 @@ export const endBreak = async (req, res) => {
 
     const row = existing.rows[0];
     const breaks = Array.isArray(row.breaks) ? [...row.breaks] : [];
-    const activeIdx = breaks.findIndex(b => !b.end);
+    const activeIdx = breaks.findIndex(b => !b.end && !b.resumeTime);
     if (activeIdx === -1) {
       return res.status(400).json({ error: "No active break to resume from." });
     }
 
-    const breakStart = new Date(breaks[activeIdx].start);
+    const breakStart = new Date(breaks[activeIdx].start || breaks[activeIdx].startTime);
     const breakDurationMinutes = Math.max(0, Math.floor((new Date(now) - breakStart) / 60000));
     breaks[activeIdx].end = now;
+    breaks[activeIdx].resumeTime = now;
     breaks[activeIdx].durationMinutes = breakDurationMinutes;
+    breaks[activeIdx].duration = breakDurationMinutes;
     if (location) breaks[activeIdx].endLocation = location;
 
     const result = await query(
@@ -304,6 +325,8 @@ export const endBreak = async (req, res) => {
       userId: updated.user_id,
       companyId: updated.company_id,
       date: today,
+      checkInTime: updated.check_in,
+      checkOutTime: updated.check_out,
       status: "checked-in",
       breaks: updated.breaks
     });

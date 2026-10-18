@@ -106,22 +106,12 @@ export const loginUser = async (email, password) => {
     body: JSON.stringify({ email: cleanEmail, password })
   });
 
-  // If MFA is required (employee login flow), return MFA challenge state without setting auth tokens
-  if (res.mfaRequired) {
-    return {
-      mfaRequired: true,
-      pendingToken: res.pendingToken,
-      email: res.email || cleanEmail,
-      message: res.message
-    };
-  }
-
   if (res.token) {
     localStorage.setItem("att_auth_token", res.token);
   }
 
-  const meta = res.user.metadata && typeof res.user.metadata === "object" ? res.user.metadata : {};
-  const empId = res.user.employeeId || res.user.employee_id || meta.employeeId || meta.employee_id || "";
+  const meta = res.user?.metadata && typeof res.user?.metadata === "object" ? res.user.metadata : {};
+  const empId = res.user?.employeeId || res.user?.employee_id || meta.employeeId || meta.employee_id || "";
 
   const user = {
     ...res.user,

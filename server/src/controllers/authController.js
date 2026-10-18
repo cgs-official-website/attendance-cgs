@@ -60,56 +60,18 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: "Invalid password." });
     }
 
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      companyId: user.company_id
+    });
+
     const mappedUser = mapUserProfile(user);
 
-    // Verify account has a valid registered email address (Phase Six requirement)
-    const userEmail = (user.email || "").toLowerCase().trim();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!userEmail || !emailRegex.test(userEmail)) {
-      return res.status(400).json({
-        error: "This account does not have a valid registered email address configured for multi-factor verification. Please contact your system administrator to configure or correct your email address."
-      });
-    }
-
-    // Require Email OTP Multi-Factor Authentication via Resend for ALL user types
-    const otp = crypto.randomInt(0, 1000000).toString().padStart(6, "0");
-    const pendingId = "otp_" + crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiration
-    const otpHash = crypto.createHash("sha256").update(pendingId + ":" + otp).digest("hex");
-
-    // Dispatch OTP using official Resend SDK
-    const emailResult = await sendOtpEmail({ email: userEmail, otp });
-    if (!emailResult.success) {
-      return res.status(500).json({
-        error: emailResult.error || "Failed to deliver login verification code. Please try again."
-      });
-    }
-
-    // Persist hashed OTP session
-    await query(
-      `INSERT INTO login_otps (id, user_id, otp_hash, expires_at, attempts, resend_count, last_sent_at)
-       VALUES ($1, $2, $3, $4, 0, 0, NOW())`,
-      [pendingId, user.id, otpHash, expiresAt]
-    );
-
-    // Issue short-lived restricted pending login token
-    const pendingToken = jwt.sign(
-      {
-        pendingId,
-        userId: user.id,
-        email: userEmail,
-        role: user.role,
-        type: "mfa_pending"
-      },
-      JWT_SECRET,
-      { expiresIn: "5m" }
-    );
-
     return res.json({
-      mfaRequired: true,
-      pendingToken,
-      email: userEmail,
-      message: "Verification code sent to your registered email address."
+      token,
+      user: mappedUser
     });
   } catch (err) {
     console.error("Login error:", err);

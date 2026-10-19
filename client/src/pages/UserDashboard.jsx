@@ -2283,32 +2283,85 @@ export default function UserDashboard() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-[600px] mx-auto mb-6">
-                    <button
-                      onClick={() => handleStartBreak("short")}
-                      disabled={actionLoading}
-                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <Coffee size={15} />
-                      <span>Break 1 (30 mins)</span>
-                    </button>
-                    <button
-                      onClick={() => handleStartBreak("long")}
-                      disabled={actionLoading}
-                      className="py-3 px-4 bg-brand-warning hover:bg-brand-warning-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <Coffee size={15} />
-                      <span>Break 2 (30 mins)</span>
-                    </button>
-                    <button
-                      onClick={() => handleStartBreak("bio")}
-                      disabled={actionLoading}
-                      className="py-3 px-4 bg-brand-success hover:bg-brand-success-hover text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <Coffee size={15} />
-                      <span>Break 3 (15 mins)</span>
-                    </button>
-                  </div>
+                  {/* Daily 3-Break System: Resumed breaks are removed from system */}
+                  {(() => {
+                    const breaksList = Array.isArray(todayLog?.breaks) ? todayLog.breaks : [];
+                    
+                    const isBreak1Resumed = breaksList.some(b => {
+                      const t = String(b.breakType || b.type || "").toLowerCase();
+                      return (t === "short" || t === "break1") && Boolean(b.end || b.resumeTime);
+                    });
+
+                    const isBreak2Resumed = breaksList.some(b => {
+                      const t = String(b.breakType || b.type || "").toLowerCase();
+                      return (t === "long" || t === "break2") && Boolean(b.end || b.resumeTime);
+                    });
+
+                    const isBreak3Resumed = breaksList.some(b => {
+                      const t = String(b.breakType || b.type || "").toLowerCase();
+                      return (t === "bio" || t === "break3") && Boolean(b.end || b.resumeTime);
+                    });
+
+                    const resumedCount = breaksList.filter(b => b.end || b.resumeTime).length;
+                    const allBreaksCompleted = resumedCount >= 3 || (isBreak1Resumed && isBreak2Resumed && isBreak3Resumed);
+
+                    const availableBreaks = [
+                      !isBreak1Resumed && {
+                        id: "short",
+                        label: "Break 1 (30 mins)",
+                        color: "bg-brand-warning hover:bg-brand-warning-hover"
+                      },
+                      !isBreak2Resumed && {
+                        id: "long",
+                        label: "Break 2 (30 mins)",
+                        color: "bg-brand-warning hover:bg-brand-warning-hover"
+                      },
+                      !isBreak3Resumed && {
+                        id: "bio",
+                        label: "Break 3 (15 mins)",
+                        color: "bg-brand-success hover:bg-brand-success-hover"
+                      }
+                    ].filter(Boolean);
+
+                    if (allBreaksCompleted || availableBreaks.length === 0) {
+                      return (
+                        <div className="max-w-[460px] mx-auto mb-6 p-3.5 bg-brand-success/10 border border-brand-success/30 rounded-[14px] flex items-center justify-center gap-2">
+                          <Check size={16} className="text-brand-success font-bold" />
+                          <span className="text-xs font-bold text-text-main">
+                            All 3 breaks completed for today ({Math.min(3, resumedCount)}/3)
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="max-w-[600px] mx-auto mb-6">
+                        <div className="flex items-center justify-between mb-2 px-1">
+                          <span className="text-[11px] font-bold text-text-sec uppercase tracking-wide">
+                            Available Breaks ({availableBreaks.length} of 3 left)
+                          </span>
+                          {resumedCount > 0 && (
+                            <span className="text-[11px] font-medium text-text-sec">
+                              {resumedCount} resumed & removed
+                            </span>
+                          )}
+                        </div>
+                        <div className={`grid grid-cols-1 ${availableBreaks.length === 2 ? 'sm:grid-cols-2' : availableBreaks.length === 1 ? 'sm:grid-cols-1 max-w-[280px] mx-auto' : 'sm:grid-cols-3'} gap-3`}>
+                          {availableBreaks.map(item => (
+                            <button
+                              key={item.id}
+                              onClick={() => handleStartBreak(item.id)}
+                              disabled={actionLoading}
+                              className={`py-3 px-4 ${item.color} text-white font-bold text-xs rounded-[12px] flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50`}
+                            >
+                              <Coffee size={15} />
+                              <span>{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <button
                     onClick={handleCheckOut}

@@ -99,6 +99,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import DomainManager from "../components/DomainManager";
 import ExternalLinksTab from "../components/ExternalLinksTab";
 import RolesTab from "../components/RolesTab";
+import AuditLogsAndSecurityTab from "../components/AuditLogsAndSecurityTab";
 import { usePermissions } from "../hooks/usePermissions";
 import { subscribeToRoles } from "../firebase";
 import { 
@@ -7286,6 +7287,10 @@ export default function AdminDashboard() {
       
       {(activeTab === "roles" && (isAdminUser || can("read", "RolesPermissions"))) && (
         <RolesTab />
+      )}
+
+      {(activeTab === "audit" && (isAdminUser || can("read", "RolesPermissions"))) && (
+        <AuditLogsAndSecurityTab />
       )}
 
     </div>

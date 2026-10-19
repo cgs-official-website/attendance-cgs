@@ -16,9 +16,13 @@ import companiesRoutes from "./routes/companies.routes.js";
 import externalLinksRoutes from "./routes/externalLinks.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
+import sessionsRoutes from "./routes/sessions.routes.js";
+import auditRoutes from "./routes/audit.routes.js";
+import auditEnricher from "./middlewares/auditLogger.js";
 
 const app = express();
 app.set("trust proxy", 1);
+app.use(auditEnricher);
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -68,6 +72,8 @@ app.use("/api/roles", rolesRoutes);
 app.use("/api/environment-settings", envSettingsRoutes);
 app.use("/api/companies", companiesRoutes);
 app.use("/api/external-links", externalLinksRoutes);
+app.use("/api/sessions", sessionsRoutes);
+app.use("/api/admin", auditRoutes);
 
 // Global 404 Handler for API
 app.use("/api/*", (req, res) => {

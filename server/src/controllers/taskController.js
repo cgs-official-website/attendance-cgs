@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import auditService from "../services/auditService.js";
 
 export const getTasks = async (req, res) => {
   try {
@@ -85,6 +86,15 @@ export const createTask = async (req, res) => {
       io.emit("task_created", taskRow);
     }
 
+    auditService.logAudit({
+      userId: creatorId,
+      action: "TASK_CREATE",
+      resourceType: "task",
+      resourceId: taskRow.id,
+      details: { title: taskRow.title, priority: taskRow.priority, assignedTo: targetAssignee, projectId },
+      req
+    });
+
     res.status(201).json(taskRow);
   } catch (err) {
     console.error("createTask error:", err);
@@ -140,6 +150,15 @@ export const updateTask = async (req, res) => {
       if (updatedTask.assigned_to) io.to(`user_${updatedTask.assigned_to}`).emit("task_updated", updatedTask);
       io.emit("task_updated", updatedTask);
     }
+
+    auditService.logAudit({
+      userId: req.user?.id,
+      action: "TASK_UPDATE",
+      resourceType: "task",
+      resourceId: id,
+      details: { fieldsUpdated: Object.keys(updates), title: updatedTask.title, status: updatedTask.status },
+      req
+    });
 
     res.json(updatedTask);
   } catch (err) {

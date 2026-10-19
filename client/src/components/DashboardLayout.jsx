@@ -804,6 +804,14 @@ export default function DashboardLayout({ children }) {
         onClick: () => { navigate("/admin?tab=roles"); setIsMobileOpen(false); }
       });
     }
+    if (isAdminUser || can("read", "RolesPermissions")) {
+      menuItems.push({
+        label: "Audit & Security",
+        icon: ShieldAlert,
+        active: location.pathname === "/admin" && activeTabParam === "audit",
+        onClick: () => { navigate("/admin?tab=audit"); setIsMobileOpen(false); }
+      });
+    }
     if (isAdminUser || can("read", "EnvironmentSetup")) {
       menuItems.push({
         label: "Environment Setup",
@@ -1000,6 +1008,12 @@ export default function DashboardLayout({ children }) {
         icon: ShieldCheck,
         active: location.pathname === "/admin" && activeTabParam === "roles",
         onClick: () => { navigate("/admin?tab=roles"); setIsMobileOpen(false); }
+      });
+      menuItems.push({
+        label: "Audit & Security",
+        icon: ShieldAlert,
+        active: location.pathname === "/admin" && activeTabParam === "audit",
+        onClick: () => { navigate("/admin?tab=audit"); setIsMobileOpen(false); }
       });
     }
     if (can("read", "EnvironmentSetup")) {

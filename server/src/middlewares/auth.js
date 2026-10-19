@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { query } from "../config/db.js";
+import { validateActiveSession } from "./sessionValidator.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "hrms_jwt_super_secret_railway_2026";
 
@@ -19,6 +20,9 @@ export const authenticateToken = (req, res, next) => {
       return res.status(401).json({ error: "Access denied. MFA verification required." });
     }
     req.user = user;
+    if (user.sid) {
+      return validateActiveSession(req, res, next);
+    }
     next();
   });
 };

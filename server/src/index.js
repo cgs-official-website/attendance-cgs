@@ -2,6 +2,7 @@ import http from "http";
 import app from "./app.js";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
+import { setSecuritySocketIO } from "./services/securityDetector.js";
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ const io = new Server(server, {
   }
 });
 app.set("io", io);
+setSecuritySocketIO(io);
 
 io.on("connection", (socket) => {
   console.log(`⚡ Socket client connected: ${socket.id}`);

@@ -4,6 +4,9 @@ import crypto from "crypto";
 import { query } from "../config/db.js";
 import { generateToken } from "../middlewares/auth.js";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendOtpEmail } from "../services/emailService.js";
+import auditService from "../services/auditService.js";
+import sessionService from "../services/sessionService.js";
+import securityDetector from "../services/securityDetector.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "hrms_jwt_super_secret_railway_2026";
 
@@ -45,6 +48,15 @@ export const login = async (req, res) => {
       [cleanEmail]
     );
     if (result.rows.length === 0) {
+      securityDetector.recordFailedLogin(cleanEmail, req);
+      auditService.logAudit({
+        action: "AUTH_LOGIN_FAILED",
+        resourceType: "auth",
+        details: { email: cleanEmail, reason: "User not found" },
+        status: "FAILURE",
+        severity: "WARNING",
+        req
+      });
       return res.status(401).json({ error: "Invalid credentials. User not found." });
     }
 
@@ -57,20 +69,45 @@ export const login = async (req, res) => {
 
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
+      securityDetector.recordFailedLogin(cleanEmail, req);
+      auditService.logAudit({
+        userId: user.id,
+        action: "AUTH_LOGIN_FAILED",
+        resourceType: "auth",
+        details: { email: cleanEmail, reason: "Invalid password" },
+        status: "FAILURE",
+        severity: "WARNING",
+        req
+      });
       return res.status(401).json({ error: "Invalid password." });
     }
+
+    // Create session and capture device info
+    const session = await sessionService.createSession(user.id, req);
 
     const token = generateToken({
       id: user.id,
       email: user.email,
       role: user.role,
-      companyId: user.company_id
+      companyId: user.company_id,
+      sid: session.sessionId
     });
 
     const mappedUser = mapUserProfile(user);
 
+    // Non-blocking audit log and security checks
+    auditService.logAudit({
+      userId: user.id,
+      action: "AUTH_LOGIN_SUCCESS",
+      resourceType: "auth",
+      details: { email: user.email, device: session.deviceInfo?.deviceName, sessionId: session.sessionId },
+      req
+    });
+    securityDetector.checkImpossibleTravel(user.id, session.ipAddress, req);
+
     return res.json({
       token,
+      sessionId: session.sessionId,
       user: mappedUser
     });
   } catch (err) {
@@ -147,15 +184,26 @@ export const verifyOtp = async (req, res) => {
     }
 
     const user = userRes.rows[0];
+    const session = await sessionService.createSession(user.id, req);
+
     const token = generateToken({
       id: user.id,
       email: user.email,
       role: user.role,
-      companyId: user.company_id
+      companyId: user.company_id,
+      sid: session.sessionId
+    });
+
+    auditService.logAudit({
+      userId: user.id,
+      action: "AUTH_MFA_SUCCESS",
+      resourceType: "auth",
+      details: { email: user.email, sessionId: session.sessionId },
+      req
     });
 
     const mappedUser = mapUserProfile(user);
-    res.json({ token, user: mappedUser });
+    res.json({ token, sessionId: session.sessionId, user: mappedUser });
   } catch (err) {
     console.error("verifyOtp error:", err);
     res.status(500).json({ error: "Internal server error during OTP verification." });
@@ -445,6 +493,30 @@ export const confirmResetPassword = async (req, res) => {
   } catch (err) {
     console.error("confirmResetPassword error:", err);
     res.status(500).json({ error: "Internal server error while resetting password." });
+  }
+};
+
+export const logout = async (req, res) => {
+  try {
+    const sid = req.user?.sid || req.body?.sessionId;
+    const userId = req.user?.id;
+
+    if (sid && userId) {
+      await sessionService.revokeSession(sid, userId, userId, "User initiated logout");
+    }
+
+    auditService.logAudit({
+      userId: userId || null,
+      action: "AUTH_LOGOUT",
+      resourceType: "auth",
+      details: { email: req.user?.email, sessionId: sid },
+      req
+    });
+
+    res.json({ success: true, message: "Logged out successfully." });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ error: "Failed to log out cleanly." });
   }
 };
 

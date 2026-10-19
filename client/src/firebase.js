@@ -70,6 +70,19 @@ export const apiFetch = async (endpoint, options = {}) => {
         const err = await response.json().catch(() => ({ error: response.statusText }));
         const apiError = new Error(err.error || err.message || `Request failed with status ${response.status}`);
         apiError.isApiResponse = true;
+        apiError.status = response.status;
+        apiError.code = err.code;
+
+        // Auto-redirect if session was revoked remotely
+        if (response.status === 401 && (err.code === "SESSION_REVOKED" || (err.error && err.error.includes("Session has been revoked")))) {
+          localStorage.removeItem("att_auth_token");
+          localStorage.removeItem("att_current_user");
+          window.dispatchEvent(new Event("local-auth-updated"));
+          if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
+            window.location.href = "/login?revoked=true";
+          }
+        }
+
         throw apiError;
       }
 
@@ -1937,6 +1950,59 @@ export const verifyCompanyDomain = async (domain) => {
 
 export const getLandingPageConfig = async () => null;
 export const updateLandingPageConfig = async () => true;
+
+// ----------------------------------------------------
+// AUDIT LOGS, SESSIONS & SECURITY ALERTS
+// ----------------------------------------------------
+export const getActiveSessions = async () => {
+  const res = await apiFetch("/sessions/active");
+  return res.sessions || [];
+};
+
+export const revokeSession = async (sessionId) => {
+  return apiFetch("/sessions/revoke", {
+    method: "POST",
+    body: JSON.stringify({ sessionId })
+  });
+};
+
+export const revokeAllOtherSessions = async () => {
+  return apiFetch("/sessions/revoke-others", {
+    method: "POST"
+  });
+};
+
+export const getAuditLogs = async (params = {}) => {
+  const searchParams = new URLSearchParams();
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== "") {
+      searchParams.append(key, params[key]);
+    }
+  });
+  const queryString = searchParams.toString();
+  return apiFetch(`/admin/audit-logs${queryString ? `?${queryString}` : ""}`);
+};
+
+export const getSecurityAlerts = async (params = {}) => {
+  const searchParams = new URLSearchParams();
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== "") {
+      searchParams.append(key, params[key]);
+    }
+  });
+  const queryString = searchParams.toString();
+  return apiFetch(`/admin/security-alerts${queryString ? `?${queryString}` : ""}`);
+};
+
+export const resolveSecurityAlert = async (alertId) => {
+  return apiFetch(`/admin/security-alerts/${encodeURIComponent(alertId)}/resolve`, {
+    method: "PATCH"
+  });
+};
+
+export const getSecurityStats = async () => {
+  return apiFetch("/admin/security-stats");
+};
 
 export const db = null;
 export default { apiFetch };

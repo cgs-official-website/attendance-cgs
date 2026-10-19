@@ -1,4 +1,6 @@
 import { query } from "../config/db.js";
+import auditService from "../services/auditService.js";
+import securityDetector from "../services/securityDetector.js";
 
 export const getAttendance = async (req, res) => {
   try {
@@ -124,6 +126,15 @@ export const checkIn = async (req, res) => {
     const checkInDate = row.check_in ? new Date(row.check_in) : new Date();
     const formatTime = (d) => d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : "";
 
+    auditService.logAudit({
+      userId,
+      action: "ATTENDANCE_CLOCK_IN",
+      resourceType: "attendance",
+      resourceId: row.id,
+      details: { date: today, workMode, location },
+      req
+    });
+
     res.json({
       ...row,
       id: row.id,
@@ -195,6 +206,15 @@ export const checkOut = async (req, res) => {
     const checkOutDate = row.check_out ? new Date(row.check_out) : new Date();
     const formatTime = (d) => d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : "";
 
+    auditService.logAudit({
+      userId: row.user_id,
+      action: "ATTENDANCE_CLOCK_OUT",
+      resourceType: "attendance",
+      resourceId: row.id,
+      details: { date: today, totalWorkingMinutes: durationMinutes },
+      req
+    });
+
     res.json({
       ...row,
       id: row.id,
@@ -237,8 +257,36 @@ export const startBreak = async (req, res) => {
       return res.status(400).json({ error: "A break is already in progress." });
     }
 
+    // Daily 3-break limit check
+    if (breaks.length >= 3) {
+      return res.status(400).json({ error: "Maximum limit reached. An employee can only take up to 3 breaks per day." });
+    }
+
+    // Check if this specific break has already been taken and resumed
+    const normalizedReqType = String(breakType).toLowerCase();
+    const isTypeAlreadyUsed = breaks.some(b => {
+      const bType = String(b.breakType || b.type || "").toLowerCase();
+      const isResumed = Boolean(b.end || b.resumeTime);
+      if (!isResumed) return false;
+
+      if (normalizedReqType === "short" || normalizedReqType === "break1") {
+        return bType === "short" || bType === "break1";
+      }
+      if (normalizedReqType === "long" || normalizedReqType === "break2") {
+        return bType === "long" || bType === "break2";
+      }
+      if (normalizedReqType === "bio" || normalizedReqType === "break3") {
+        return bType === "bio" || bType === "break3";
+      }
+      return bType === normalizedReqType;
+    });
+
+    if (isTypeAlreadyUsed) {
+      return res.status(400).json({ error: "This break has already been taken and resumed today. It has been removed from your available breaks." });
+    }
+
     let durationSeconds = 1800; // default 30 mins
-    if (breakType === "bio") durationSeconds = 900; // 15 mins
+    if (normalizedReqType === "bio" || normalizedReqType === "break3") durationSeconds = 900; // 15 mins
     const timerEnd = new Date(Date.now() + durationSeconds * 1000).toISOString();
 
     breaks.push({
@@ -261,6 +309,24 @@ export const startBreak = async (req, res) => {
     );
 
     const updated = result.rows[0];
+
+    // Non-blocking Audit Log: Break Started
+    auditService.logAudit({
+      userId,
+      action: "ATTENDANCE_BREAK_START",
+      resourceType: "attendance",
+      resourceId: recordId,
+      details: {
+        breakNumber: breaks.length,
+        breakType,
+        startTime: now,
+        durationMinutes: durationSeconds / 60,
+        remainingBreaksAfterThis: Math.max(0, 3 - breaks.length),
+        location: location || null
+      },
+      req
+    });
+
     res.json({
       ...updated,
       id: updated.id,
@@ -319,6 +385,28 @@ export const endBreak = async (req, res) => {
     );
 
     const updated = result.rows[0];
+
+    // Non-blocking Audit Log: Break Resumed
+    const completedBreak = breaks[activeIdx];
+    const totalCompletedBreaks = breaks.filter(b => b.end || b.resumeTime).length;
+    auditService.logAudit({
+      userId: row.user_id,
+      action: "ATTENDANCE_BREAK_RESUME",
+      resourceType: "attendance",
+      resourceId: recordId,
+      details: {
+        breakNumber: activeIdx + 1,
+        breakType: completedBreak.breakType || completedBreak.type,
+        startTime: completedBreak.start || completedBreak.startTime,
+        resumeTime: now,
+        durationMinutes: breakDurationMinutes,
+        totalCompletedBreaks,
+        remainingBreaks: Math.max(0, 3 - totalCompletedBreaks),
+        location: location || null
+      },
+      req
+    });
+
     res.json({
       ...updated,
       id: updated.id,
@@ -364,7 +452,24 @@ export const updateAttendance = async (req, res) => {
       return res.status(404).json({ error: "Attendance record not found." });
     }
 
-    res.json(result.rows[0]);
+    const updatedRow = result.rows[0];
+    auditService.logAudit({
+      userId: req.user?.id,
+      action: "ATTENDANCE_EDIT",
+      resourceType: "attendance",
+      resourceId: id,
+      details: { checkIn, checkOut, status, date, targetUserId: updatedRow.user_id },
+      req
+    });
+    securityDetector.checkSuspiciousAction({
+      userId: req.user?.id,
+      action: "ATTENDANCE_EDIT",
+      resourceType: "attendance",
+      details: { checkIn, checkOut, status, date, targetUserId: updatedRow.user_id },
+      req
+    });
+
+    res.json(updatedRow);
   } catch (err) {
     console.error("updateAttendance error:", err);
     res.status(500).json({ error: "Failed to update attendance." });

@@ -4,6 +4,7 @@ import { useToast } from "../context/ToastContext";
 import { updateUserRecord, uploadFileToFirebase, getCompanies, deleteCompany, updateCompanyDetails } from "../firebase";
 import { User, Mail, Shield, ShieldAlert, Award, Clock, Save, Building, Copy, Check, Eye, Crop, Camera, Trash2, Sliders, Lock } from "lucide-react";
 import ImageEditorModal from "../components/ImageEditorModal";
+import ActiveSessionsCard from "../components/ActiveSessionsCard";
 
 export default function Profile() {
   const { currentUser, updateCurrentUserState, changeUserPassword } = useAuth();
@@ -673,6 +674,11 @@ export default function Profile() {
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Active Devices & Session Management */}
+          <div className="mt-8">
+            <ActiveSessionsCard />
           </div>
 
           {/* Organization Branding (Admin Only) */}

@@ -24,8 +24,11 @@ import {
   subscribeToCompanyPayroll,
   listenToCompany,
   db,
-  getDbType
+  getDbType,
+  getFaceEnrollmentStatus,
+  verifyFaceSession
 } from "../firebase";
+import CameraCapture from "../components/CameraCapture";
 import { getDoc, doc } from "firebase/firestore";
 import { resolveLocationName, getDistanceFromLatLonInMeters, isPointInPolygon } from "../utils/locationHelper";
 import {
@@ -200,6 +203,9 @@ export default function UserDashboard() {
   const [actionLoading, setActionLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
+  const [biometricModal, setBiometricModal] = useState({ open: false, action: "check-in", location: null });
+  const [enrollmentRequiredModal, setEnrollmentRequiredModal] = useState(false);
+  const [verifyingFace, setVerifyingFace] = useState(false);
 
   // Leave Form & Notice Board states
   const [paidLeaves, setPaidLeaves] = useState([]);
@@ -667,13 +673,28 @@ export default function UserDashboard() {
         }
       }
 
-      const res = await checkIn(currentUser, location);
-      if (res) {
-        setTodayLog(res);
+      // Check biometric enrollment status before prompting camera
+      showToast("Verifying biometric profile...", "info", 1000);
+      let faceStatus = null;
+      try {
+        faceStatus = await getFaceEnrollmentStatus();
+      } catch (fErr) {
+        console.warn("Could not check face enrollment status:", fErr);
       }
-      showToast("Checked in successfully! Have a great workday.", "success");
+
+      if (faceStatus?.enrollment_status !== "enrolled") {
+        setEnrollmentRequiredModal(true);
+        return;
+      }
+
+      // Open camera modal to capture fresh selfie
+      setBiometricModal({
+        open: true,
+        action: "check-in",
+        location
+      });
     } catch (err) {
-      showToast(err.message || "Failed to check in.", "error");
+      showToast(err.message || "Failed to initiate check in.", "error");
     } finally {
       setActionLoading(false);
     }
@@ -694,14 +715,69 @@ export default function UserDashboard() {
       } catch (locErr) {
         location = { latitude: null, longitude: null, locationName: "Office / Remote" };
       }
-      const res = await checkOut(currentUser.uid, location);
-      if (res) {
-        setTodayLog(res);
+
+      // Check biometric enrollment status before prompting camera
+      showToast("Verifying biometric profile...", "info", 1000);
+      let faceStatus = null;
+      try {
+        faceStatus = await getFaceEnrollmentStatus();
+      } catch (fErr) {
+        console.warn("Could not check face enrollment status:", fErr);
       }
-      showToast("Checked out successfully! See you tomorrow.", "success");
+
+      if (faceStatus?.enrollment_status !== "enrolled") {
+        setEnrollmentRequiredModal(true);
+        return;
+      }
+
+      // Open camera modal to capture fresh selfie for check out
+      setBiometricModal({
+        open: true,
+        action: "check-out",
+        location
+      });
     } catch (err) {
-      showToast(err.message || "Failed to check out.", "error");
+      showToast(err.message || "Failed to initiate check out.", "error");
     } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBiometricSelfieCapture = async (imageBase64) => {
+    setVerifyingFace(true);
+    setActionLoading(true);
+    try {
+      showToast("Verifying biometric identity...", "info", 2500);
+      const verifyRes = await verifyFaceSession(imageBase64, {
+        workMode: "office",
+        location: biometricModal.location,
+        actionType: biometricModal.action
+      });
+
+      if (!verifyRes?.verificationSessionToken) {
+        throw new Error("Biometric verification did not return a valid session token.");
+      }
+
+      if (biometricModal.action === "check-in") {
+        const res = await checkIn(currentUser, biometricModal.location, verifyRes.verificationSessionToken);
+        if (res) {
+          setTodayLog(res);
+        }
+        showToast("Biometric verification verified! Checked in successfully.", "success");
+      } else {
+        const res = await checkOut(currentUser.uid, biometricModal.location, verifyRes.verificationSessionToken);
+        if (res) {
+          setTodayLog(res);
+        }
+        showToast("Biometric verification verified! Checked out successfully.", "success");
+      }
+
+      setBiometricModal({ open: false, action: "check-in", location: null });
+    } catch (err) {
+      console.error("Biometric verification error:", err);
+      showToast(err.message || "Face verification failed. Please try again.", "error");
+    } finally {
+      setVerifyingFace(false);
       setActionLoading(false);
     }
   };
@@ -2736,6 +2812,68 @@ export default function UserDashboard() {
         </div>
       </div>
       </div>
+
+      {/* Biometric Verification Modal */}
+      {biometricModal.open && createPortal(
+        <CameraCapture
+          title={`Face Verification - ${biometricModal.action === "check-in" ? "Check In" : "Check Out"}`}
+          description="Look directly at the camera in clear lighting. Your live selfie will be matched against your enrolled face profile."
+          captureLabel={biometricModal.action === "check-in" ? "Verify & Check In" : "Verify & Check Out"}
+          busy={verifyingFace || actionLoading}
+          onCapture={handleBiometricSelfieCapture}
+          onCancel={() => setBiometricModal({ open: false, action: "check-in", location: null })}
+          footer={
+            <div className="text-center">
+              <span className="text-[11px] text-text-mut inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                2D ArcFace Biometric Matching &bull; Presentation liveness: not configured
+              </span>
+            </div>
+          }
+        />,
+        document.body
+      )}
+
+      {/* Enrollment Required Dialog */}
+      {enrollmentRequiredModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/50 dark:bg-black/70 backdrop-blur-md flex items-center justify-center z-[99999] p-6 animate-fade-in">
+          <div className="w-full max-w-[460px] bg-bg-card border border-border-card rounded-[24px] p-6 shadow-xl animate-scale-up relative overflow-hidden text-left">
+            <div className="flex items-center justify-between mb-4 border-b border-border-card pb-4">
+              <h3 className="font-bold text-lg text-text-main flex items-center gap-2">
+                <AlertCircle className="text-amber-500" size={20} />
+                <span>Face Biometric Required</span>
+              </h3>
+              <button
+                onClick={() => setEnrollmentRequiredModal(false)}
+                className="text-text-mut hover:text-text-main font-bold text-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-text-sec leading-relaxed mb-6">
+              You do not have an enrolled biometric face profile yet. Attendance check-in and check-out require verified facial identification.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setEnrollmentRequiredModal(false)}
+                className="py-2.5 px-4 border border-border-card rounded-[12px] bg-bg-card hover:bg-bg-base text-text-sec text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setEnrollmentRequiredModal(false);
+                  navigate("/face-enrollment");
+                }}
+                className="py-2.5 px-5 bg-brand-primary text-white text-xs font-bold rounded-[12px] hover:bg-brand-primary-hover transition-colors cursor-pointer"
+              >
+                Go to Face Enrollment
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Glassmorphic Checkout Confirmation Modal */}
       {showCheckoutConfirm && createPortal(

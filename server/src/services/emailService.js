@@ -387,10 +387,8 @@ export const sendOtpEmail = async ({ email, otp }) => {
     return await customOtpDispatcher({ email, otp });
   }
 
-  // Log OTP clearly to backend console for easy local verification
-  console.log(`\n==================================================`);
-  console.log(`🔑 [HRMS MFA OTP] Verification code for <${email}>: ${otp}`);
-  console.log(`==================================================\n`);
+  // Do not log OTP plaintext values in logs (Phase Three Security Requirement)
+  console.log(`📧 [HRMS MFA OTP] Verification code dispatched to <${email}>`);
 
   const textBody = `Hello,\n\nYour OTP for HRMS login is ${otp}.\n\nThis code expires in 5 minutes. Please do not share it with anyone.\n\nIf you did not attempt to log in, please ignore this email and contact your administrator if necessary.\n\nRegards,\nHRMS Team`;
 

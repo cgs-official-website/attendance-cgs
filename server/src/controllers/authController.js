@@ -82,33 +82,64 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: "Invalid password." });
     }
 
-    // Create session and capture device info
-    const session = await sessionService.createSession(user.id, req);
+    // All user types (employees, admins, superadmins, HR managers, project managers, etc.)
+    // must complete Email OTP Multi-Factor Authentication before receiving access credentials.
+    const registeredEmail = (user.email || "").toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!registeredEmail || !emailRegex.test(registeredEmail)) {
+      return res.status(400).json({
+        error: "This account does not have a valid registered email address configured for multi-factor verification. Please contact your administrator to configure a registered email address."
+      });
+    }
 
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      companyId: user.company_id,
-      sid: session.sessionId
-    });
+    // Generate 6-digit numeric OTP with leading zeros preserved
+    const otp = crypto.randomInt(0, 1000000).toString().padStart(6, "0");
+    const pendingId = "mfa_" + crypto.randomUUID();
+    const otpHash = crypto.createHash("sha256").update(pendingId + ":" + otp).digest("hex");
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    const mappedUser = mapUserProfile(user);
+    // Store in login_otps table
+    await query(
+      `INSERT INTO login_otps (id, user_id, otp_hash, expires_at, attempts, resend_count, last_sent_at, is_used)
+       VALUES ($1, $2, $3, $4, 0, 0, NOW(), FALSE)`,
+      [pendingId, user.id, otpHash, expiresAt]
+    );
 
-    // Non-blocking audit log and security checks
+    // Dispatch OTP email via Resend
+    const emailResult = await sendOtpEmail({ email: registeredEmail, otp });
+    if (!emailResult.success) {
+      console.error(`❌ [MFA] Failed to deliver OTP to ${registeredEmail}:`, emailResult.error);
+      return res.status(500).json({
+        error: "Failed to deliver verification code. Please check your email configuration or try again."
+      });
+    }
+
+    // Issue restricted pendingToken (rejected by authenticateToken middleware)
+    const pendingToken = jwt.sign(
+      {
+        type: "mfa_pending",
+        pending: true,
+        userId: user.id,
+        pendingId,
+        email: user.email
+      },
+      JWT_SECRET,
+      { expiresIn: "5m" }
+    );
+
     auditService.logAudit({
       userId: user.id,
-      action: "AUTH_LOGIN_SUCCESS",
+      action: "AUTH_MFA_CHALLENGE_ISSUED",
       resourceType: "auth",
-      details: { email: user.email, device: session.deviceInfo?.deviceName, sessionId: session.sessionId },
+      details: { email: user.email, pendingId, role: user.role },
       req
     });
-    securityDetector.checkImpossibleTravel(user.id, session.ipAddress, req);
 
     return res.json({
-      token,
-      sessionId: session.sessionId,
-      user: mappedUser
+      mfaRequired: true,
+      pendingToken,
+      email: user.email,
+      message: "A 6-digit verification code has been sent to your registered email address."
     });
   } catch (err) {
     console.error("Login error:", err);

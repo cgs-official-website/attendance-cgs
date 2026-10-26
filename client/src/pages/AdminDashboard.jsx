@@ -90,7 +90,8 @@ import {
   Settings,
   UserX,
   UserCheck,
-  Upload
+  Upload,
+  Camera
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { addStandardPDFHeader, addPDFFooter } from "../utils/pdfHeader";
@@ -100,6 +101,7 @@ import DomainManager from "../components/DomainManager";
 import ExternalLinksTab from "../components/ExternalLinksTab";
 import RolesTab from "../components/RolesTab";
 import AuditLogsAndSecurityTab from "../components/AuditLogsAndSecurityTab";
+import FaceEnrollmentPanel from "../components/FaceEnrollmentPanel";
 import { usePermissions } from "../hooks/usePermissions";
 import { subscribeToRoles } from "../firebase";
 import { 
@@ -3011,6 +3013,18 @@ export default function AdminDashboard() {
                               >
                                 <Eye size={13} />
                               </button>
+                              {(isAdminUser || can("update", "EmployeeManagement")) && (
+                                <button 
+                                  onClick={() => {
+                                    const uid = user.uid || user.id;
+                                    setSearchParams({ tab: "biometrics", userId: uid });
+                                  }} 
+                                  className="w-7 h-7 flex items-center justify-center border border-border-card rounded-[8px] bg-bg-card hover:bg-bg-base text-text-sec hover:text-brand-primary hover:border-brand-primary/30 transition-colors cursor-pointer" 
+                                  title="Face Biometrics / Enroll Face"
+                                >
+                                  <Camera size={13} />
+                                </button>
+                              )}
                               {can("update", "EmployeeManagement") && (
                                 <button 
                                   onClick={() => openEditModal(user)} 
@@ -4570,7 +4584,21 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-border-card mt-4">
+            <div className="flex justify-end gap-2 pt-4 border-t border-border-card mt-4">
+              {(isAdminUser || can("update", "EmployeeManagement")) && (
+                <button 
+                  onClick={() => {
+                    const uid = selectedUser.uid || selectedUser.id;
+                    setShowDetailModal(false);
+                    setSelectedUser(null);
+                    setSearchParams({ tab: "biometrics", userId: uid });
+                  }}
+                  className="py-2.5 px-4 bg-bg-card hover:bg-bg-base border border-border-card text-text-main text-xs font-bold rounded-[12px] transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Camera size={14} />
+                  <span>Face Biometrics</span>
+                </button>
+              )}
               <button 
                 onClick={() => { setShowDetailModal(false); openEditModal(selectedUser); }}
                 className="py-2.5 px-6 bg-brand-primary hover:bg-brand-hover text-white text-xs font-bold rounded-[12px] transition-colors cursor-pointer"
@@ -7291,6 +7319,10 @@ export default function AdminDashboard() {
 
       {(activeTab === "audit" && (isAdminUser || can("read", "RolesPermissions"))) && (
         <AuditLogsAndSecurityTab />
+      )}
+
+      {(activeTab === "biometrics" && (isAdminUser || can("read", "EmployeeManagement") || can("read", "LiveActivity"))) && (
+        <FaceEnrollmentPanel users={users} showToast={showToast} />
       )}
 
     </div>

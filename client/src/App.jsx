@@ -20,6 +20,7 @@ import ClientChat from "./pages/ClientChat";
 import ProjectCalendar from "./pages/ProjectCalendar";
 import EnvironmentalSetup from "./modules/environmentalSetup/pages/EnvironmentalSetup";
 import ResetPassword from "./pages/ResetPassword";
+import FaceEnrollment from "./pages/FaceEnrollment";
 import NotFound from "./pages/NotFound";
 import InactiveAccount from "./pages/InactiveAccount";
 
@@ -208,6 +209,16 @@ export default function App() {
             <ProtectedRoute>
               <DashboardLayout>
                 <Profile />
+              </DashboardLayout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/face-enrollment" 
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <FaceEnrollment />
               </DashboardLayout>
             </ProtectedRoute>
           } 

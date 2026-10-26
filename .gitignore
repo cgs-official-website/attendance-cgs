@@ -45,6 +45,9 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+scratch/
+__pycache__/
+*.pyc
 
 # Root markdown documentation excluded from production repo
 /*.md

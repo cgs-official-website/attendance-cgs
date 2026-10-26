@@ -41,9 +41,26 @@ async function testBreakSystem() {
     return { req, res, getStatus: () => statusCode, getData: () => responseData };
   };
 
-  // Step 1: Check in
+  // Step 1: Check in with biometric session token
   console.log("\n--- STEP 1: Check in ---");
-  const checkInMock = mockReqRes({ date: testDate }, { id: user.id, companyId: user.company_id });
+  const { generateVerificationSessionToken } = await import("../src/services/livenessVerification.js");
+  const { rawToken, tokenHash } = generateVerificationSessionToken();
+  const sessionId = "avs_test_break_" + Date.now();
+  const attemptId = "ava_test_break_" + Date.now();
+  await query(
+    `INSERT INTO attendance_verification_attempts (
+       id, user_id, company_id, work_mode, status, gps_result, face_result, liveness_result, model
+     ) VALUES ($1, $2, $3, 'office', 'verified', 'inside', 'matched', 'not_checked', 'ArcFace')`,
+    [attemptId, user.id, user.company_id]
+  );
+  await query(
+    `INSERT INTO attendance_verification_sessions (
+       id, attempt_id, user_id, company_id, token_hash, provider, status, expires_at
+     ) VALUES ($1, $2, $3, $4, $5, 'internal', 'issued', CURRENT_TIMESTAMP + INTERVAL '5 minutes')`,
+    [sessionId, attemptId, user.id, user.company_id, tokenHash]
+  );
+
+  const checkInMock = mockReqRes({ date: testDate, verificationSessionToken: rawToken }, { id: user.id, companyId: user.company_id });
   await attendanceController.checkIn(checkInMock.req, checkInMock.res);
   console.log(`✅ Checked in successfully (Status: ${checkInMock.getStatus()})`);
 

@@ -119,6 +119,15 @@ export const loginUser = async (email, password) => {
     body: JSON.stringify({ email: cleanEmail, password })
   });
 
+  if (res.mfaRequired) {
+    return {
+      mfaRequired: true,
+      pendingToken: res.pendingToken,
+      email: res.email || cleanEmail,
+      message: res.message
+    };
+  }
+
   if (res.token) {
     localStorage.setItem("att_auth_token", res.token);
   }
@@ -362,23 +371,29 @@ export const deleteUserRecord = async (uid) => {
 // ATTENDANCE & TRACKING
 // ----------------------------------------------------
 
-export const checkIn = async (userId, location = {}) => {
+export const checkIn = async (userId, location = {}, verificationSessionToken = null) => {
   const uid = typeof userId === "object" && userId !== null ? (userId.uid || userId.id) : userId;
   const companyId = typeof userId === "object" && userId !== null ? userId.companyId : undefined;
   const date = getLocalDateString();
+  const token = typeof location === "object" && location?.verificationSessionToken
+    ? location.verificationSessionToken
+    : verificationSessionToken;
   return apiFetch("/attendance/check-in", {
     method: "POST",
-    body: JSON.stringify({ userId: uid, companyId, date, location })
+    body: JSON.stringify({ userId: uid, companyId, date, location, verificationSessionToken: token })
   });
 };
 
-export const checkOut = async (userId, location = {}) => {
+export const checkOut = async (userId, location = {}, verificationSessionToken = null) => {
   const uid = typeof userId === "object" && userId !== null ? (userId.uid || userId.id) : userId;
   const companyId = typeof userId === "object" && userId !== null ? userId.companyId : undefined;
   const date = getLocalDateString();
+  const token = typeof location === "object" && location?.verificationSessionToken
+    ? location.verificationSessionToken
+    : verificationSessionToken;
   return apiFetch("/attendance/check-out", {
     method: "POST",
-    body: JSON.stringify({ userId: uid, companyId, date, location })
+    body: JSON.stringify({ userId: uid, companyId, date, location, verificationSessionToken: token })
   });
 };
 
@@ -2002,6 +2017,70 @@ export const resolveSecurityAlert = async (alertId) => {
 
 export const getSecurityStats = async () => {
   return apiFetch("/admin/security-stats");
+};
+
+// ----------------------------------------------------
+// BIOMETRICS & FACE ENROLLMENT
+// ----------------------------------------------------
+
+export const getFaceEnrollmentStatus = async (userId = null) => {
+  const url = userId ? `/attendance/face/status?userId=${encodeURIComponent(userId)}` : "/attendance/face/status";
+  return apiFetch(url);
+};
+
+export const authorizeFaceEnrollment = async (targetUserId) => {
+  return apiFetch("/attendance/face/authorize", {
+    method: "POST",
+    body: JSON.stringify({ targetUserId })
+  });
+};
+
+export const enrollFace = async (imageBase64, consentGiven = true, targetUserId = null) => {
+  return apiFetch("/attendance/face/enroll", {
+    method: "POST",
+    body: JSON.stringify({ imageBase64, consentGiven, targetUserId })
+  });
+};
+
+export const revokeFaceEnrollment = async (targetUserId, reason = "") => {
+  return apiFetch("/attendance/face/revoke", {
+    method: "POST",
+    body: JSON.stringify({ targetUserId, reason })
+  });
+};
+
+export const verifyFaceSession = async (imageBase64, options = {}) => {
+  const { workMode = "office", location = {}, actionType = "check-in" } = options;
+  return apiFetch("/attendance/face/verify-session", {
+    method: "POST",
+    body: JSON.stringify({ imageBase64, workMode, location, actionType })
+  });
+};
+
+export const getVerificationAttempts = async (params = {}) => {
+  const searchParams = new URLSearchParams();
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== "") {
+      searchParams.append(key, params[key]);
+    }
+  });
+  const queryString = searchParams.toString();
+  return apiFetch(`/attendance/face/attempts${queryString ? `?${queryString}` : ""}`);
+};
+
+export const reviewVerificationAttempt = async (attemptIdOrObj, decisionArg, noteArg) => {
+  let attemptId, decision, note;
+  if (typeof attemptIdOrObj === "object" && attemptIdOrObj !== null) {
+    ({ attemptId, decision, note = "" } = attemptIdOrObj);
+  } else {
+    attemptId = attemptIdOrObj;
+    decision = decisionArg;
+    note = noteArg || "";
+  }
+  return apiFetch("/attendance/face/review", {
+    method: "POST",
+    body: JSON.stringify({ attemptId, decision, note })
+  });
 };
 
 export const db = null;

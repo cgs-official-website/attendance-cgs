@@ -44,9 +44,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const user = await loginUser(email, password);
-    setCurrentUser(user);
-    return user;
+    const res = await loginUser(email, password);
+    if (!res?.mfaRequired) {
+      setCurrentUser(res);
+    }
+    return res;
   };
 
   const verifyLoginOtp = async (pendingToken, otp) => {

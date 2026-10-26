@@ -3,6 +3,8 @@ import app from "./app.js";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
 import { setSecuritySocketIO } from "./services/securityDetector.js";
+import { ensureFaceService, stopFaceServiceProcess } from "./services/faceServiceManager.js";
+import { runGeofenceDefaultsMigration } from "../scripts/migrate-geofence-defaults.js";
 
 dotenv.config();
 
@@ -61,7 +63,39 @@ server.on("error", (err) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 HRMS Backend Server running on port ${PORT}`);
-  console.log(`📡 Health check available at: http://localhost:${PORT}/api/health`);
-});
+// Graceful shutdown on termination signals
+function handleShutdown() {
+  console.log("\n[HRMS Backend] Gracefully shutting down...");
+  stopFaceServiceProcess();
+  server.close(() => {
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 3000);
+}
+process.once("SIGINT", handleShutdown);
+process.once("SIGTERM", handleShutdown);
+
+async function startServer() {
+  // 1. Ensure Python FastAPI Face Verification microservice is running or start it
+  try {
+    await ensureFaceService();
+  } catch (faceErr) {
+    console.error(`❌ [FaceService] Failed to initialize face verification microservice: ${faceErr.message}`);
+    console.warn(`⚠️ [FaceService] Biometric attendance operations will fail-closed (503) until the service is restored.`);
+  }
+
+  // 2. Run geofence defaults migration (non-blocking)
+  try {
+    await runGeofenceDefaultsMigration();
+  } catch (migErr) {
+    console.warn(`⚠️ [Migration] Geofence defaults migration check: ${migErr.message}`);
+  }
+
+  // 3. Start Express server
+  server.listen(PORT, () => {
+    console.log(`🚀 HRMS Backend Server running on port ${PORT}`);
+    console.log(`📡 Health check available at: http://localhost:${PORT}/api/health`);
+  });
+}
+
+startServer();

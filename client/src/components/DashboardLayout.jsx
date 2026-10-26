@@ -812,6 +812,14 @@ export default function DashboardLayout({ children }) {
         onClick: () => { navigate("/admin?tab=audit"); setIsMobileOpen(false); }
       });
     }
+    if (isAdminUser || can("read", "EmployeeManagement") || can("read", "LiveActivity")) {
+      menuItems.push({
+        label: "Biometrics & Verification",
+        icon: ShieldCheck,
+        active: location.pathname === "/admin" && activeTabParam === "biometrics",
+        onClick: () => { navigate("/admin?tab=biometrics"); setIsMobileOpen(false); }
+      });
+    }
     if (isAdminUser || can("read", "EnvironmentSetup")) {
       menuItems.push({
         label: "Environment Setup",
@@ -899,6 +907,13 @@ export default function DashboardLayout({ children }) {
         active: location.pathname === "/history",
         module: "attendance",
         onClick: () => { navigate("/history"); setIsMobileOpen(false); }
+      },
+      {
+        label: "Face Biometrics",
+        icon: ShieldCheck,
+        active: location.pathname === "/face-enrollment",
+        module: "attendance",
+        onClick: () => { navigate("/face-enrollment"); setIsMobileOpen(false); }
       }
     );
 

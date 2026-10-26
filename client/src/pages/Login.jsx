@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { Lock, Mail, ShieldAlert, Eye, EyeOff, Globe, Sparkles, Clock, X } from "lucide-react";
+import { Lock, Mail, ShieldAlert, ShieldCheck, Eye, EyeOff, Globe, Sparkles, Clock, X } from "lucide-react";
 import Logo from "../components/Logo";
 
 export default function Login() {
@@ -15,10 +15,30 @@ export default function Login() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
-  const { login, logout, currentUser, sendPasswordReset } = useAuth();
+  const { login, logout, currentUser, sendPasswordReset, verifyLoginOtp, resendLoginOtp } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { companySlug } = useParams();
+
+  // Multi-Factor Authentication (Email OTP) state
+  const [mfaState, setMfaState] = useState({
+    active: false,
+    pendingToken: "",
+    email: ""
+  });
+  const [otp, setOtp] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Resend cooldown timer countdown
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   // Clear existing session once on initial mount if visiting login page
   React.useEffect(() => {
@@ -66,8 +86,23 @@ export default function Login() {
     }
 
     setLoading(true);
+    setOtpError("");
     try {
       const result = await login(email, password);
+
+      // If Email OTP MFA is required, transition to the verification screen
+      if (result?.mfaRequired) {
+        setMfaState({
+          active: true,
+          pendingToken: result.pendingToken,
+          email: result.email || email
+        });
+        setOtp("");
+        setOtpError("");
+        setResendCooldown(60);
+        showToast("Verification code sent to your email.", "info");
+        return;
+      }
 
       showToast(`Welcome back, ${result.name}!`, "success");
       
@@ -99,6 +134,60 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    const cleanOtp = otp.trim();
+    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      setOtpError("Please enter a valid 6-digit numeric verification code.");
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError("");
+    try {
+      const user = await verifyLoginOtp(mfaState.pendingToken, cleanOtp);
+      showToast(`Welcome back, ${user.name || "Employee"}!`, "success");
+
+      const roleLower = (user.role || "").toLowerCase().trim();
+      if (roleLower === "superadmin" || roleLower === "super admin") {
+        navigate("/superadmin");
+      } else if (roleLower === "admin" || roleLower === "system admin" || roleLower === "systemadmin") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      const msg = error.message || "Invalid or expired verification code.";
+      setOtpError(msg);
+      showToast(msg, "error");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || otpLoading) return;
+    setOtpLoading(true);
+    setOtpError("");
+    try {
+      await resendLoginOtp(mfaState.pendingToken);
+      setResendCooldown(60);
+      showToast("A new verification code has been sent to your email.", "success");
+    } catch (error) {
+      const msg = error.message || "Failed to resend verification code.";
+      setOtpError(msg);
+      showToast(msg, "error");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleCancelMfa = () => {
+    setMfaState({ active: false, pendingToken: "", email: "" });
+    setOtp("");
+    setOtpError("");
   };
 
   const handleSetAdminDemo = () => {
@@ -208,22 +297,106 @@ export default function Login() {
 
         {/* Center Card */}
         <div className="max-w-[460px] w-full mx-auto my-auto py-8">
-          {/* Tabs */}
-          <div className="flex border-b border-border-card mb-8">
-            <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
-              Sign In
-            </button>
-            <Link to={companySlug ? `/${companySlug}/register` : "/register"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
-              Sign Up
-            </Link>
-          </div>
+          {mfaState.active ? (
+            <div>
+              {/* MFA Header */}
+              <div className="mb-6">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-full text-xs font-bold text-brand-primary mb-3">
+                  <ShieldCheck size={14} />
+                  <span>Two-Factor Authentication</span>
+                </div>
+                <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Verify Your Email</h2>
+                <p className="text-xs text-text-sec leading-relaxed">
+                  Enter the 6-digit verification code sent to your registered email address (<span className="font-semibold text-text-main">{mfaState.email}</span>).
+                </p>
+                <div className="mt-2.5 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  <Clock size={13} />
+                  <span>This code expires in 5 minutes.</span>
+                </div>
+              </div>
 
-          <div className="mb-6">
-            <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Welcome back</h2>
-            <p className="text-xs text-text-sec">Please enter your credentials to access your dashboard.</p>
-          </div>
+              {/* Error Message */}
+              {otpError && (
+                <div className="mb-4 p-3 rounded-[12px] bg-red-500/10 border border-red-500/20 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {otpError}
+                </div>
+              )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {/* Verification Form */}
+              <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-text-sec" htmlFor="otp-input">
+                    6-Digit Verification Code
+                  </label>
+                  <input
+                    id="otp-input"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    autoFocus
+                    className="w-full py-3 px-4 border border-border-card rounded-[12px] bg-bg-base/20 text-2xl font-bold tracking-[0.4em] text-center text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
+                    placeholder="000000"
+                    value={otp}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setOtp(val);
+                      if (otpError) setOtpError("");
+                    }}
+                    disabled={otpLoading}
+                    required
+                  />
+                </div>
+
+                {/* Verify Button */}
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-brand-primary hover:bg-brand-hover text-white font-bold rounded-[12px] hover:shadow-lg hover:shadow-brand-primary/10 transition-all mt-1 cursor-pointer disabled:opacity-50"
+                  disabled={otpLoading || otp.length !== 6}
+                >
+                  {otpLoading ? "Verifying Code..." : "Verify OTP →"}
+                </button>
+
+                {/* Resend and Cancel Controls */}
+                <div className="flex items-center justify-between text-xs mt-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelMfa}
+                    disabled={otpLoading}
+                    className="text-text-sec hover:text-text-main font-semibold cursor-pointer"
+                  >
+                    ← Back to Login
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendCooldown > 0 || otpLoading}
+                    className="text-brand-primary hover:text-brand-hover font-bold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <>
+              {/* Tabs */}
+              <div className="flex border-b border-border-card mb-8">
+                <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
+                  Sign In
+                </button>
+                <Link to={companySlug ? `/${companySlug}/register` : "/register"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
+                  Sign Up
+                </Link>
+              </div>
+
+              <div className="mb-6">
+                <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Welcome back</h2>
+                <p className="text-xs text-text-sec">Please enter your credentials to access your dashboard.</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 {/* Email Address */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-text-sec" htmlFor="email-input">Email Address</label>
@@ -306,6 +479,8 @@ export default function Login() {
                   {loading ? "Signing In..." : "Sign In →"}
                 </button>
               </form>
+            </>
+          )}
 
           {/* SSO Options */}
           {/* <div className="relative flex py-5 items-center">

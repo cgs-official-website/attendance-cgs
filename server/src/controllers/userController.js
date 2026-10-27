@@ -301,6 +301,112 @@ export const updateUser = async (req, res) => {
   }
 };
 
+export const createUser = async (req, res) => {
+  const callerRole = req.user?.role?.toLowerCase();
+  const isSuperAdmin = callerRole === "superadmin";
+  const isAdmin = callerRole === "admin" || isSuperAdmin || callerRole === "system admin";
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: "Access forbidden. Admin role required to create employees." });
+  }
+
+  try {
+    const {
+      name,
+      email,
+      password = "Welcome@123",
+      department,
+      designation,
+      programType = "Full-time",
+      jobType = "Full-time",
+      shiftStart = "09:00",
+      shiftEnd = "18:00",
+      role = "employee",
+      employeeId,
+      companyId,
+      annualLeaves = 25,
+      sickLeaves = 10,
+      casualLeaves = 6,
+      phone,
+      projects = [],
+      isProjectManager = false,
+      additionalData = {}
+    } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ error: "Name and email are required." });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const existing = await query("SELECT id FROM users WHERE LOWER(TRIM(email)) = LOWER($1)", [cleanEmail]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: "A user with this email address already exists." });
+    }
+
+    // Tenant isolation: Superadmin can optionally specify target companyId, but regular admins can ONLY create users within their own company!
+    let targetCompanyId = req.user?.companyId;
+    if (isSuperAdmin && companyId) {
+      targetCompanyId = companyId;
+    }
+
+    if (!targetCompanyId) {
+      return res.status(400).json({ error: "Cannot create employee without an associated company workspace." });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+    const userId = "usr_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+
+    const metadata = {
+      ...additionalData,
+      employeeId: employeeId || null,
+      jobType,
+      isProjectManager: Boolean(isProjectManager),
+      tasks: []
+    };
+
+    const insertRes = await query(
+      `INSERT INTO users (
+         id, name, email, password_hash, department, designation, program_type,
+         employment_type, shift_start, shift_end, company_id, role, employee_id,
+         casual_leave_quota, sick_leave_quota, paid_leave_quota, phone,
+         is_project_manager, projects, metadata, status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'active')
+       RETURNING id, id as uid, name, email, role, department, designation, company_id, employee_id, created_at`,
+      [
+        userId,
+        name.trim(),
+        cleanEmail,
+        passwordHash,
+        department || "General",
+        designation || null,
+        programType || "Full-time",
+        jobType || "Full-time",
+        shiftStart || "09:00",
+        shiftEnd || "18:00",
+        targetCompanyId,
+        role || "employee",
+        employeeId || null,
+        annualLeaves,
+        sickLeaves,
+        casualLeaves,
+        phone || additionalData?.personalMobileNumber || null,
+        Boolean(isProjectManager),
+        projects,
+        JSON.stringify(metadata)
+      ]
+    );
+
+    const newUser = insertRes.rows[0];
+    res.status(201).json({ message: "Employee created successfully.", user: newUser });
+  } catch (err) {
+    console.error("createUser error:", err);
+    res.status(500).json({ error: err.message || "Failed to create employee." });
+  }
+};
+
+
 export const deleteUser = async (req, res) => {
   const callerRole = req.user?.role?.toLowerCase();
   const isSuperAdmin = callerRole === "superadmin";

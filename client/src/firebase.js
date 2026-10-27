@@ -112,11 +112,15 @@ export const getLocalDateString = () => {
 // AUTHENTICATION & USER MANAGEMENT
 // ----------------------------------------------------
 
-export const loginUser = async (email, password) => {
+export const loginUser = async (email, password, companySlug = "") => {
   const cleanEmail = email.toLowerCase().trim();
+  const payload = { email: cleanEmail, password };
+  if (companySlug && typeof companySlug === "string" && companySlug.trim()) {
+    payload.companySlug = companySlug.trim();
+  }
   const res = await apiFetch("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email: cleanEmail, password })
+    body: JSON.stringify(payload)
   });
 
   if (res.mfaRequired) {
@@ -185,6 +189,14 @@ export const resendLoginOtp = async (pendingToken) => {
   });
 };
 
+export const createEmployee = async (employeeData) => {
+  const res = await apiFetch("/users", {
+    method: "POST",
+    body: JSON.stringify(employeeData)
+  });
+  return res.user;
+};
+
 export const registerUser = async (name, department, programType, email, password, shiftStart = "10:00", shiftEnd = "19:00", annualLeaves = 25, sickLeaves = 10, casualLeaves = 6, dob = "", joiningDate = "", projects = [], tasks = [], jobType = "Full-time", designation = "", isProjectManager = false, employeeId = "", companySlug = "", role = "user", companyId = "", additionalData = {}) => {
   let targetCompanyId = companyId;
   if (!targetCompanyId && (email.toLowerCase().endsWith("@teamcarrezza.com") || companySlug === "carrezza-global-solutions")) {
@@ -212,16 +224,28 @@ export const registerUser = async (name, department, programType, email, passwor
       designation,
       isProjectManager,
       employeeId,
-      companyId: targetCompanyId,
+      companyId: targetCompanyId || undefined,
+      companySlug: companySlug || undefined,
       role: email.toLowerCase() === "admin@teamcarrezza.com" ? "admin" : role,
       ...additionalData
     })
   });
 
+  if (res.token) {
+    localStorage.setItem("att_auth_token", res.token);
+  }
+
+  const meta = res.user?.metadata && typeof res.user?.metadata === "object" ? res.user.metadata : {};
+  const empId = res.user?.employeeId || res.user?.employee_id || meta.employeeId || meta.employee_id || employeeId || "";
+
   const user = {
-    ...res,
-    uid: res.id,
-    companyId: res.company_id || targetCompanyId
+    ...res.user,
+    ...meta,
+    uid: res.user?.id || res.id,
+    id: res.user?.id || res.id,
+    employeeId: empId,
+    employee_id: empId,
+    companyId: res.user?.company_id || res.user?.companyId || res.company_id || targetCompanyId || ""
   };
 
   localStorage.setItem("att_current_user", JSON.stringify(user));

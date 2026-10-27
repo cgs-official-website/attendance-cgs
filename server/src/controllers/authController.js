@@ -37,9 +37,25 @@ const mapUserProfile = (user) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, companySlug } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required." });
+    }
+
+    let targetCompany = null;
+    if (companySlug && typeof companySlug === "string" && companySlug.trim()) {
+      const cleanSlug = companySlug.toLowerCase().trim();
+      const compRes = await query(
+        "SELECT id, name, slug, status FROM companies WHERE LOWER(slug) = $1 OR LOWER(id) = $1",
+        [cleanSlug]
+      );
+      if (compRes.rows.length === 0) {
+        return res.status(404).json({ error: `Organization workspace "${companySlug}" not found.` });
+      }
+      if (compRes.rows[0].status === "deactive") {
+        return res.status(403).json({ error: "This organization workspace has been deactivated." });
+      }
+      targetCompany = compRes.rows[0];
     }
 
     const cleanEmail = email.toLowerCase().trim();
@@ -82,6 +98,23 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: "Invalid password." });
     }
 
+    // If logging into a specific organization workspace, validate tenant membership
+    if (targetCompany) {
+      const isSuperAdmin = user.role === "superadmin" || (user.email || "").toLowerCase().includes("superadmin@");
+      if (!isSuperAdmin) {
+        if (!user.company_id) {
+          return res.status(403).json({
+            error: "Your account is not linked to any organization workspace. Please contact your administrator."
+          });
+        }
+        if (user.company_id !== targetCompany.id) {
+          return res.status(403).json({
+            error: `Access denied. Your account belongs to a different organization, not "${targetCompany.name}".`
+          });
+        }
+      }
+    }
+
     // All user types (employees, admins, superadmins, HR managers, project managers, etc.)
     // must complete Email OTP Multi-Factor Authentication before receiving access credentials.
     const registeredEmail = (user.email || "").toLowerCase().trim();
@@ -121,7 +154,8 @@ export const login = async (req, res) => {
         pending: true,
         userId: user.id,
         pendingId,
-        email: user.email
+        email: user.email,
+        expectedCompanyId: targetCompany ? targetCompany.id : undefined
       },
       JWT_SECRET,
       { expiresIn: "5m" }
@@ -215,6 +249,17 @@ export const verifyOtp = async (req, res) => {
     }
 
     const user = userRes.rows[0];
+
+    // If login was initiated for a specific workspace, verify tenant isolation
+    if (decoded.expectedCompanyId) {
+      const isSuperAdmin = user.role === "superadmin" || (user.email || "").toLowerCase().includes("superadmin@");
+      if (!isSuperAdmin && user.company_id !== decoded.expectedCompanyId) {
+        return res.status(403).json({
+          error: "Access denied. Your account belongs to a different organization workspace."
+        });
+      }
+    }
+
     const session = await sessionService.createSession(user.id, req);
 
     const token = generateToken({
@@ -338,6 +383,7 @@ export const register = async (req, res) => {
       shiftStart,
       shiftEnd,
       companyId,
+      companySlug,
       role = "employee",
       employeeId
     } = req.body;
@@ -346,7 +392,64 @@ export const register = async (req, res) => {
       return res.status(400).json({ error: "Name, email, and password are required." });
     }
 
-    const existing = await query("SELECT id FROM users WHERE email = $1", [email.toLowerCase().trim()]);
+    const cleanEmail = email.toLowerCase().trim();
+
+    // 1. Resolve workspace / company
+    let targetCompanyId = (companyId || "").trim();
+
+    // If companySlug was provided, resolve to company record
+    if (!targetCompanyId && companySlug) {
+      const cleanSlug = companySlug.toLowerCase().trim();
+      const compRes = await query(
+        "SELECT id, status FROM companies WHERE LOWER(slug) = $1 OR LOWER(id) = $1",
+        [cleanSlug]
+      );
+      if (compRes.rows.length === 0) {
+        return res.status(404).json({ error: `Workspace '${companySlug}' not found.` });
+      }
+      if (compRes.rows[0].status === "deactive") {
+        return res.status(400).json({ error: "This organization workspace has been deactivated." });
+      }
+      targetCompanyId = compRes.rows[0].id;
+    }
+
+    // Auto-discovery via verified email domain if still no company
+    if (!targetCompanyId && cleanEmail.includes("@")) {
+      const emailDomain = cleanEmail.split("@")[1];
+      const domainRes = await query(
+        "SELECT company_id FROM company_domains WHERE LOWER(domain) = $1 AND status = 'VERIFIED' LIMIT 1",
+        [emailDomain]
+      );
+      if (domainRes.rows.length > 0) {
+        targetCompanyId = domainRes.rows[0].company_id;
+      }
+    }
+
+    // Default domain mapping for legacy Carrezza domain
+    if (!targetCompanyId && (cleanEmail.endsWith("@teamcarrezza.com") || cleanEmail === "admin@teamcarrezza.com")) {
+      const cgsRes = await query("SELECT id FROM companies WHERE id = 'carrezza-global-solutions' OR slug = 'cgs' LIMIT 1");
+      if (cgsRes.rows.length > 0) {
+        targetCompanyId = cgsRes.rows[0].id;
+      }
+    }
+
+    // Enforce workspace requirement: Do not create orphaned users with NULL company_id
+    if (!targetCompanyId) {
+      return res.status(400).json({
+        error: "No organization workspace specified. Please register using your company's workspace link (e.g. /:companySlug/register) or create an organization."
+      });
+    }
+
+    // Validate that the resolved company exists and is active
+    const compCheck = await query("SELECT id, status FROM companies WHERE id = $1", [targetCompanyId]);
+    if (compCheck.rows.length === 0) {
+      return res.status(404).json({ error: "The specified organization workspace does not exist." });
+    }
+    if (compCheck.rows[0].status === "deactive") {
+      return res.status(400).json({ error: "This organization workspace has been deactivated." });
+    }
+
+    const existing = await query("SELECT id FROM users WHERE LOWER(TRIM(email)) = LOWER($1)", [cleanEmail]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: "User with this email already exists." });
     }
@@ -364,15 +467,15 @@ export const register = async (req, res) => {
        RETURNING id, name, email, role, department, company_id, created_at`,
       [
         userId,
-        name,
-        email.toLowerCase().trim(),
+        name.trim(),
+        cleanEmail,
         passwordHash,
-        department || null,
+        department || "General",
         designation || null,
         programType || "Full-time",
         shiftStart || "09:00",
         shiftEnd || "18:00",
-        companyId || null,
+        targetCompanyId,
         role,
         employeeId || null
       ]

@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { useNavigate, Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { Lock, Mail, ShieldAlert, ShieldCheck, Eye, EyeOff, Globe, Sparkles, Clock, X } from "lucide-react";
+import { Lock, Mail, ShieldAlert, ShieldCheck, Eye, EyeOff, Globe, Sparkles, Clock, X, Building2, RefreshCw } from "lucide-react";
 import Logo from "../components/Logo";
+import { getCompanyBySlug } from "../firebase";
 
 export default function Login() {
   const [searchParams] = useSearchParams();
@@ -30,6 +31,11 @@ export default function Login() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Workspace resolution state
+  const [workspaceInfo, setWorkspaceInfo] = useState(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(!!companySlug);
+  const [workspaceError, setWorkspaceError] = useState(null); // 'not_found' | 'deactivated' | null
 
   // Resend cooldown timer countdown
   React.useEffect(() => {
@@ -61,21 +67,39 @@ export default function Login() {
     };
 
     if (companySlug) {
-      import("../firebase").then(({ getCompanyBySlug }) => {
-        getCompanyBySlug(companySlug).then(company => {
-          if (company && company.logoBase64) {
-            updateFavicon(company.logoBase64);
-          } else {
+      setWorkspaceLoading(true);
+      setWorkspaceError(null);
+      getCompanyBySlug(companySlug)
+        .then((company) => {
+          if (!company) {
+            setWorkspaceInfo(null);
+            setWorkspaceError("not_found");
             updateFavicon("/favicon.png");
+          } else if (company.status === "deactive") {
+            setWorkspaceInfo(company);
+            setWorkspaceError("deactivated");
+            updateFavicon(company.logoBase64 || "/favicon.png");
+          } else {
+            setWorkspaceInfo(company);
+            setWorkspaceError(null);
+            updateFavicon(company.logoBase64 || "/favicon.png");
           }
-        }).catch(() => {
+        })
+        .catch(() => {
+          setWorkspaceInfo(null);
+          setWorkspaceError("not_found");
           updateFavicon("/favicon.png");
+        })
+        .finally(() => {
+          setWorkspaceLoading(false);
         });
-      });
     } else {
+      setWorkspaceInfo(null);
+      setWorkspaceError(null);
+      setWorkspaceLoading(false);
       updateFavicon("/favicon.png");
     }
-    
+
     return () => updateFavicon("/favicon.png");
   }, [companySlug]);
 
@@ -88,7 +112,7 @@ export default function Login() {
     setLoading(true);
     setOtpError("");
     try {
-      const result = await login(email, password);
+      const result = await login(email, password, companySlug);
 
       // If Email OTP MFA is required, transition to the verification screen
       if (result?.mfaRequired) {
@@ -102,6 +126,18 @@ export default function Login() {
         setResendCooldown(60);
         showToast("Verification code sent to your email.", "info");
         return;
+      }
+
+      // If login completed without MFA, validate tenant membership
+      if (companySlug && workspaceInfo && (result.role || "").toLowerCase() !== "superadmin") {
+        if (!result.companyId) {
+          await logout();
+          return showToast("Your account is not linked to any organization workspace.", "error");
+        }
+        if (result.companyId !== workspaceInfo.id) {
+          await logout();
+          return showToast(`Access denied: Your account belongs to a different organization, not "${workspaceInfo.name}".`, "error");
+        }
       }
 
       showToast(`Welcome back, ${result.name}!`, "success");
@@ -148,6 +184,21 @@ export default function Login() {
     setOtpError("");
     try {
       const user = await verifyLoginOtp(mfaState.pendingToken, cleanOtp);
+
+      // Validate tenant membership if route has companySlug
+      if (companySlug && workspaceInfo && (user.role || "").toLowerCase() !== "superadmin") {
+        if (!user.companyId) {
+          await logout();
+          setOtpError("Your account is not linked to any organization workspace.");
+          return showToast("Your account is not linked to any organization workspace.", "error");
+        }
+        if (user.companyId !== workspaceInfo.id) {
+          await logout();
+          setOtpError(`Access denied: Your account belongs to a different organization, not "${workspaceInfo.name}".`);
+          return showToast(`Access denied: Your account belongs to a different organization, not "${workspaceInfo.name}".`, "error");
+        }
+      }
+
       showToast(`Welcome back, ${user.name || "Employee"}!`, "success");
 
       const roleLower = (user.role || "").toLowerCase().trim();
@@ -297,7 +348,53 @@ export default function Login() {
 
         {/* Center Card */}
         <div className="max-w-[460px] w-full mx-auto my-auto py-8">
-          {mfaState.active ? (
+          {workspaceLoading ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <RefreshCw className="animate-spin mb-4 text-brand-primary" size={36} />
+              <h3 className="text-xl font-bold text-text-main mb-1">Verifying Workspace</h3>
+              <p className="text-xs text-text-sec">Connecting to organization portal...</p>
+            </div>
+          ) : workspaceError === "not_found" ? (
+            <div className="flex flex-col items-center text-center p-8 bg-red-500/5 border border-red-500/20 rounded-[20px]">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-4">
+                <Building2 size={32} />
+              </div>
+              <h2 className="text-2xl font-extrabold text-text-main mb-2">Workspace Not Found</h2>
+              <p className="text-xs text-text-sec leading-relaxed mb-6">
+                The organization workspace <span className="font-semibold text-text-main font-mono">"{companySlug}"</span> does not exist or may have been deleted.
+              </p>
+              <div className="flex flex-col gap-2.5 w-full">
+                <Link
+                  to="/login"
+                  className="w-full py-2.5 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[10px] text-center transition-all no-underline"
+                >
+                  Use Standard Login
+                </Link>
+                <Link
+                  to="/purchase"
+                  className="w-full py-2.5 bg-bg-base hover:bg-border-card text-text-main font-semibold text-xs rounded-[10px] border border-border-card text-center transition-all no-underline"
+                >
+                  Create an Organization
+                </Link>
+              </div>
+            </div>
+          ) : workspaceError === "deactivated" ? (
+            <div className="flex flex-col items-center text-center p-8 bg-amber-500/5 border border-amber-500/20 rounded-[20px]">
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
+                <ShieldAlert size={32} />
+              </div>
+              <h2 className="text-2xl font-extrabold text-text-main mb-2">Workspace Deactivated</h2>
+              <p className="text-xs text-text-sec leading-relaxed mb-6">
+                The organization workspace <span className="font-semibold text-text-main font-mono">"{workspaceInfo?.name || companySlug}"</span> has been deactivated. Please contact your organization administrator or support.
+              </p>
+              <Link
+                to="/login"
+                className="w-full py-2.5 bg-brand-primary hover:bg-brand-hover text-white font-bold text-xs rounded-[10px] text-center transition-all no-underline"
+              >
+                Return to Login
+              </Link>
+            </div>
+          ) : mfaState.active ? (
             <div>
               {/* MFA Header */}
               <div className="mb-6">
@@ -381,6 +478,28 @@ export default function Login() {
             </div>
           ) : (
             <>
+              {/* Verified Organization Branding Banner */}
+              {workspaceInfo && (
+                <div className="mb-6 p-3.5 rounded-[14px] bg-brand-primary/5 border border-brand-primary/20 flex items-center justify-between animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    {workspaceInfo.logoBase64 ? (
+                      <img src={workspaceInfo.logoBase64} alt={workspaceInfo.name} className="w-10 h-10 rounded-lg object-contain bg-white/10 p-1 border border-border-card" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold">
+                        <Building2 size={20} />
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-[11px] font-semibold text-brand-primary uppercase tracking-wider">Organization Workspace</div>
+                      <div className="text-sm font-extrabold text-text-main">{workspaceInfo.name}</div>
+                    </div>
+                  </div>
+                  <Link to="/login" className="text-xs font-semibold text-text-sec hover:text-brand-primary transition-colors no-underline">
+                    Switch
+                  </Link>
+                </div>
+              )}
+
               {/* Tabs */}
               <div className="flex border-b border-border-card mb-8">
                 <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
@@ -393,7 +512,9 @@ export default function Login() {
 
               <div className="mb-6">
                 <h2 className="text-3xl font-extrabold text-text-main tracking-tight mb-1.5">Welcome back</h2>
-                <p className="text-xs text-text-sec">Please enter your credentials to access your dashboard.</p>
+                <p className="text-xs text-text-sec">
+                  {workspaceInfo ? `Please sign in to access ${workspaceInfo.name}.` : "Please enter your credentials to access your dashboard."}
+                </p>
               </div>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">

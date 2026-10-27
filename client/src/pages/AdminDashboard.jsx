@@ -14,6 +14,7 @@ import {
   updateUserAccountStatus,
   deleteUserRecord,
   registerUser,
+  createEmployee,
   updateLeaveRequest,
   subscribeToLeaveRequests,
   uploadPaidLeave,
@@ -278,7 +279,8 @@ export default function AdminDashboard() {
   // Add Employee Form Fields
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [newDept, setNewDept] = useState("");
+  const [newDept, setNewDept] = useState("General");
+  const [newProgram, setNewProgram] = useState("Full-time");
   const [newShiftType, setNewShiftType] = useState("Morning");
   const [newShiftStart, setNewShiftStart] = useState("09:00");
   const [newShiftEnd, setNewShiftEnd] = useState("18:00");
@@ -1921,13 +1923,15 @@ export default function AdminDashboard() {
   // Add Employee handler
   const handleAddNewEmployee = async (e) => {
     e.preventDefault();
-    if (!newName || !newEmail || !newDept || !newShiftStart || !newShiftEnd) {
-      return showToast("Please fill in all fields.", "warning");
+    const fullName = (newName || `${newFirstName} ${newLastName}`).trim();
+    const dept = (newDept || "General").trim();
+
+    if (!fullName || !newEmail || !dept || !newShiftStart || !newShiftEnd) {
+      return showToast("Please fill in all required fields (Name, Email, Department).", "warning");
     }
 
     setActionLoading(true);
     try {
-      
       const roleStr = newRole === "Admin" ? "admin" : (newRole === "System Admin" ? "system admin" : "employee");
       const isPm = newRole === "Project Manager" || newRole === "Admin" || newRole === "System Admin";
       
@@ -1942,14 +1946,34 @@ export default function AdminDashboard() {
         location: newLocation, unit: newUnit, grade: newGrade, costCenter: newCostCenter, pfNo: newPfNo
       };
       
-      await registerUser(newName, newDept, newProgram, newEmail, "Welcome@123", newShiftStart, newShiftEnd, newAnnual, newSick, newCasual, newDob, newJoiningDate, newProject.split(',').map(s=>s.trim()).filter(Boolean), [], newJobType, newDesignation, isPm, newEmployeeId, "", roleStr, currentUser.companyId, additionalData);
-      showToast(`Employee ${newName} registered successfully. Default password is 'Welcome@123'.`, "success");
+      await createEmployee({
+        name: fullName,
+        email: newEmail.toLowerCase().trim(),
+        password: "Welcome@123",
+        department: dept,
+        designation: newDesignation,
+        programType: newProgram || "Full-time",
+        jobType: newJobType,
+        shiftStart: newShiftStart,
+        shiftEnd: newShiftEnd,
+        role: roleStr,
+        employeeId: newEmployeeId,
+        companyId: currentUser?.companyId,
+        annualLeaves: newAnnual,
+        sickLeaves: newSick,
+        casualLeaves: newCasual,
+        isProjectManager: isPm,
+        projects: newProject.split(',').map(s => s.trim()).filter(Boolean),
+        additionalData
+      });
+
+      showToast(`Employee ${fullName} registered successfully. Default password is 'Welcome@123'.`, "success");
       setShowAddModal(false);
       
       // Reset fields
       setNewName("");
       setNewEmail("");
-      setNewDept("");
+      setNewDept("General");
       setNewShiftType("Morning");
       setNewShiftStart("09:00");
       setNewShiftEnd("18:00");
@@ -4663,6 +4687,10 @@ export default function AdminDashboard() {
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Work Email Address *</label>
                         <input type="email" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="e.g. john.doe@company.com" required />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold text-text-sec uppercase">Department *</label>
+                        <input type="text" className="w-full px-3 py-2 border border-border-card rounded-[8px] bg-bg-base/30 text-xs text-text-main outline-none focus:border-brand-primary" value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="e.g. Engineering" required />
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold text-text-sec uppercase">Personal Email Address</label>

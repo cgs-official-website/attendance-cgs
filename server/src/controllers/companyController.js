@@ -20,7 +20,8 @@ export const getCompanies = async (req, res) => {
 export const getCompanyBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const result = await query("SELECT * FROM companies WHERE slug = $1 OR id = $1", [slug]);
+    const cleanSlug = (slug || "").trim().toLowerCase();
+    const result = await query("SELECT * FROM companies WHERE LOWER(slug) = $1 OR LOWER(id) = $1", [cleanSlug]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Company not found." });
     }

@@ -23,7 +23,10 @@ export default function Register() {
   const { signup } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const { companySlug } = useParams();
+  const { companySlug: routeCompanySlug } = useParams();
+  const [workspaceSlug, setWorkspaceSlug] = useState(routeCompanySlug || "");
+  const [companyInfo, setCompanyInfo] = useState(null);
+  const effectiveSlug = (routeCompanySlug || workspaceSlug).trim();
 
   React.useEffect(() => {
     const updateFavicon = (url) => {
@@ -36,29 +39,47 @@ export default function Register() {
       link.href = url || "/favicon.png";
     };
 
-    if (companySlug) {
-      getCompanyBySlug(companySlug).then(company => {
-        if (company && company.logoBase64) {
-          updateFavicon(company.logoBase64);
+    if (effectiveSlug) {
+      getCompanyBySlug(effectiveSlug).then(company => {
+        if (company) {
+          setCompanyInfo(company);
+          if (company.logoBase64) {
+            updateFavicon(company.logoBase64);
+          } else {
+            updateFavicon("/favicon.png");
+          }
         } else {
+          setCompanyInfo(null);
           updateFavicon("/favicon.png");
         }
       }).catch(() => {
+        setCompanyInfo(null);
         updateFavicon("/favicon.png");
       });
     } else {
+      setCompanyInfo(null);
       updateFavicon("/favicon.png");
     }
     
     return () => updateFavicon("/favicon.png");
-  }, [companySlug]);
+  }, [effectiveSlug]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const finalDept = selectedDept === "Other" ? customDept.trim() : selectedDept;
     const finalProgram = selectedProgram === "Other" ? customProgram.trim() : selectedProgram;
+    const targetSlug = (routeCompanySlug || workspaceSlug).trim();
+
     if (!name || !finalDept || !finalProgram || !email || !password || !shiftStart || !shiftEnd) {
       return showToast("Please fill in all fields", "warning");
+    }
+
+    if (!targetSlug && !email.toLowerCase().endsWith("@teamcarrezza.com")) {
+      return showToast("Please enter your organization's workspace slug or code.", "warning");
+    }
+
+    if (companyInfo && companyInfo.status === "deactive") {
+      return showToast("This organization workspace has been deactivated.", "error");
     }
 
     if (password.length < 6) {
@@ -67,13 +88,13 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const authCheck = await checkDomainAuthorization(email, companySlug);
+      const authCheck = await checkDomainAuthorization(email, targetSlug);
       if (!authCheck.allowed) {
         setLoading(false);
         return showToast(authCheck.reason, "error");
       }
 
-      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd, employeeId, companySlug);
+      await signup(name, finalDept, finalProgram, email, password, shiftStart, shiftEnd, employeeId, targetSlug);
       showToast("Account registered successfully! Welcome to the portal.", "success");
 
       if (email.toLowerCase() === "admin@teamcarrezza.com" || email.toLowerCase().includes("superadmin")) {
@@ -171,7 +192,7 @@ export default function Register() {
         <div className="max-w-[460px] w-full mx-auto my-auto py-8">
           {/* Tabs */}
           <div className="flex border-b border-border-card mb-6">
-            <Link to={companySlug ? `/${companySlug}/login` : "/login"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
+            <Link to={(routeCompanySlug || workspaceSlug) ? `/${routeCompanySlug || workspaceSlug}/login` : "/login"} className="py-2.5 px-4 font-semibold text-sm border-b-2 border-transparent text-text-sec hover:text-brand-primary transition-colors no-underline">
               Sign In
             </Link>
             <button className="py-2.5 px-4 font-bold text-sm border-b-2 border-brand-primary text-text-main cursor-pointer">
@@ -185,6 +206,51 @@ export default function Register() {
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {/* Organization Workspace Badge or Input */}
+            {routeCompanySlug ? (
+              <div className="p-3 bg-brand-primary/10 border border-brand-primary/20 rounded-[12px] flex items-center gap-2.5">
+                <Building size={16} className="text-brand-primary flex-shrink-0" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase font-bold text-text-mut">Organization Workspace</span>
+                  <span className="text-xs font-bold text-text-main">
+                    {companyInfo?.name || routeCompanySlug}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-text-sec" htmlFor="workspace-input">
+                    Workspace Code / Slug *
+                  </label>
+                  <Link to="/purchase-organization" className="text-[11px] text-brand-primary hover:underline">
+                    Create Workspace
+                  </Link>
+                </div>
+                <div className="relative">
+                  <Building
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-mut pointer-events-none"
+                  />
+                  <input
+                    id="workspace-input"
+                    type="text"
+                    className="w-full pl-10 pr-4 py-2.5 border border-border-card rounded-[12px] bg-bg-base/20 text-sm text-text-main placeholder-text-mut focus:bg-bg-card focus:border-brand-primary outline-none transition-all"
+                    placeholder="e.g. cgs, acmecorporation"
+                    value={workspaceSlug}
+                    onChange={(e) => setWorkspaceSlug(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+                {companyInfo && (
+                  <span className="text-[11px] text-emerald-500 font-medium">
+                    ✓ Verified workspace: {companyInfo.name}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Full Name */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-text-sec" htmlFor="name-input">Full Name</label>
